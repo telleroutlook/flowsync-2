@@ -16,3 +16,8 @@ localConnectionString = "postgres://directus:<REPLACE_WITH_DB_PASSWORD>@pgdb.wor
 [vars]
 OPENAI_BASE_URL = "https://open.bigmodel.cn/api/coding/paas/v4"
 OPENAI_MODEL = "GLM-4.7"
+
+[observability]
+[observability.logs]
+enabled = true
+invocation_logs = true
