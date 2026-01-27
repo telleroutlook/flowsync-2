@@ -335,16 +335,18 @@ const planActions = async (
           const dueViolated = explicitFields.includes('dueDate') && constrainedDue !== merged.dueDate;
 
           if (startViolated || dueViolated) {
-            // Throw an error to prevent draft creation
-            const errorMessage = [
-      `Cannot modify task dates: ${startViolated ? 'Start Date' : ''}${startViolated && dueViolated ? ' and ' : ''}${dueViolated ? 'Due Date' : ''} violate predecessor constraints`,
-      `Task "${existing.title}" has mandatory predecessors.`,
-      `Requested dates: ${merged.startDate ? new Date(merged.startDate).toISOString().split('T')[0] : 'N/A'} - ${merged.dueDate ? new Date(merged.dueDate).toISOString().split('T')[0] : 'N/A'}`,
-      `Constraint dates: ${constrainedStart ? new Date(constrainedStart).toISOString().split('T')[0] : 'N/A'} - ${constrainedDue ? new Date(constrainedDue).toISOString().split('T')[0] : 'N/A'}`,
-      `Please modify the predecessor task or remove the dependency.`
-            ].join('\n');
-
-            throw new Error(errorMessage);
+            // Instead of throwing, we warn the user and allow the system to auto-correct the dates
+            // to the valid constrained dates (which happens in the fall-through below).
+            const warningMessage = [
+              `Adjusted task dates: ${startViolated ? 'Start Date' : ''}${startViolated && dueViolated ? ' and ' : ''}${dueViolated ? 'Due Date' : ''} violated predecessor constraints`,
+              `Task "${existing.title}" has mandatory predecessors.`,
+              `Requested: ${merged.startDate ? new Date(merged.startDate).toISOString().split('T')[0] : 'N/A'} - ${merged.dueDate ? new Date(merged.dueDate).toISOString().split('T')[0] : 'N/A'}`,
+              `Adjusted to: ${constrainedStart ? new Date(constrainedStart).toISOString().split('T')[0] : 'N/A'} - ${constrainedDue ? new Date(constrainedDue).toISOString().split('T')[0] : 'N/A'}`
+            ].join('. ');
+            
+            warnings.push(warningMessage);
+            // We append this specific warning to the constraint result so it appears on the action item too
+            constraintResult.warnings.push(warningMessage);
           }
         }
 
