@@ -70,6 +70,7 @@ const fetchWithRetry = async (
   abortSignal?: AbortSignal
 ) => {
   let lastError: unknown;
+  let lastErrorType: 'network' | 'timeout' | 'unknown' = 'unknown';
   let totalElapsedMs = 0;
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
@@ -118,10 +119,30 @@ const fetchWithRetry = async (
         throw new StreamAbortError();
       }
 
+      // Classify error type for better retry strategy
+      const errorStr = String(error);
+      if (timedOut || errorStr.includes('timeout') || errorStr.includes('timed out')) {
+        lastErrorType = 'timeout';
+      } else if (
+        errorStr.includes('ECONNREFUSED') ||
+        errorStr.includes('ECONNRESET') ||
+        errorStr.includes('ENOTFOUND') ||
+        errorStr.includes('ETIMEDOUT') ||
+        errorStr.includes('fetch failed') ||
+        errorStr.includes('network')
+      ) {
+        lastErrorType = 'network';
+      }
+
       if (attempt === maxRetries) {
         throw { error: lastError, attempts: attempt + 1, elapsedMs: totalElapsedMs };
       }
-      const delayMs = getRetryDelay(attempt);
+
+      // Use longer delays for connection errors (cold start, network issues)
+      const delayMs = lastErrorType === 'network' && attempt === 0
+        ? Math.min(2000, getRetryDelay(attempt) * 2)  // First network error: wait up to 2s
+        : getRetryDelay(attempt);
+
       onRetry?.({ attempt: attempt + 1, delayMs, error: String(error) });
       await sleep(delayMs);
     }
