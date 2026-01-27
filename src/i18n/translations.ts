@@ -24,6 +24,10 @@ const en = {
   'app.view.board': 'Board',
   'app.view.list': 'List',
   'app.view.gantt': 'Gantt',
+  'app.zoom': 'Zoom',
+  'app.zoom.in': 'Zoom In',
+  'app.zoom.out': 'Zoom Out',
+  'app.zoom.reset': 'Reset',
 
   'app.header.import': 'Import',
   'app.header.import_strategy': 'Import strategy',
@@ -326,6 +330,10 @@ const zh: Record<keyof typeof en, string> = {
   'app.view.board': '看板',
   'app.view.list': '列表',
   'app.view.gantt': '甘特',
+  'app.zoom': '缩放',
+  'app.zoom.in': '放大',
+  'app.zoom.out': '缩小',
+  'app.zoom.reset': '重置',
 
   'app.header.import': '导入',
   'app.header.import_strategy': '导入策略',

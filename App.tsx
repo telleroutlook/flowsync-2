@@ -3,7 +3,7 @@ import { ProjectSidebar } from './components/ProjectSidebar';
 import { WorkspacePanel } from './components/WorkspacePanel';
 import { Button } from './components/ui/Button';
 import { cn } from './src/utils/cn';
-import { Menu, X, Grid, List as ListIcon, Calendar, Upload, Download, History, MessageSquare, FileText, Check, MoreVertical } from 'lucide-react';
+import { Menu, X, Grid, List as ListIcon, Calendar, Upload, Download, History, MessageSquare, FileText, Check, MoreVertical, Minus, Plus, RotateCcw } from 'lucide-react';
 import { LoginModal } from './components/LoginModal';
 import WorkspaceModal from './components/WorkspaceModal';
 import { UserProfileModal } from './components/UserProfileModal';
@@ -11,7 +11,7 @@ import { ChatInterface } from './components/ChatInterface';
 import { AuditPanel } from './components/AuditPanel';
 import { TaskDetailPanel } from './components/TaskDetailPanel';
 import { CreateProjectModal } from './components/CreateProjectModal';
-import { Task, DraftAction, ChatMessage } from './types';
+import { Task, DraftAction, ChatMessage, TaskStatus } from './types';
 import { useProjectData } from './src/hooks/useProjectData';
 import { useAuth } from './src/hooks/useAuth';
 import { useWorkspaces } from './src/hooks/useWorkspaces';
@@ -28,6 +28,26 @@ const ListView = React.lazy(() => import('./components/ListView').then(module =>
 const GanttChart = React.lazy(() => import('./components/GanttChart').then(module => ({ default: module.GanttChart })));
 
 type ViewMode = 'BOARD' | 'LIST' | 'GANTT';
+type ZoomState = {
+  BOARD: number;
+  LIST: number;
+  GANTT: number;
+};
+type ZoomSignature = {
+  count: number;
+  spanDays?: number;
+};
+type ZoomMeta = {
+  signature: ZoomSignature | null;
+  userOverride: boolean;
+};
+type ZoomMetaState = {
+  BOARD: ZoomMeta;
+  LIST: ZoomMeta;
+  GANTT: ZoomMeta;
+};
+
+type GanttViewMode = 'Day' | 'Week' | 'Month' | 'Year';
 
 // Memoized loading spinner component
 const LoadingSpinner = memo(({ message }: { message: string }) => (
@@ -49,12 +69,119 @@ const formatAttachmentSize = (value: number): string => {
 };
 
 const CHAT_EXPORT_SEPARATOR = '-'.repeat(72);
+const DAY_MS = 86400000;
+const GANTT_PX_PER_DAY: Record<GanttViewMode, number> = {
+  Day: 60,
+  Week: 30,
+  Month: 10,
+  Year: 1.5,
+};
+
+const computeGanttTimelineRange = (tasks: Task[], viewMode: GanttViewMode) => {
+  if (tasks.length === 0) return null;
+  const starts = tasks.map((task) => task.startDate ?? task.createdAt);
+  const ends = tasks.map((task) => {
+    const start = task.startDate ?? task.createdAt;
+    const end = task.dueDate ?? start + DAY_MS;
+    return end <= start ? start + DAY_MS : end;
+  });
+  const rawStart = Math.min(...starts);
+  const rawEnd = Math.max(...ends);
+  const startDate = new Date(rawStart);
+  startDate.setDate(startDate.getDate() - 7);
+  const endDate = new Date(rawEnd);
+  endDate.setDate(endDate.getDate() + 14);
+
+  if (viewMode === 'Year') {
+    startDate.setMonth(0, 1);
+    endDate.setMonth(11, 31);
+  } else if (viewMode === 'Month') {
+    startDate.setDate(1);
+    endDate.setMonth(endDate.getMonth() + 1, 0);
+  } else if (viewMode === 'Week') {
+    const day = startDate.getDay();
+    startDate.setDate(startDate.getDate() - ((day + 6) % 7));
+  }
+
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(23, 59, 59, 999);
+
+  return { startMs: startDate.getTime(), endMs: endDate.getTime() };
+};
+
+const pickZoomLevel = (levels: number[], ratio: number) => {
+  if (levels.length === 0) return 1;
+  const min = levels[0];
+  const max = levels[levels.length - 1];
+  const clamped = Math.max(min, Math.min(max, ratio));
+  let candidate = min;
+  levels.forEach((level) => {
+    if (level <= clamped) candidate = level;
+  });
+  return candidate;
+};
 
 function App() {
   const { t, locale } = useI18n();
+  const zoomLevels = useMemo(() => [0.6, 0.8, 1, 1.2, 1.4], []);
 
   // UI State
   const [viewMode, setViewMode] = useState<ViewMode>('GANTT'); 
+  const [viewZoom, setViewZoom] = useState<ZoomState>(() => {
+    if (typeof window === 'undefined') {
+      return { BOARD: 1, LIST: 1, GANTT: 1 };
+    }
+    try {
+      const raw = window.localStorage.getItem('flowsync:viewZoom');
+      if (!raw) return { BOARD: 1, LIST: 1, GANTT: 1 };
+      const parsed = JSON.parse(raw) as Partial<ZoomState>;
+      return {
+        BOARD: typeof parsed.BOARD === 'number' ? parsed.BOARD : 1,
+        LIST: typeof parsed.LIST === 'number' ? parsed.LIST : 1,
+        GANTT: typeof parsed.GANTT === 'number' ? parsed.GANTT : 1,
+      };
+    } catch {
+      return { BOARD: 1, LIST: 1, GANTT: 1 };
+    }
+  });
+  const [zoomMeta, setZoomMeta] = useState<ZoomMetaState>(() => {
+    if (typeof window === 'undefined') {
+      return {
+        BOARD: { signature: null, userOverride: false },
+        LIST: { signature: null, userOverride: false },
+        GANTT: { signature: null, userOverride: false },
+      };
+    }
+    try {
+      const raw = window.localStorage.getItem('flowsync:viewZoomMeta');
+      if (!raw) {
+        return {
+          BOARD: { signature: null, userOverride: false },
+          LIST: { signature: null, userOverride: false },
+          GANTT: { signature: null, userOverride: false },
+        };
+      }
+      const parsed = JSON.parse(raw) as Partial<ZoomMetaState>;
+      const normalize = (value?: ZoomMeta): ZoomMeta => ({
+        signature: value?.signature ?? null,
+        userOverride: value?.userOverride ?? false,
+      });
+      return {
+        BOARD: normalize(parsed.BOARD),
+        LIST: normalize(parsed.LIST),
+        GANTT: normalize(parsed.GANTT),
+      };
+    } catch {
+      return {
+        BOARD: { signature: null, userOverride: false },
+        LIST: { signature: null, userOverride: false },
+        GANTT: { signature: null, userOverride: false },
+      };
+    }
+  });
+  const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>('Month');
+  const viewContainerRef = useRef<HTMLDivElement>(null);
+  const [viewContainerSize, setViewContainerSize] = useState({ width: 0, height: 0 });
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -373,6 +500,144 @@ function App() {
     GANTT: t('app.view.gantt'),
   }), [t]);
 
+  const currentZoom = viewZoom[viewMode];
+  const zoomIndex = useMemo(() => {
+    const exactIndex = zoomLevels.findIndex((level) => level === currentZoom);
+    if (exactIndex !== -1) return exactIndex;
+    let closest = 0;
+    let minDiff = Math.abs(zoomLevels[0] - currentZoom);
+    zoomLevels.forEach((level, index) => {
+      const diff = Math.abs(level - currentZoom);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = index;
+      }
+    });
+    return closest;
+  }, [currentZoom, zoomLevels]);
+
+  const updateZoom = useCallback((mode: ViewMode, value: number, markUserOverride: boolean = true) => {
+    setViewZoom((prev) => ({ ...prev, [mode]: value }));
+    if (markUserOverride) {
+      setZoomMeta((prev) => {
+        const signature = prev[mode].signature;
+        return { ...prev, [mode]: { signature, userOverride: true } };
+      });
+    }
+  }, []);
+
+  const handleZoomStep = useCallback((direction: -1 | 1) => {
+    const nextIndex = Math.max(0, Math.min(zoomLevels.length - 1, zoomIndex + direction));
+    const nextValue = zoomLevels[nextIndex];
+    updateZoom(viewMode, nextValue);
+  }, [updateZoom, viewMode, zoomIndex, zoomLevels]);
+
+  useEffect(() => {
+    const el = viewContainerRef.current;
+    if (!el) return;
+    const updateSize = () => {
+      setViewContainerSize({ width: el.clientWidth || 0, height: el.clientHeight || 0 });
+    };
+    updateSize();
+    const observer = new ResizeObserver(() => updateSize());
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+    };
+  }, [viewMode]);
+
+  const computeSignature = useCallback((mode: ViewMode): ZoomSignature => {
+    const count = activeTasks.length;
+    if (mode !== 'GANTT') return { count };
+    const range = computeGanttTimelineRange(activeTasks, ganttViewMode);
+    const spanDays = range ? Math.max(1, Math.ceil((range.endMs - range.startMs) / DAY_MS)) : 1;
+    return { count, spanDays };
+  }, [activeTasks, ganttViewMode]);
+
+  const isMajorChange = useCallback((mode: ViewMode, prev: ZoomSignature | null, next: ZoomSignature) => {
+    if (!prev) return true;
+    const countDiff = Math.abs(next.count - prev.count);
+    if (countDiff >= 3) return true;
+    if (mode === 'GANTT') {
+      const prevSpan = prev.spanDays ?? 0;
+      const nextSpan = next.spanDays ?? 0;
+      return Math.abs(nextSpan - prevSpan) >= 7;
+    }
+    return false;
+  }, []);
+
+  const computeAutoZoom = useCallback((mode: ViewMode) => {
+    const { width, height } = viewContainerSize;
+    if (width <= 0 || height <= 0) return 1;
+
+    if (mode === 'LIST') {
+      const headerHeight = 48;
+      const rowHeight = 44;
+      const rows = activeTasks.length;
+      if (rows === 0) return 1;
+      const neededHeight = headerHeight + rows * rowHeight;
+      return pickZoomLevel(zoomLevels, height / neededHeight);
+    }
+
+    if (mode === 'BOARD') {
+      const counts = {
+        todo: activeTasks.filter((task) => task.status === TaskStatus.TODO).length,
+        inProgress: activeTasks.filter((task) => task.status === TaskStatus.IN_PROGRESS).length,
+        done: activeTasks.filter((task) => task.status === TaskStatus.DONE).length,
+      };
+      const maxCards = Math.max(counts.todo, counts.inProgress, counts.done);
+      if (maxCards === 0) return 1;
+      const headerHeight = 72;
+      const cardHeight = 160;
+      const cardGap = 12;
+      const padding = 24;
+      const neededHeight = headerHeight + padding + maxCards * cardHeight + Math.max(0, maxCards - 1) * cardGap;
+      return pickZoomLevel(zoomLevels, height / neededHeight);
+    }
+
+    const range = computeGanttTimelineRange(activeTasks, ganttViewMode);
+    if (!range) return 1;
+    const spanDays = Math.max(1, Math.ceil((range.endMs - range.startMs) / DAY_MS));
+    const pxPerDay = GANTT_PX_PER_DAY[ganttViewMode] || 10;
+    const neededWidth = spanDays * pxPerDay;
+    return pickZoomLevel(zoomLevels, width / neededWidth);
+  }, [activeTasks, ganttViewMode, viewContainerSize, zoomLevels]);
+
+  useEffect(() => {
+    const mode = viewMode;
+    const signature = computeSignature(mode);
+    const meta = zoomMeta[mode];
+    const shouldAuto = isMajorChange(mode, meta.signature, signature);
+    if (!shouldAuto) return;
+    const nextZoom = computeAutoZoom(mode);
+    updateZoom(mode, nextZoom, false);
+    setZoomMeta((prev) => ({
+      ...prev,
+      [mode]: {
+        signature,
+        userOverride: false,
+      },
+    }));
+  }, [computeAutoZoom, computeSignature, isMajorChange, updateZoom, viewMode, zoomMeta]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem('flowsync:viewZoom', JSON.stringify(viewZoom));
+    } catch {
+      // ignore storage errors
+    }
+  }, [viewZoom]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem('flowsync:viewZoomMeta', JSON.stringify(zoomMeta));
+    } catch {
+      // ignore storage errors
+    }
+  }, [zoomMeta]);
+
   return (
     <div className="flex h-screen h-[100dvh] w-full bg-background overflow-hidden text-text-primary font-sans selection:bg-primary/20 selection:text-primary">
       
@@ -459,6 +724,43 @@ function App() {
           </div>
 
           <div className="flex items-center gap-2">
+             {/* Zoom Panel */}
+             <div className="flex items-center gap-1 bg-background/50 rounded-lg border border-border-subtle px-2 py-1">
+               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary/70">{t('app.zoom')}</span>
+               <Button
+                 variant="ghost"
+                 size="sm"
+                 onClick={() => handleZoomStep(-1)}
+                 disabled={zoomIndex === 0}
+                 className="h-7 w-7 p-0"
+                 title={t('app.zoom.out')}
+               >
+                 <Minus className="w-3.5 h-3.5" />
+               </Button>
+               <span className="text-xs font-mono text-text-secondary min-w-[44px] text-center">{Math.round(currentZoom * 100)}%</span>
+               <Button
+                 variant="ghost"
+                 size="sm"
+                 onClick={() => handleZoomStep(1)}
+                 disabled={zoomIndex === zoomLevels.length - 1}
+                 className="h-7 w-7 p-0"
+                 title={t('app.zoom.in')}
+               >
+                 <Plus className="w-3.5 h-3.5" />
+               </Button>
+               <Button
+                 variant="ghost"
+                 size="sm"
+                 onClick={() => updateZoom(viewMode, 1)}
+                 disabled={currentZoom === 1}
+                 className="h-7 px-2 text-[10px] uppercase tracking-wider"
+                 title={t('app.zoom.reset')}
+               >
+                 <RotateCcw className="w-3 h-3 mr-1" />
+                 {t('app.zoom.reset')}
+               </Button>
+             </div>
+
              {/* Import Group */}
              <div className="flex items-center gap-1 bg-surface p-1 rounded-lg border border-border-subtle shadow-sm">
                <input
@@ -694,26 +996,49 @@ function App() {
             <LoadingSpinner message={t('app.loading.project_data')} />
           ) : (
             <>
-              <div className="flex-1 min-w-0 h-full overflow-hidden relative">
+              <div ref={viewContainerRef} className="flex-1 min-w-0 h-full overflow-hidden relative">
                 <Suspense fallback={<LoadingSpinner message={t('app.loading.view')} />}>
                   {viewMode === 'BOARD' && (
-                    <KanbanBoard
-                      tasks={activeTasks}
-                      selectedTaskId={selectedTaskId}
-                      onSelectTask={(id) => setSelectedTaskId(id)}
-                    />
+                    <div
+                      className="h-full w-full"
+                      style={{
+                        transform: `scale(${viewZoom.BOARD})`,
+                        transformOrigin: 'top left',
+                        width: `${100 / viewZoom.BOARD}%`,
+                        height: `${100 / viewZoom.BOARD}%`,
+                      }}
+                    >
+                      <KanbanBoard
+                        tasks={activeTasks}
+                        selectedTaskId={selectedTaskId}
+                        onSelectTask={(id) => setSelectedTaskId(id)}
+                      />
+                    </div>
                   )}
                   {viewMode === 'LIST' && (
-                    <ListView
-                      tasks={activeTasks}
-                      selectedTaskId={selectedTaskId}
-                      onSelectTask={(id) => setSelectedTaskId(id)}
-                    />
+                    <div
+                      className="h-full w-full"
+                      style={{
+                        transform: `scale(${viewZoom.LIST})`,
+                        transformOrigin: 'top left',
+                        width: `${100 / viewZoom.LIST}%`,
+                        height: `${100 / viewZoom.LIST}%`,
+                      }}
+                    >
+                      <ListView
+                        tasks={activeTasks}
+                        selectedTaskId={selectedTaskId}
+                        onSelectTask={(id) => setSelectedTaskId(id)}
+                      />
+                    </div>
                   )}
                   {viewMode === 'GANTT' && (
                     <div className="flex-1 h-full min-w-0 bg-surface rounded-xl border border-border-subtle shadow-sm overflow-hidden">
                       <GanttChart
                         tasks={activeTasks}
+                        projectId={activeProjectId}
+                        zoom={viewZoom.GANTT}
+                        onViewModeChange={setGanttViewMode}
                         selectedTaskId={selectedTaskId}
                         onSelectTask={(id) => setSelectedTaskId(id)}
                         onUpdateTaskDates={(id, startDate, dueDate) => {

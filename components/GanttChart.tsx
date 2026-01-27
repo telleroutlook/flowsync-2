@@ -5,6 +5,9 @@ import { cn } from '../src/utils/cn';
 
 interface GanttChartProps {
   tasks: Task[];
+  projectId?: string;
+  zoom?: number;
+  onViewModeChange?: (mode: ViewMode) => void;
   selectedTaskId?: string | null;
   onSelectTask?: (id: string) => void;
   onUpdateTaskDates?: (id: string, startDate: number, dueDate: number) => void;
@@ -49,9 +52,48 @@ const getTaskColorClass = (priority: Priority, isMilestone?: boolean): string =>
 const ROW_HEIGHT = 44;
 const BAR_HEIGHT = 32;
 const BAR_OFFSET_Y = (ROW_HEIGHT - BAR_HEIGHT) / 2;
+const LIST_WIDTH = 256;
+
+const computeTimelineRange = (entries: TaskEntry[], viewMode: ViewMode) => {
+  if (entries.length === 0) return null;
+
+  const rawStart = Math.min(...entries.map(t => t.startMs));
+  const rawEnd = Math.max(...entries.map(t => t.endMs));
+
+  const startDate = new Date(rawStart);
+  startDate.setDate(startDate.getDate() - 7);
+  const endDate = new Date(rawEnd);
+  endDate.setDate(endDate.getDate() + 14);
+
+  if (viewMode === 'Year') {
+    startDate.setMonth(0, 1);
+    endDate.setMonth(11, 31);
+  } else if (viewMode === 'Month') {
+    startDate.setDate(1);
+    endDate.setMonth(endDate.getMonth() + 1, 0);
+  } else if (viewMode === 'Week') {
+    const day = startDate.getDay();
+    startDate.setDate(startDate.getDate() - ((day + 6) % 7));
+  }
+
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(23, 59, 59, 999);
+
+  return { startMs: startDate.getTime(), endMs: endDate.getTime() };
+};
+
+const estimateTotalWidth = (entries: TaskEntry[], viewMode: ViewMode, zoom: number) => {
+  const range = computeTimelineRange(entries, viewMode);
+  if (!range) return 0;
+  const settings = VIEW_SETTINGS[viewMode];
+  return (range.endMs - range.startMs) * ((settings.pxPerDay * zoom) / DAY_MS);
+};
 
 export const GanttChart: React.FC<GanttChartProps> = memo(({
   tasks,
+  projectId,
+  zoom = 1,
+  onViewModeChange,
   selectedTaskId,
   onSelectTask,
   onUpdateTaskDates,
@@ -64,6 +106,8 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
   const dragDeltaRef = useRef(0);
   const [dependencyTooltip, setDependencyTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const arrowId = useId();
+  const userSelectedViewRef = useRef(false);
+  const [timelineWidth, setTimelineWidth] = useState(0);
 
   const headerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -88,42 +132,67 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
       .sort((a, b) => a.startMs - b.startMs);
   }, [tasks]);
 
+  useEffect(() => {
+    onViewModeChange?.(viewMode);
+  }, [onViewModeChange, viewMode]);
+
+  useEffect(() => {
+    userSelectedViewRef.current = false;
+  }, [projectId]);
+
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+
+    const updateWidth = () => {
+      setTimelineWidth(el.clientWidth || 0);
+    };
+
+    updateWidth();
+
+    const observer = new ResizeObserver(() => updateWidth());
+    observer.observe(el);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (taskEntries.length === 0) return;
+    if (userSelectedViewRef.current) return;
+
+    const availableWidth = Math.max(0, timelineWidth - (showList ? LIST_WIDTH : 0));
+    if (availableWidth <= 0) return;
+
+    const candidates: ViewMode[] = ['Day', 'Week', 'Month', 'Year'];
+    let nextMode: ViewMode = 'Year';
+
+    for (const candidate of candidates) {
+      const totalWidth = estimateTotalWidth(taskEntries, candidate, zoom);
+      if (totalWidth <= availableWidth) {
+        nextMode = candidate;
+        break;
+      }
+    }
+
+    if (nextMode !== viewMode) {
+      setViewMode(nextMode);
+    }
+  }, [taskEntries, timelineWidth, showList, viewMode, zoom]);
+
   // 2. Compute Timeline Bounds & Scale
   const { startMs, endMs, totalWidth, pxPerMs, gridLines } = useMemo(() => {
-    if (taskEntries.length === 0) {
+    const range = computeTimelineRange(taskEntries, viewMode);
+    if (!range) {
       return { startMs: 0, endMs: 0, totalWidth: 0, pxPerMs: 0, gridLines: [] };
     }
 
-    // Add padding to timeline
-    const rawStart = Math.min(...taskEntries.map(t => t.startMs));
-    const rawEnd = Math.max(...taskEntries.map(t => t.endMs));
-    
-    // Adjust start/end to nice boundaries based on ViewMode
-    const startDate = new Date(rawStart);
-    startDate.setDate(startDate.getDate() - 7); // Buffer before
-    const endDate = new Date(rawEnd);
-    endDate.setDate(endDate.getDate() + 14); // Buffer after
-
-    // Align to start of year/month/week for clean grid
-    if (viewMode === 'Year') {
-      startDate.setMonth(0, 1);
-      endDate.setMonth(11, 31);
-    } else if (viewMode === 'Month') {
-      startDate.setDate(1);
-      endDate.setMonth(endDate.getMonth() + 1, 0);
-    } else if (viewMode === 'Week') {
-      const day = startDate.getDay();
-      startDate.setDate(startDate.getDate() - ((day + 6) % 7));
-    }
-
-    startDate.setHours(0, 0, 0, 0);
-    endDate.setHours(23, 59, 59, 999);
-
-    const sMs = startDate.getTime();
-    const eMs = endDate.getTime();
+    const sMs = range.startMs;
+    const eMs = range.endMs;
     
     const settings = VIEW_SETTINGS[viewMode];
-    const pxPerMsValue = settings.pxPerDay / DAY_MS;
+    const pxPerMsValue = (settings.pxPerDay * zoom) / DAY_MS;
     const totalW = (eMs - sMs) * pxPerMsValue;
 
     // Generate Grid Lines (Ticks) - optimized to reduce iterations
@@ -346,7 +415,10 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
           {(['Day', 'Week', 'Month', 'Year'] as ViewMode[]).map(m => (
              <button
                key={m}
-               onClick={() => setViewMode(m)}
+               onClick={() => {
+                 userSelectedViewRef.current = true;
+                 setViewMode(m);
+               }}
                className={cn(
                  "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
                  viewMode === m 
