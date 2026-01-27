@@ -12,7 +12,7 @@ binding = "HYPERDRIVE"
 id = "165e16e1c93849e09e95097ed1c83141"
 
 [vars]
-OPENAI_BASE_URL = "https://gateway.ai.cloudflare.com/v1/fd70ec11f02dba413166e35ea34bad1f/bigmodel/custom-bigmodel-root/api/coding/paas/v4"
+OPENAI_BASE_URL = "https://open.bigmodel.cn/api/coding/paas/v4"
 OPENAI_MODEL = "GLM-4.7"
 
 [observability]
