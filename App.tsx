@@ -1079,6 +1079,7 @@ function App() {
         isChatOpen={isChatOpen}
         setIsChatOpen={setIsChatOpen}
         onResetChat={handleResetChat}
+        onExportChat={handleExportChat}
         pendingDraft={pendingDraft}
         draftWarnings={draftWarnings}
         onApplyDraft={handleApplyDraft}
