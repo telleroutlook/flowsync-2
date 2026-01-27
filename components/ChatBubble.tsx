@@ -140,7 +140,7 @@ export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessin
     <div className={cn("flex w-full mb-4 animate-fade-in", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[92%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm transition-all",
+          "max-w-[92%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm transition-all break-words overflow-hidden",
           isUser
             ? "bg-primary text-primary-foreground rounded-br-none"
             : "bg-surface text-text-primary border border-border-subtle rounded-bl-none"
@@ -149,7 +149,7 @@ export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessin
         {hasText && <MarkdownContent content={message.text} isUser={isUser} codeLabel={t('chat.code')} />}
 
         {attachments.length > 0 && (
-          <div className={cn("mt-2 flex flex-col gap-1.5", !hasText && "mt-0")}>
+          <div className={cn("mt-2 flex flex-col gap-1.5 min-w-0", !hasText && "mt-0")}>
             {attachments.map((attachment) => (
               <Attachment key={attachment.id} attachment={attachment} isUser={isUser} />
             ))}

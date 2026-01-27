@@ -190,7 +190,7 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
             {draftWarnings.length > 0 && (
               <div className="space-y-1 pl-5 mb-3">
                 {draftWarnings.map((warning, index) => (
-                  <div key={index} className="text-xs text-critical">
+                  <div key={index} className="text-xs text-critical break-words">
                     {warning}
                   </div>
                 ))}
@@ -242,47 +242,47 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
               exit={{ opacity: 0, y: 10 }}
               className="flex justify-start mb-4"
             >
-               <div className="bg-surface px-4 py-3 rounded-2xl rounded-bl-none border border-border-subtle shadow-sm max-w-[85%]">
-                  <div className="flex items-center gap-2.5 mb-2">
-                    <span className="text-sm font-semibold text-joule-start">{t('chat.thinking')}</span>
-                    <div className="flex gap-1" aria-hidden="true">
+               <div className="bg-surface px-4 py-3 rounded-2xl rounded-bl-none border border-joule-start/50 shadow-md shadow-joule-start/10 max-w-[85%]">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-sm font-bold text-joule-start">{t('chat.thinking')}</span>
+                    <div className="flex gap-1.5" aria-hidden="true">
                       <motion.span
-                        animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-                        transition={{ repeat: Infinity, duration: 1.5, delay: 0 }}
-                        className="w-1.5 h-1.5 bg-joule-start rounded-full"
+                        animate={{ scale: [1, 1.5, 1], opacity: [0.4, 1, 0.4] }}
+                        transition={{ repeat: Infinity, duration: 1, delay: 0 }}
+                        className="w-2 h-2 bg-joule-start rounded-full"
                       />
                       <motion.span
-                        animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-                        transition={{ repeat: Infinity, duration: 1.5, delay: 0.2 }}
-                        className="w-1.5 h-1.5 bg-joule-start rounded-full"
+                        animate={{ scale: [1, 1.5, 1], opacity: [0.4, 1, 0.4] }}
+                        transition={{ repeat: Infinity, duration: 1, delay: 0.2 }}
+                        className="w-2 h-2 bg-joule-start rounded-full"
                       />
                       <motion.span
-                        animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-                        transition={{ repeat: Infinity, duration: 1.5, delay: 0.4 }}
-                        className="w-1.5 h-1.5 bg-joule-start rounded-full"
+                        animate={{ scale: [1, 1.5, 1], opacity: [0.4, 1, 0.4] }}
+                        transition={{ repeat: Infinity, duration: 1, delay: 0.4 }}
+                        className="w-2 h-2 bg-joule-start rounded-full"
                       />
                     </div>
                   </div>
 
                   {thinkingPreview && (
-                    <div className="text-xs text-text-secondary italic border-l-2 border-border-subtle pl-2 mb-2">
+                    <div className="text-xs text-text-secondary italic border-l-2 border-joule-start/30 pl-3 mb-2 break-words">
                       {thinkingPreview}
                     </div>
                   )}
 
                   {processingSteps.length > 0 && (
-                    <div className="space-y-1">
+                    <div className="space-y-1.5 mt-2">
                       {processingSteps.map((step, index) => (
                         <motion.div
                           initial={{ opacity: 0, x: -5 }}
                           animate={{ opacity: 1, x: 0 }}
                           key={`${step.label}-${index}`}
-                          className="flex items-center gap-1.5 text-xs text-text-secondary"
+                          className="flex items-center gap-2 text-xs text-text-secondary"
                         >
-                          <div className="w-1 h-1 rounded-full bg-success" aria-hidden="true"></div>
-                          <span>{step.label}</span>
+                          <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" aria-hidden="true"></div>
+                          <span className="break-words">{step.label}</span>
                           {typeof step.elapsedMs === 'number' && (
-                             <span className="opacity-50">· {(step.elapsedMs / 1000).toFixed(1)}s</span>
+                             <span className="opacity-50 shrink-0">· {(step.elapsedMs / 1000).toFixed(1)}s</span>
                           )}
                         </motion.div>
                       ))}
