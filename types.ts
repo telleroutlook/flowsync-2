@@ -49,6 +49,7 @@ export interface ChatMessage {
   timestamp: number;
   isThinking?: boolean;
   attachments?: ChatAttachment[];
+  suggestions?: string[];
 }
 
 export interface ChatAttachment {

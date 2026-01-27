@@ -854,6 +854,28 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
         return JSON.stringify({ success: true, message: 'Draft applied successfully.' });
       },
     },
+    {
+      name: 'suggestActions',
+      description: 'Provide a list of suggested next actions for the user. Use this to offer concrete, executable options based on the current context.',
+      parameters: {
+        type: 'object',
+        properties: {
+          suggestions: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'List of suggested actions (e.g., "Create a new task", "Update project status")',
+          },
+        },
+        required: ['suggestions'],
+      },
+      category: 'read', // Using 'read' so it can be called by the AI during the conversation flow
+      handler: async ({ args }) => {
+        return JSON.stringify({
+          success: true,
+          data: args.suggestions,
+        });
+      },
+    },
   ];
 }
 

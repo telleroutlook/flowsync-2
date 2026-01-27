@@ -11,6 +11,7 @@ interface ChatBubbleProps {
   message: ChatMessage;
   onRetry?: () => void;
   isProcessing?: boolean;
+  onSuggestionClick?: (suggestion: string) => void;
 }
 
 const formatBytes = (value: number): string => {
@@ -113,12 +114,13 @@ const MarkdownContent = memo<MarkdownContentProps>(({ content, isUser, codeLabel
 });
 MarkdownContent.displayName = 'MarkdownContent';
 
-export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessing }) => {
+export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessing, onSuggestionClick }) => {
   const { t, locale } = useI18n();
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const hasText = message.text.trim().length > 0;
   const attachments = message.attachments || [];
+  const suggestions = message.suggestions || [];
   const isRetryableError = !isUser && !isSystem && message.text.includes('OpenAI request failed.');
 
   const timestamp = useMemo(() =>
@@ -137,7 +139,7 @@ export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessin
   }
 
   return (
-    <div className={cn("flex w-full mb-4 animate-fade-in", isUser ? "justify-end" : "justify-start")}>
+    <div className={cn("flex flex-col w-full mb-4 animate-fade-in", isUser ? "items-end" : "items-start")}>
       <div
         className={cn(
           "max-w-[92%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm transition-all break-words overflow-hidden",
@@ -177,6 +179,21 @@ export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessin
           {isUser && <span>• {t('chat.you')}</span>}
         </div>
       </div>
+
+      {suggestions.length > 0 && !isUser && (
+        <div className="flex flex-wrap gap-2 mt-2 ml-1 max-w-[92%]">
+          {suggestions.map((suggestion, index) => (
+            <button
+              key={index}
+              onClick={() => onSuggestionClick?.(suggestion)}
+              disabled={isProcessing}
+              className="text-xs bg-surface border border-primary/20 hover:border-primary/50 text-primary px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 });

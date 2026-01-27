@@ -204,6 +204,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
       );
 
       let finalText = response.text;
+      let suggestions: string[] = [];
 
       // Process tool calls if any
       if (response.toolCalls && response.toolCalls.length > 0) {
@@ -229,6 +230,10 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
             t,
           }
         );
+
+        if (result.suggestions) {
+          suggestions = result.suggestions;
+        }
 
         // Handle retry logic for invalid responses
         if (result.shouldRetry && attempt < MAX_RETRIES) {
@@ -279,7 +284,8 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
         id: generateId(),
         role: 'model',
         text: finalText || t('chat.processed'),
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        suggestions: suggestions.length > 0 ? suggestions : undefined
       }]);
 
     } catch (error) {
@@ -293,11 +299,11 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
     }
   }, [activeProjectId, submitDraft, appendSystemMessage, pushProcessingStep, setMessages, setThinkingPreview, t, stageLabels]);
 
-  const handleSendMessage = useCallback(async (e?: React.FormEvent) => {
+  const handleSendMessage = useCallback(async (e?: React.FormEvent, overrideText?: string) => {
     e?.preventDefault();
     if (isProcessing) return;
 
-    const cleanedInput = inputText.trim();
+    const cleanedInput = (overrideText ?? inputText).trim();
     const hasAttachments = pendingAttachments.length > 0;
     if (!cleanedInput && !hasAttachments) return;
 

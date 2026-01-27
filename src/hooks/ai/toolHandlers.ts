@@ -25,6 +25,7 @@ export interface ToolExecutionResult {
   draftReason?: string;
   shouldRetry?: boolean;
   retryReason?: string;
+  suggestions?: string[];
 }
 
 // Map of tool names to their handlers
@@ -279,6 +280,17 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     await api.applyDraft(args.draftId, 'user');
     return { output: t('tool.apply.success', { id: args.draftId }) };
   },
+
+  suggestActions: (args, { t }) => {
+    if (!Array.isArray(args.suggestions)) {
+      return { output: '' };
+    }
+    const suggestions = args.suggestions.filter((s): s is string => typeof s === 'string');
+    return {
+      output: '',
+      suggestions,
+    };
+  },
 };
 
 /**
@@ -313,9 +325,11 @@ export async function processToolCalls(
   draftReason: string | undefined;
   shouldRetry: boolean;
   retryReason: string;
+  suggestions: string[];
 }> {
   const outputs: string[] = [];
   const allDraftActions: DraftAction[] = [];
+  const allSuggestions: string[] = [];
   let draftReason: string | undefined;
   let shouldRetry = false;
   let retryReason = '';
@@ -324,6 +338,9 @@ export async function processToolCalls(
     const result = await executeToolCall(call.name, call.args, context);
     outputs.push(result.output);
     allDraftActions.push(...(result.draftActions || []));
+    if (result.suggestions) {
+      allSuggestions.push(...result.suggestions);
+    }
     if (result.draftReason) {
       draftReason = result.draftReason;
     }
@@ -339,6 +356,7 @@ export async function processToolCalls(
     draftReason,
     shouldRetry,
     retryReason,
+    suggestions: allSuggestions,
   };
 }
 

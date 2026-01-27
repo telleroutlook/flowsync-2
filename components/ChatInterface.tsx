@@ -20,7 +20,7 @@ interface ChatInterfaceProps {
   processingSteps: { label: string; elapsedMs?: number }[];
   thinkingPreview: string;
   messagesEndRef: React.RefObject<HTMLDivElement>;
-  onSendMessage: (e?: React.FormEvent) => void;
+  onSendMessage: (e?: React.FormEvent, overrideText?: string) => void;
   onRetryLastMessage: () => void;
   pendingAttachments: ChatAttachment[];
   onRemoveAttachment: (id: string) => void;
@@ -103,6 +103,10 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
       target.style.height = 'auto';
       onSendMessage();
     }
+  }, [onSendMessage]);
+
+  const handleSuggestionClick = useCallback((suggestion: string) => {
+    onSendMessage(undefined, suggestion);
   }, [onSendMessage]);
 
   return (
@@ -229,6 +233,7 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
             message={msg}
             onRetry={onRetryLastMessage}
             isProcessing={isProcessing}
+            onSuggestionClick={handleSuggestionClick}
           />
         ))}
 
