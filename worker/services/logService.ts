@@ -6,10 +6,19 @@ export const recordLog = async (
   kind: 'ai_request' | 'ai_response' | 'tool_execution' | 'error',
   payload: Record<string, unknown>
 ) => {
-  await db.insert(observabilityLogs).values({
-    id: generateId(),
-    kind,
-    payload,
-    createdAt: now(),
-  });
+  try {
+    await db.insert(observabilityLogs).values({
+      id: generateId(),
+      kind,
+      payload,
+      createdAt: now(),
+    });
+  } catch (error) {
+    const requestId = typeof payload.requestId === 'string' ? payload.requestId : undefined;
+    console.warn('[observability] log insert failed', {
+      kind,
+      requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 };

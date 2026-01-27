@@ -61,6 +61,31 @@ class StreamAbortError extends Error {
   }
 }
 
+type RetryAttemptInfo = {
+  attempt: number;
+  elapsedMs: number;
+  status?: number;
+  error?: string;
+  timedOut?: boolean;
+  delayMs?: number;
+  retryAfter?: string | null;
+};
+
+type FetchRetryResult = {
+  response: Response;
+  attempts: number;
+  elapsedMs: number;
+  retryHistory: RetryAttemptInfo[];
+};
+
+type FetchRetryError = {
+  error: unknown;
+  attempts: number;
+  elapsedMs: number;
+  lastErrorType: 'network' | 'timeout' | 'unknown';
+  retryHistory: RetryAttemptInfo[];
+};
+
 const fetchWithRetry = async (
   endpoint: string,
   options: RequestInit,
@@ -68,10 +93,11 @@ const fetchWithRetry = async (
   maxRetries: number,
   onRetry?: (info: { attempt: number; delayMs: number; status?: number; error?: string }) => void,
   abortSignal?: AbortSignal
-) => {
+): Promise<FetchRetryResult> => {
   let lastError: unknown;
   let lastErrorType: 'network' | 'timeout' | 'unknown' = 'unknown';
   let totalElapsedMs = 0;
+  const retryHistory: RetryAttemptInfo[] = [];
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
     if (abortSignal?.aborted) {
@@ -96,12 +122,16 @@ const fetchWithRetry = async (
       totalElapsedMs += elapsed;
       clearTimeout(timeoutId);
       abortSignal?.removeEventListener('abort', handleAbort);
+      const attemptInfo: RetryAttemptInfo = { attempt: attempt + 1, elapsedMs: elapsed, status: response.status };
+      retryHistory.push(attemptInfo);
 
       if (response.ok || !shouldRetryStatus(response.status) || attempt === maxRetries) {
-        return { response, attempts: attempt + 1, elapsedMs: totalElapsedMs };
+        return { response, attempts: attempt + 1, elapsedMs: totalElapsedMs, retryHistory };
       }
 
       const delayMs = getRetryDelay(attempt, response.headers.get('Retry-After'));
+      attemptInfo.delayMs = delayMs;
+      attemptInfo.retryAfter = response.headers.get('Retry-After');
       onRetry?.({ attempt: attempt + 1, delayMs, status: response.status });
       await sleep(delayMs);
       continue;
@@ -111,6 +141,12 @@ const fetchWithRetry = async (
       const elapsed = Date.now() - start;
       totalElapsedMs += elapsed;
       lastError = error;
+      const attemptInfo: RetryAttemptInfo = {
+        attempt: attempt + 1,
+        elapsedMs: elapsed,
+        error: String(error),
+        timedOut,
+      };
 
       if (externalAborted) {
         throw new StreamAbortError();
@@ -135,7 +171,14 @@ const fetchWithRetry = async (
       }
 
       if (attempt === maxRetries) {
-        throw { error: lastError, attempts: attempt + 1, elapsedMs: totalElapsedMs };
+        retryHistory.push(attemptInfo);
+        throw {
+          error: lastError,
+          attempts: attempt + 1,
+          elapsedMs: totalElapsedMs,
+          lastErrorType,
+          retryHistory,
+        } satisfies FetchRetryError;
       }
 
       // Aggressive retry for first network error (Double Tap)
@@ -144,12 +187,20 @@ const fetchWithRetry = async (
         ? 10 // Almost immediate retry for first network glitch
         : getRetryDelay(attempt);
 
+      attemptInfo.delayMs = delayMs;
+      retryHistory.push(attemptInfo);
       onRetry?.({ attempt: attempt + 1, delayMs, error: String(error) });
       await sleep(delayMs);
     }
   }
 
-  throw { error: lastError, attempts: maxRetries + 1, elapsedMs: totalElapsedMs };
+  throw {
+    error: lastError,
+    attempts: maxRetries + 1,
+    elapsedMs: totalElapsedMs,
+    lastErrorType,
+    retryHistory,
+  } satisfies FetchRetryError;
 };
 
 // Helper function to execute tool calls using the registry
@@ -291,6 +342,9 @@ const runAIRequest = async (
     messageLength: message.length,
     systemContextLength: systemContext?.length || 0,
     usingAig: hasAigToken,
+    baseUrl,
+    endpoint,
+    model,
   });
 
   const boundedHistory = history.slice(-MAX_HISTORY_MESSAGES);
@@ -308,6 +362,13 @@ const runAIRequest = async (
   let allFunctionCalls: Array<{ name: string; args: unknown }> = [];
   let lastToolCallSignature: string | null = null;
   let totalToolCalls = 0;
+  const upstreamCalls: Array<{
+    turn: number;
+    attempts: number;
+    elapsedMs: number;
+    status: number;
+    retryHistory: RetryAttemptInfo[];
+  }> = [];
 
   while (currentTurn < MAX_TURNS) {
     assertNotAborted();
@@ -330,6 +391,7 @@ const runAIRequest = async (
     let response: Response;
     let attempts = 0;
     let elapsedMs = 0;
+    let retryHistory: RetryAttemptInfo[] = [];
     try {
       const result = await fetchWithRetry(
         endpoint,
@@ -359,11 +421,13 @@ const runAIRequest = async (
       response = result.response;
       attempts = result.attempts;
       elapsedMs = result.elapsedMs;
+      retryHistory = result.retryHistory;
     } catch (errorInfo) {
       if (errorInfo instanceof StreamAbortError) {
         throw errorInfo;
       }
-      const err = (errorInfo as { error: unknown }).error;
+      const failure = errorInfo as FetchRetryError;
+      const err = failure.error;
       const errorMsg = err instanceof Error ? err.message : String(err);
       const errorStack = err instanceof Error ? err.stack : undefined;
       // Re-classify error type for logging
@@ -371,12 +435,30 @@ const runAIRequest = async (
       const isNetwork = errorMsg.includes('ECONN') || errorMsg.includes('network') || errorMsg.includes('fetch failed');
       const errorType = isTimeout ? 'timeout' : (isNetwork ? 'network' : 'unknown');
       
-      const errorDetail = `Type: ${errorType}, Attempts: ${attempts}, Elapsed: ${elapsedMs}ms, Error: ${errorMsg}`;
+      const errorDetail = `Type: ${errorType}, Attempts: ${failure.attempts}, Elapsed: ${failure.elapsedMs}ms, Error: ${errorMsg}`;
 
       await recordLog(c.get('db'), 'error', {
         requestId,
         message: 'Upstream request failed (Network/Timeout).',
         detail: errorDetail + (errorStack ? `\nStack: ${errorStack}` : ''),
+        baseUrl,
+        endpoint,
+        model,
+        usingAig: hasAigToken,
+        lastErrorType: failure.lastErrorType,
+        retryHistory: failure.retryHistory,
+        turn: currentTurn,
+      });
+      console.error('[ai] upstream request failed', {
+        requestId,
+        message: errorMsg,
+        lastErrorType: failure.lastErrorType,
+        attempts: failure.attempts,
+        elapsedMs: failure.elapsedMs,
+        retryHistory: failure.retryHistory,
+        baseUrl,
+        endpoint,
+        model,
       });
       throw new ApiError('OPENAI_ERROR', `Request failed: ${errorMsg}`, 502);
     }
@@ -396,9 +478,35 @@ const runAIRequest = async (
         status: response.status,
         attempts,
         elapsedMs,
+        retryHistory,
+        baseUrl,
+        endpoint,
+        model,
+        usingAig: hasAigToken,
+        turn: currentTurn,
+      });
+      console.error('[ai] upstream non-OK response', {
+        requestId,
+        status: response.status,
+        statusText,
+        attempts,
+        elapsedMs,
+        retryHistory,
+        baseUrl,
+        endpoint,
+        model,
+        bodySnippet: errorText.slice(0, 400),
       });
       throw new ApiError('OPENAI_ERROR', `Provider Error (${response.status}): ${errorText.slice(0, 200)}`, 502);
     }
+
+    upstreamCalls.push({
+      turn: currentTurn,
+      attempts,
+      elapsedMs,
+      status: response.status,
+      retryHistory,
+    });
 
     const responseJson = await response.json().catch(() => null);
     const responseSchema = z.object({
@@ -530,6 +638,7 @@ const runAIRequest = async (
     toolCalls: allFunctionCalls,
     turns: currentTurn,
     toolCallsTotal: allFunctionCalls.length,
+    upstreamCalls,
   });
 
   assertNotAborted();
@@ -560,6 +669,10 @@ aiRoute.post('/api/ai', zValidator('json', requestSchema), async (c) => {
       requestId,
       message: 'OpenAI request failed.',
       detail: error instanceof Error ? error.message : String(error),
+    });
+    console.error('[ai] request failed', {
+      requestId,
+      message: error instanceof Error ? error.message : String(error),
     });
     return jsonError(c, 'OPENAI_ERROR', 'OpenAI request failed.', 502);
   }
@@ -648,6 +761,10 @@ aiRoute.post('/api/ai/stream', zValidator('json', requestSchema), async (c) => {
               } else {
                 send('error', { code: 'OPENAI_ERROR', message: 'OpenAI request failed.', status: 502 });
               }
+              console.error('[ai] stream failed', {
+                requestId,
+                message: error instanceof Error ? error.message : String(error),
+              });
               closed = true;
               controller.close();
             } catch {
