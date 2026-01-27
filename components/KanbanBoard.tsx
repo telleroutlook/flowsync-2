@@ -4,6 +4,8 @@ import { useI18n } from '../src/i18n';
 import { getPriorityShortLabel, getStatusLabel } from '../src/i18n/labels';
 import { cn } from '../src/utils/cn';
 import { ClipboardList, Calendar } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './ui/Card';
+import { Badge } from './ui/Badge';
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -46,14 +48,14 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect }) 
   }, [onSelect, task.id]);
 
   return (
-    <div
+    <Card
       role="button"
       tabIndex={0}
       aria-pressed={isSelected}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       className={cn(
-        "bg-surface p-4 rounded-xl border transition-all duration-200 cursor-pointer group animate-fade-in relative overflow-hidden",
+        "transition-all duration-200 cursor-pointer group animate-fade-in relative overflow-hidden",
         isSelected
           ? 'border-primary/50 ring-2 ring-primary/20 shadow-md'
           : task.isMilestone
@@ -62,61 +64,62 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect }) 
       )}
     >
       {task.isMilestone && (
-        <div className="absolute top-0 right-0 w-8 h-8 bg-gradient-to-bl from-joule-start/20 to-transparent -mr-4 -mt-4 rotate-45" aria-hidden="true" />
+        <div className="absolute top-0 right-0 w-8 h-8 bg-gradient-to-bl from-joule-start/20 to-transparent -mr-4 -mt-4 rotate-45 pointer-events-none" aria-hidden="true" />
       )}
 
-      <div className="flex justify-between items-center mb-2">
-        <div className="min-w-0 pr-2">
-          <h4 className={cn(
-            "font-semibold text-base leading-snug text-text-primary inline-flex flex-wrap items-center gap-1",
-            task.isMilestone ? "text-text-primary" : "text-text-primary"
-          )}>
-            {task.wbs && (
-              <span className="text-[10px] font-mono text-text-secondary tracking-tight shrink-0 leading-none">
-                [{task.wbs}]
-              </span>
-            )}
-            <span className="min-w-0 break-words">{task.title}</span>
-          </h4>
+      <CardHeader className="p-4 pb-2 space-y-0">
+        <div className="flex justify-between items-start gap-2">
+          <CardTitle className="text-base font-semibold leading-snug text-text-primary flex-1 min-w-0">
+             <div className="flex flex-wrap items-center gap-1">
+                {task.wbs && (
+                  <span className="text-[10px] font-mono text-text-secondary tracking-tight shrink-0 leading-none">
+                    [{task.wbs}]
+                  </span>
+                )}
+                <span className="break-words">{task.title}</span>
+             </div>
+          </CardTitle>
+          <Badge 
+            variant="outline" 
+            className={cn("shrink-0 uppercase tracking-wider text-[10px] px-2 py-0.5 h-auto", PRIORITY_COLORS[task.priority])}
+          >
+            {getPriorityShortLabel(task.priority, t)}
+          </Badge>
         </div>
-        <span className={cn(
-          "shrink-0 text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wider ring-1 ring-inset",
-          PRIORITY_COLORS[task.priority]
-        )}>
-          {getPriorityShortLabel(task.priority, t)}
-        </span>
-      </div>
+      </CardHeader>
 
-      {task.description && (
-        <p className="text-sm text-text-secondary mb-3 line-clamp-2 leading-relaxed">{task.description}</p>
-      )}
+      <CardContent className="p-4 py-2">
+        {task.description && (
+          <p className="text-sm text-text-secondary mb-3 line-clamp-3 leading-relaxed">{task.description}</p>
+        )}
 
-      {/* Progress Bar */}
-      <div className="mb-3 group-hover:opacity-100 transition-opacity">
-        <div className="flex justify-between text-xs text-text-secondary mb-1 font-medium">
-          <span>{t('kanban.progress')}</span>
-          <span className={task.completion === 100 ? 'text-success' : ''}>{task.completion || 0}%</span>
+        {/* Progress Bar */}
+        <div className="group-hover:opacity-100 transition-opacity">
+          <div className="flex justify-between text-xs text-text-secondary mb-1 font-medium">
+            <span>{t('kanban.progress')}</span>
+            <span className={task.completion === 100 ? 'text-success' : ''}>{task.completion || 0}%</span>
+          </div>
+          <div className="w-full bg-background h-1.5 rounded-full overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                task.completion === 100 ? 'bg-success' : 'bg-primary'
+              )}
+              style={{ width: `${task.completion || 0}%`}}
+              aria-label={`${task.completion || 0}% complete`}
+            />
+          </div>
         </div>
-        <div className="w-full bg-background h-1.5 rounded-full overflow-hidden">
-          <div
-            className={cn(
-              "h-full rounded-full transition-all duration-500",
-              task.completion === 100 ? 'bg-success' : 'bg-primary'
-            )}
-            style={{ width: `${task.completion || 0}%`}}
-            aria-label={`${task.completion || 0}% complete`}
-          />
-        </div>
-      </div>
+      </CardContent>
 
-      <div className="flex justify-between items-center border-t border-border-subtle pt-2.5 mt-2">
-        <div className="flex items-center gap-2 min-w-0">
+      <CardFooter className="p-4 pt-2 border-t border-border-subtle mt-2 flex justify-between items-center">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           {task.assignee ? (
-            <div className="flex items-center gap-1.5 bg-primary/10 pr-2 py-0.5 rounded-full border border-primary/10">
-              <div className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[8px] font-bold">
+            <div className="flex items-center gap-1.5 bg-primary/10 pr-2 py-0.5 rounded-full border border-primary/10 max-w-full">
+              <div className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[8px] font-bold shrink-0">
                 {task.assignee.charAt(0).toUpperCase()}
               </div>
-              <span className="text-xs text-primary truncate max-w-[80px] font-medium">
+              <span className="text-xs text-primary truncate font-medium" title={task.assignee}>
                 {task.assignee}
               </span>
             </div>
@@ -127,7 +130,7 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect }) 
 
         {task.dueDate && (
           <div className={cn(
-            "flex items-center gap-1 text-xs font-medium",
+            "flex items-center gap-1 text-xs font-medium shrink-0 ml-2",
              task.dueDate < Date.now() && task.status !== TaskStatus.DONE
               ? 'text-negative bg-negative/10 px-1.5 py-0.5 rounded'
               : 'text-text-secondary'
@@ -136,8 +139,8 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect }) 
             {new Date(task.dueDate).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
           </div>
         )}
-      </div>
-    </div>
+      </CardFooter>
+    </Card>
   );
 });
 TaskCard.displayName = 'TaskCard';
