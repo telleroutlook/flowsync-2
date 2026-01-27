@@ -10,6 +10,7 @@ let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 const MAX_QUERY_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 120;
 const MAX_RETRY_DELAY_MS = 1500;
+const SLOW_QUERY_WARN_MS = 500;
 
 const RETRYABLE_PG_ERROR_CODES = new Set([
   'ECONNRESET',
@@ -92,7 +93,7 @@ export const getPgDb = (env: Bindings) => {
       connectionTimeoutMillis: 1_500,
       idleTimeoutMillis: 30_000,
       max: 5,
-      query_timeout: 1_000,
+      query_timeout: 3_000,
     });
     pool.on('error', (error) => {
       console.error('pg_pool_error', {
@@ -113,11 +114,31 @@ export const getPgDb = (env: Bindings) => {
 
         let lastError: unknown;
         for (let attempt = 0; attempt <= MAX_QUERY_RETRIES; attempt += 1) {
+          const startedAt = Date.now();
           try {
-            return await originalQuery(...args);
+            const result = await originalQuery(...args);
+            const elapsedMs = Date.now() - startedAt;
+            if (elapsedMs >= SLOW_QUERY_WARN_MS) {
+              console.warn('db_slow_query', {
+                elapsedMs,
+                canRetry,
+                query: queryText?.slice(0, 200) ?? 'unknown',
+                rows: typeof result.rowCount === 'number' ? result.rowCount : null,
+              });
+            }
+            return result;
           } catch (error) {
             lastError = error;
+            const elapsedMs = Date.now() - startedAt;
             if (!canRetry || !isRetryablePgError(error) || attempt === MAX_QUERY_RETRIES) {
+              console.error('db_query_failed', {
+                elapsedMs,
+                code: getErrorCode(error),
+                message: getErrorMessage(error),
+                query: queryText?.slice(0, 200) ?? 'unknown',
+                canRetry,
+                attempt: attempt + 1,
+              });
               throw error;
             }
             const delayMs = getRetryDelay(attempt);
@@ -126,6 +147,7 @@ export const getPgDb = (env: Bindings) => {
               delayMs,
               code: getErrorCode(error),
               message: getErrorMessage(error),
+              elapsedMs,
             });
             await sleep(delayMs);
           }

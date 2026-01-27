@@ -59,34 +59,77 @@ export const listTasks = async (
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, filters.pageSize ?? 50));
   const whereClause = buildWhere(filters);
+  const projectScoped = typeof filters.projectId === 'string' && filters.projectId.length > 0;
   const workspaceClause = eq(projects.workspaceId, workspaceId);
   const combinedClause = whereClause ? and(whereClause, workspaceClause) : workspaceClause;
+  let seedFallback: { data: TaskRecord[]; total: number } | null = null;
+  let projectValidated = false;
 
-  const [{ count }] = await retryOnce('tasks_count_failed', () =>
-    db
-      .select({ count: sql<number>`count(*)` })
-      .from(tasks)
-      .innerJoin(projects, eq(tasks.projectId, projects.id))
-      .where(combinedClause)
-  ).catch((error) => {
+  if (projectScoped) {
+    const projectRows = await retryOnce('tasks_project_validate_failed', () =>
+      db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(and(eq(projects.id, filters.projectId!), workspaceClause))
+        .limit(1)
+    ).catch((error) => {
+      console.warn('tasks_project_validate_failed', {
+        workspaceId,
+        projectId: filters.projectId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    });
+    if (projectRows.length === 0) {
+      return { data: [], total: 0, page, pageSize };
+    }
+    projectValidated = true;
+  }
+
+  let countValue: number | null = null;
+  try {
+    const [{ count }] = await retryOnce('tasks_count_failed', () => {
+      if (projectValidated) {
+        return db
+          .select({ count: sql<number>`count(*)` })
+          .from(tasks)
+          .where(whereClause);
+      }
+      return db
+        .select({ count: sql<number>`count(*)` })
+        .from(tasks)
+        .innerJoin(projects, eq(tasks.projectId, projects.id))
+        .where(combinedClause);
+    });
+    countValue = count;
+  } catch (error) {
     if (cached) {
       console.warn('tasks_cache_fallback', { workspaceId, cacheKey });
-      return [{ count: cached.data.total }];
-    }
-    if (workspaceId === 'public') {
-      const fallback = buildSeedTaskList(filters);
+      countValue = cached.data.total;
+    } else if (workspaceId === 'public') {
+      seedFallback = buildSeedTaskList(filters);
       console.warn('tasks_seed_fallback', { workspaceId, cacheKey });
-      return [{ count: fallback.total }];
+      countValue = seedFallback.total;
+    } else {
+      console.warn('tasks_count_fallback', {
+        workspaceId,
+        cacheKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
-    throw error;
-  });
+  }
 
   const rows = await retryOnce('tasks_list_failed', () =>
-    db
-      .select()
-      .from(tasks)
-      .innerJoin(projects, eq(tasks.projectId, projects.id))
-      .where(combinedClause)
+    (projectValidated
+      ? db
+          .select()
+          .from(tasks)
+          .where(whereClause)
+      : db
+          .select()
+          .from(tasks)
+          .innerJoin(projects, eq(tasks.projectId, projects.id))
+          .where(combinedClause))
       .orderBy(tasks.createdAt)
       .limit(pageSize)
       .offset((page - 1) * pageSize)
@@ -96,14 +139,18 @@ export const listTasks = async (
       return cached.data.data;
     }
     if (workspaceId === 'public') {
-      const fallback = buildSeedTaskList(filters);
+      seedFallback = seedFallback ?? buildSeedTaskList(filters);
       console.warn('tasks_seed_fallback', { workspaceId, cacheKey });
-      return fallback.data;
+      return seedFallback.data;
     }
     throw error;
   });
 
-  const data = { data: rows.map((row) => toTaskRecord(row.tasks)), total: count, page, pageSize };
+  if (countValue === null) {
+    countValue = rows.length;
+    console.warn('tasks_count_estimated', { workspaceId, cacheKey, total: countValue });
+  }
+  const data = { data: rows.map((row) => toTaskRecord(row.tasks)), total: countValue, page, pageSize };
   taskCache.set(cacheKey, { data, at: now() });
   return data;
 };
