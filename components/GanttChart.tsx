@@ -260,7 +260,7 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
       pxPerMs: pxPerMsValue,
       gridLines: lines
     };
-  }, [taskEntries, viewMode, locale]);
+  }, [taskEntries, viewMode, locale, zoom]);
 
   // Helper: Time -> X
   const getX = useCallback((time: number) => (time - startMs) * pxPerMs, [startMs, pxPerMs]);
