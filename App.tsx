@@ -268,11 +268,12 @@ function App() {
   }, [t]);
 
   const handleExportChat = useCallback(() => {
+    console.log('Attempting to export chat history...', { messageCount: messages?.length });
     try {
       if (typeof document === 'undefined') return;
       
       if (!messages || messages.length === 0) {
-        console.warn('No messages to export');
+        alert(t('export.chat.no_messages') || 'No messages to export');
         return;
       }
 
@@ -344,7 +345,7 @@ function App() {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
     } catch (error) {
       console.error('Failed to export chat history:', error);
       alert(t('app.error.generic') || 'Export failed');
