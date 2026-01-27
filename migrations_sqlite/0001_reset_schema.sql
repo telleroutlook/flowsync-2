@@ -1,13 +1,13 @@
-CREATE TABLE `users` (
+CREATE TABLE IF NOT EXISTS `users` (
 	`id` text PRIMARY KEY NOT NULL,
 	`username` text NOT NULL,
 	`password_hash` text NOT NULL,
 	`created_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `users_username_unique` ON `users` (`username`);
+CREATE UNIQUE INDEX IF NOT EXISTS `users_username_unique` ON `users` (`username`);
 --> statement-breakpoint
-CREATE TABLE `sessions` (
+CREATE TABLE IF NOT EXISTS `sessions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` text NOT NULL,
 	`token_hash` text NOT NULL,
@@ -15,9 +15,9 @@ CREATE TABLE `sessions` (
 	`expires_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `sessions_token_hash_unique` ON `sessions` (`token_hash`);
+CREATE UNIQUE INDEX IF NOT EXISTS `sessions_token_hash_unique` ON `sessions` (`token_hash`);
 --> statement-breakpoint
-CREATE TABLE `workspaces` (
+CREATE TABLE IF NOT EXISTS `workspaces` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
 	`description` text,
@@ -26,7 +26,7 @@ CREATE TABLE `workspaces` (
 	`is_public` integer DEFAULT false NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `workspace_members` (
+CREATE TABLE IF NOT EXISTS `workspace_members` (
 	`workspace_id` text NOT NULL,
 	`user_id` text NOT NULL,
 	`role` text NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE `workspace_members` (
 	PRIMARY KEY(`workspace_id`, `user_id`)
 );
 --> statement-breakpoint
-CREATE TABLE `projects` (
+CREATE TABLE IF NOT EXISTS `projects` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
 	`name` text NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE `projects` (
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `tasks` (
+CREATE TABLE IF NOT EXISTS `tasks` (
 	`id` text PRIMARY KEY NOT NULL,
 	`project_id` text NOT NULL,
 	`title` text NOT NULL,
@@ -63,7 +63,7 @@ CREATE TABLE `tasks` (
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `drafts` (
+CREATE TABLE IF NOT EXISTS `drafts` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
 	`project_id` text,
@@ -74,7 +74,7 @@ CREATE TABLE `drafts` (
 	`reason` text
 );
 --> statement-breakpoint
-CREATE TABLE `audit_logs` (
+CREATE TABLE IF NOT EXISTS `audit_logs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
 	`entity_type` text NOT NULL,
@@ -90,9 +90,15 @@ CREATE TABLE `audit_logs` (
 	`draft_id` text
 );
 --> statement-breakpoint
-CREATE TABLE `observability_logs` (
+CREATE TABLE IF NOT EXISTS `observability_logs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`kind` text NOT NULL,
 	`payload` text NOT NULL,
 	`created_at` integer NOT NULL
 );
+--> statement-breakpoint
+ALTER TABLE `projects` ADD COLUMN IF NOT EXISTS `workspace_id` text NOT NULL DEFAULT 'public';
+--> statement-breakpoint
+ALTER TABLE `drafts` ADD COLUMN IF NOT EXISTS `workspace_id` text NOT NULL DEFAULT 'public';
+--> statement-breakpoint
+ALTER TABLE `audit_logs` ADD COLUMN IF NOT EXISTS `workspace_id` text NOT NULL DEFAULT 'public';

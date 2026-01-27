@@ -1,6 +1,6 @@
 # [ARCHIVED] FlowSync Refactoring Plan (AI Agent-Oriented Project Management System)
 
-> **Status**: Completed. The system has been refactored to a data-driven backend architecture. It now runs on Cloudflare Workers with PostgreSQL via Hyperdrive.
+> **Status**: Completed. The system has been refactored to a data-driven backend architecture. It now runs on Cloudflare Workers with D1.
 
 > Goal: Refactor the current "frontend state + conversational tool calling" prototype into a "data-driven + read-write separated + auditable" AI-native project management system.
 

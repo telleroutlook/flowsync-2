@@ -1,12 +1,11 @@
 # FlowSync -> Cloudflare Workers Migration Plan
 
-> **Status**: Completed. The project now runs on Cloudflare Workers with Hyperdrive-backed PostgreSQL and Vite static assets.
+> **Status**: Completed. The project now runs on Cloudflare Workers with D1-backed SQLite and Vite static assets.
 
-Scope: migrate both frontend and backend to run on Cloudflare Workers with Hyperdrive for PostgreSQL.
+Scope: migrate both frontend and backend to run on Cloudflare Workers with D1 for persistence.
 
 This plan assumed:
 - The backend was Hono running on Node (`src/server.ts`).
-- The DB was PostgreSQL accessed via `pg` and Drizzle.
 - The frontend was a Vite SPA.
 
 ---
@@ -15,7 +14,7 @@ This plan assumed:
 
 Goals:
 - Single Cloudflare Worker handles API (`/api/*`) and serves frontend assets.
-- PostgreSQL connectivity via Cloudflare Hyperdrive binding.
+- D1 connectivity via Cloudflare D1 binding.
 - No Node-only APIs at runtime (Workers-compatible).
 - Lint/typecheck/tests pass.
 - Production deployment via `wrangler deploy`.
@@ -24,7 +23,7 @@ Acceptance criteria (met):
 - `wrangler dev` serves both UI and API locally (optional).
 - API endpoints return expected data and auth works.
 - Frontend loads and can perform core flows (projects, tasks, drafts, audit, auth).
-- Hyperdrive successfully connects to the Postgres instance.
+- D1 successfully connects to the Worker.
 - One-time init endpoint exists for public workspace + seed data (`POST /api/system/init`).
 
 ---
@@ -34,14 +33,14 @@ Acceptance criteria (met):
 Add:
 - `wrangler.toml`
 - `worker/index.ts` (Workers entry)
-- `worker/db/pg.ts` updated for Hyperdrive/Workers
+- `worker/db/d1.ts` updated for D1/Workers
 - `docs/cloudflare-migration-plan.md` (this plan)
 
 Modify:
 - `package.json` scripts for `wrangler dev` / `wrangler deploy`
 - `worker/utils/bigmodelAuth.ts` (remove Node crypto/Buffer)
 - `worker/services/authService.ts` (remove Buffer fallbacks)
-- `worker/types.ts` (add Hyperdrive binding type)
+- `worker/types.ts` (add D1 binding type)
 - `worker/app.ts` (attach `env` correctly)
 - `vite.config.ts` (static assets config for Worker build)
 
@@ -55,7 +54,7 @@ Remove or keep (decision):
 ### 3.1 Add Worker entry
 - Create `worker/index.ts` as the Worker fetch handler:
   - Build the Hono app using `createApp`.
-  - Construct DB connection using `env.HYPERDRIVE.connectionString`.
+  - Construct DB connection using `env.DB`.
   - Pass `env` into `createApp`.
 
 ### 3.2 Replace Node-specific runtime pieces
@@ -67,27 +66,22 @@ Remove or keep (decision):
 
 ### 3.3 Environment bindings
 - Update `worker/types.ts`:
-  - Add `HYPERDRIVE` binding type.
+  - Add `DB` binding type for D1.
   - Keep `OPENAI_*` as bindings.
 - Ensure `createApp` and middleware use `c.env` bindings (Workers standard).
 
 ---
 
-## 4) Database + Hyperdrive
+## 4) Database + D1
 
-### 4.1 Update PostgreSQL driver
-- Bump `pg` to `>= 8.16.3` (Hyperdrive requirement).
-- Ensure `nodejs_compat_v2` flag in `wrangler.toml`.
+### 4.1 Update driver
+- Use `drizzle-orm/d1` with `sqlite` schema definitions.
 
 ### 4.2 Refactor DB connection for Workers
-- Update `worker/db/pg.ts` to:
+- Implement `worker/db/d1.ts` to:
   - Accept `env` binding instead of `process.env`.
-  - Use `env.HYPERDRIVE.connectionString`.
+  - Use `env.DB` for D1.
   - Avoid `process.env` / `VCAP_SERVICES` logic.
-
-### 4.3 Pool lifecycle
-- Workers are short-lived; keep a global pool with lazy init.
-- Ensure `closePgDb` exists for local tests if needed.
 
 ---
 
@@ -100,10 +94,6 @@ Preferred approach: Workers Static Assets
   - `/api/*` -> Hono app
   - everything else -> `env.ASSETS.fetch(request)`
 
-Alternative approach: Cloudflare Vite plugin
-- Use `@cloudflare/vite-plugin` for unified build.
-- Only if static assets integration is preferred by the team.
-
 ---
 
 ## 6) Wrangler Configuration
@@ -111,12 +101,11 @@ Alternative approach: Cloudflare Vite plugin
 Create `wrangler.toml` with:
 - `name`, `main`, `compatibility_date`
 - `compatibility_flags = ["nodejs_compat_v2"]`
-- Hyperdrive binding
+- D1 binding
 - Static assets binding
-- `vars` for `OPENAI_BASE_URL`, `OPENAI_MODEL` (secrets for `OPENAI_API_KEY`)
 
 Example fields to include:
-- `hyperdrive` binding named `HYPERDRIVE`
+- `d1_databases` binding named `DB`
 - `assets` directory set to `dist`
 
 ---
@@ -124,21 +113,20 @@ Example fields to include:
 ## 7) Scripts and Tooling Updates
 
 Update `package.json` scripts:
-- `dev` -> `wrangler dev --local` (or `wrangler dev`)
+- `dev` -> `vite`
 - `build` -> `vite build`
 - `deploy` -> `wrangler deploy`
 - Keep `test` and `lint` as-is
 
 Add a script for Workers local dev if needed:
-- `dev:worker`: `wrangler dev` (with local Hyperdrive connection string)
+- `dev:worker`: `wrangler dev`
 
 ---
 
 ## 8) Secrets and Config
 
 - Store `OPENAI_API_KEY` via `wrangler secret put`.
-- `OPENAI_BASE_URL` and `OPENAI_MODEL` can be set in `wrangler.toml` vars.
-- `HYPERDRIVE` binding configured in Cloudflare dashboard; local string set in `wrangler.toml` for dev.
+- `DB` binding configured in Cloudflare dashboard; local D1 is managed by `wrangler d1`.
 
 ---
 
@@ -174,12 +162,11 @@ Rollback plan:
 
 Phase 1: Prep
 - [x] Remove Node entry `src/server.ts` from prod flow.
-- [x] Upgrade `pg` dependency.
-- [x] Add `wrangler.toml` with Hyperdrive and assets config.
+- [x] Add `wrangler.toml` with D1 and assets config.
 
 Phase 2: Runtime changes
 - [x] Add `worker/index.ts` fetch entry.
-- [x] Update `worker/db/pg.ts` for Hyperdrive env.
+- [x] Update `worker/db/d1.ts` for D1 env.
 - [x] Update `worker/types.ts` bindings (including `INIT_TOKEN`).
 - [x] Replace Node crypto usage in `worker/utils/bigmodelAuth.ts`.
 - [x] Remove Buffer fallback from `worker/services/authService.ts`.
@@ -204,4 +191,3 @@ Phase 5: Validate
 
 - Switched to Workers-only dev via `npm run dev:worker`.
 - Single Worker serves both API and UI assets.
-- SAP BTP references are deprecated in this repo.

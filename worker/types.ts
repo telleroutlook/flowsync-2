@@ -11,12 +11,10 @@ export type Variables = {
 };
 
 export interface Bindings {
-  DATABASE_URL: string;
   OPENAI_API_KEY: string;
   OPENAI_BASE_URL?: string;
   OPENAI_MODEL?: string;
-  CF_AIG_TOKEN?: string;
   INIT_TOKEN?: string;
-  HYPERDRIVE: Hyperdrive;
+  DB: D1Database;
   ASSETS: Fetcher;
 }

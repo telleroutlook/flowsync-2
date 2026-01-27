@@ -7,9 +7,11 @@ compatibility_flags = ["nodejs_compat_v2"]
 directory = "dist"
 binding = "ASSETS"
 
-[[hyperdrive]]
-binding = "HYPERDRIVE"
-id = "165e16e1c93849e09e95097ed1c83141"
+[[d1_databases]]
+binding = "DB"
+database_name = "flowsync"
+database_id = "376955eb-a3f2-48c0-a8f2-056be5b1c9ea"
+migrations_dir = "migrations_sqlite"
 
 [vars]
 OPENAI_BASE_URL = "https://open.bigmodel.cn/api/coding/paas/v4"

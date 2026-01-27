@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 FlowSync AI Studio is a data-driven project management application with:
 - **Frontend**: React 19.2.3 + Vite 6.2.0
 - **Backend**: Hono on Cloudflare Workers
-- **Database**: PostgreSQL with Drizzle ORM via Hyperdrive
+- **Database**: Cloudflare D1 with Drizzle ORM
 - **AI Integration**: OpenAI-compatible API for task/project assistance
 - **Deployment**: Cloudflare Workers
 
@@ -56,7 +56,7 @@ npm run lint                 # Type check with no emit
 React Components → Custom Hooks → API Service → Backend Routes → Services → Database
 ```
 
-Example: `TaskDetailPanel.tsx` → `useProjectData.ts` → `apiService.ts` → `/api/tasks` → `taskService.ts` → PostgreSQL
+Example: `TaskDetailPanel.tsx` → `useProjectData.ts` → `apiService.ts` → `/api/tasks` → `taskService.ts` → D1
 
 ### Key Directories
 - `src/` - Frontend React code
@@ -117,8 +117,6 @@ Error handling is centralized in `worker/app.ts` middleware.
 - **Provider**: OpenAI-compatible API (default: `https://api.openai.com/v1`)
 - **Environment variables**:
   - `OPENAI_API_KEY` (required)
-  - `OPENAI_BASE_URL` (optional, default: `https://api.openai.com/v1`)
-  - `OPENAI_MODEL` (optional, default: `gpt-4`)
 - **Route**: `POST /api/ai/chat`
 - **Usage**: AI suggests actions that create drafts via `useChat.ts` hook
 
@@ -138,13 +136,13 @@ project,id,title,status,priority,assignee,wbs,startDate,dueDate,completion,isMil
 ## Environment Setup
 
 Local dev uses `.env`:
-- `DATABASE_URL` - PostgreSQL connection string (required for local dev)
-- `OPENAI_API_KEY` - OpenAI API key (required)
-- `OPENAI_BASE_URL` - Custom OpenAI endpoint (optional)
-- `OPENAI_MODEL` - Model name (optional, default: `gpt-4`)
+- `DB` binding configured in `wrangler.toml` for D1 (use `wrangler d1` for local migrations)
+  - `OPENAI_API_KEY` - OpenAI API key (required)
+  - `OPENAI_BASE_URL` - Custom OpenAI endpoint (optional, default: `https://api.openai.com/v1`)
+  - `OPENAI_MODEL` - Model name (optional, default: `gpt-4`)
 
 Production uses Cloudflare bindings:
-- `HYPERDRIVE` binding for database connectivity
+- `DB` binding for D1 connectivity
 - `OPENAI_API_KEY` via `wrangler secret put`
 - `INIT_TOKEN` via `wrangler secret put` (used by `POST /api/system/init`)
 - `OPENAI_BASE_URL` and `OPENAI_MODEL` in `wrangler.toml` `[vars]`
@@ -155,7 +153,7 @@ Run once after tables exist:
 
 ## Coding Conventions
 
-- **Naming**: PostgreSQL tables use snake_case, TypeScript uses camelCase/PascalCase
+- **Naming**: Tables use snake_case, TypeScript uses camelCase/PascalCase
 - **Components**: PascalCase.tsx in `components/`
 - **Services/Helpers**: camelCase.ts
 - **Path alias**: `@/*` resolves from repo root
@@ -175,4 +173,4 @@ Run once after tables exist:
 - Draft warnings (e.g., constraint violations) are returned but don't block draft creation
 - Audit logs support rollback via `POST /api/audit/:id/rollback`
 - The Vite dev server runs on port 5173, proxying API calls to port 8787
-- PostgreSQL connection is initialized once in `worker/db/pg.ts` and injected into Hono context
+- D1 connection is initialized in `worker/db/d1.ts` and injected into Hono context

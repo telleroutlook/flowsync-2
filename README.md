@@ -5,7 +5,7 @@
 # FlowSync AI Studio App
 
 FlowSync is a data-driven project management app with a Cloudflare Workers backend,
-PostgreSQL persistence via Drizzle + Hyperdrive, and a React/Vite frontend served as
+Cloudflare D1 persistence via Drizzle, and a React/Vite frontend served as
 static assets from the same Worker. The backend supports draft-first changes, audit
 logging, and rollback via audit snapshots.
 
@@ -13,34 +13,33 @@ logging, and rollback via audit snapshots.
 
 ## Run Locally (Optional)
 
-**Prerequisites:** Node.js, PostgreSQL
+**Prerequisites:** Node.js, Cloudflare D1
 
 1. Install dependencies:
    `npm install`
 2. Copy environment variables:
    `cp .env.example .env`
 3. Configure `.env`:
-   - Required: `DATABASE_URL` (PostgreSQL connection string for local dev)
    - Required: `OPENAI_API_KEY`
    - Optional: `OPENAI_BASE_URL` (default: `https://api.openai.com/v1`)
    - Optional: `OPENAI_MODEL` (default: `gpt-4`)
-4. Setup database (local PostgreSQL):
-   `npm run db:push`
+4. Apply database migrations (local D1):
+   `npm run db:migrate:local`
 5. Start local development:
    - Frontend: `npm run dev` (http://localhost:5173)
    - Workers backend: `npm run dev:worker` (http://127.0.0.1:8787)
 
 Vite proxies `/api` to the Workers dev server.
 
-### Database (PostgreSQL)
+### Database (D1)
 Migrations are managed via Drizzle Kit:
 
 ```bash
 # Generate migration (if schema changes)
 npm run db:generate
 
-# Push schema to database
-npm run db:push
+# Apply migrations to local D1
+npm run db:migrate:local
 
 # Open database studio
 npm run db:studio
@@ -56,8 +55,9 @@ npm run db:studio
 1. Build the frontend assets:
    `npm run build:prod`
 
-2. Configure Hyperdrive binding and secrets:
-   - Set `HYPERDRIVE` binding in Cloudflare
+2. Configure D1 binding and secrets:
+   - Set `DB` binding in `wrangler.toml`
+   - Create a D1 database and set `database_id`
    - `wrangler secret put OPENAI_API_KEY`
    - `wrangler secret put INIT_TOKEN` (used by `/api/system/init`)
    - `OPENAI_BASE_URL` and `OPENAI_MODEL` are configured in `wrangler.toml` `[vars]`
@@ -70,8 +70,7 @@ npm run db:studio
    - This creates the public workspace and seed data if missing
 
 ### Production Database
-- The Worker expects Postgres tables to exist in the Hyperdrive database.
-- Apply SQL migrations from `migrations/*.sql` to the target database before calling `/api/system/init`.
+- Apply SQL migrations from `migrations_sqlite/*.sql` to the target D1 database before calling `/api/system/init` (`npm run db:migrate:prod`).
 
 ## API Notes
 - Draft-first flow: `POST /api/drafts` then `POST /api/drafts/:id/apply`

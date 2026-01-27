@@ -77,18 +77,34 @@ export const listAuditLogs = async (
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, filters.pageSize ?? 20));
 
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(auditLogs)
-    .where(whereClause);
+  let total: number | null = null;
+  try {
+    const [{ count }] = await retryOnce('audit_count_failed', () =>
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(auditLogs)
+        .where(whereClause)
+    );
+    total = count;
+  } catch (error) {
+    logDbError('audit_count_failed', error);
+  }
 
-  const rows = await db
-    .select()
-    .from(auditLogs)
-    .where(whereClause)
-    .orderBy(desc(auditLogs.timestamp))
-    .limit(pageSize)
-    .offset((page - 1) * pageSize);
+  let rows: typeof auditLogs.$inferSelect[] = [];
+  try {
+    rows = await retryOnce('audit_list_failed', () =>
+      db
+        .select()
+        .from(auditLogs)
+        .where(whereClause)
+        .orderBy(desc(auditLogs.timestamp))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize)
+    );
+  } catch (error) {
+    logDbError('audit_list_failed', error);
+    return { data: [], total: total ?? 0, page, pageSize };
+  }
 
   const data = rows.map((row) => ({
     id: row.id,
@@ -105,7 +121,11 @@ export const listAuditLogs = async (
     taskId: row.taskId,
     draftId: row.draftId,
   }));
-  return { data, total: count, page, pageSize };
+  if (total === null) {
+    total = rows.length;
+    console.warn('audit_count_estimated', { workspaceId: filters.workspaceId, total });
+  }
+  return { data, total, page, pageSize };
 };
 
 export const getAuditLogById = async (
@@ -135,4 +155,27 @@ export const getAuditLogById = async (
     taskId: row.taskId,
     draftId: row.draftId,
   };
+};
+
+const logDbError = (label: string, error: unknown) => {
+  if (error instanceof Error) {
+    const meta = {
+      name: error.name,
+      message: error.message,
+      cause: error.cause instanceof Error ? error.cause.message : error.cause,
+    };
+    console.error(label, meta);
+    return;
+  }
+  console.error(label, { message: String(error) });
+};
+
+const retryOnce = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error) {
+    logDbError(label, error);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return await fn();
+  }
 };

@@ -1,6 +1,6 @@
 // Re-export everything for convenience
 export * from './schema';
-export { getPgDb as getDb, closePgDb } from './pg';
-import { getPgDb } from './pg';
+export { getD1Db as getDb } from './d1';
+import { getD1Db } from './d1';
 
-export type DrizzleDB = ReturnType<typeof getPgDb>;
+export type DrizzleDB = ReturnType<typeof getD1Db>;

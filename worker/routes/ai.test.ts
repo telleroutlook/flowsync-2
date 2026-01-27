@@ -153,8 +153,8 @@ describe('aiRoute', () => {
       },
       {
         OPENAI_API_KEY: 'test-key',
-        OPENAI_BASE_URL: 'https://example.com/v1/chat/completions///',
-        OPENAI_MODEL: 'custom-model',
+        OPENAI_BASE_URL: 'https://open.bigmodel.cn/api/coding/paas/v4',
+        OPENAI_MODEL: 'GLM-4.7',
       }
     );
     const json = (await res.json()) as any;
@@ -164,9 +164,9 @@ describe('aiRoute', () => {
     expect(fetchMock).toHaveBeenCalled();
 
     const [url, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('https://example.com/v1/chat/completions');
+    expect(url).toBe('https://open.bigmodel.cn/api/coding/paas/v4/chat/completions');
     const body = JSON.parse(String(options.body));
-    expect(body.model).toBe('custom-model');
+    expect(body.model).toBe('GLM-4.7');
     expect(recordLog).toHaveBeenCalledTimes(2);
   });
 });

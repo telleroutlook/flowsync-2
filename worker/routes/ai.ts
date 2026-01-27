@@ -319,10 +319,8 @@ const runAIRequest = async (
   emit?.('stage', { name: 'received' });
 
   const hasApiKey = !!c.env.OPENAI_API_KEY;
-  const hasAigToken = !!c.env.CF_AIG_TOKEN;
-
-  if (!hasApiKey && !hasAigToken) {
-    throw new ApiError('MISSING_API_KEY', 'Missing API Key or AI Gateway Token.', 500);
+  if (!hasApiKey) {
+    throw new ApiError('MISSING_API_KEY', 'Missing API key.', 500);
   }
 
   assertNotAborted();
@@ -341,7 +339,6 @@ const runAIRequest = async (
     history: history.slice(-MAX_HISTORY_MESSAGES),
     messageLength: message.length,
     systemContextLength: systemContext?.length || 0,
-    usingAig: hasAigToken,
     baseUrl,
     endpoint,
     model,
@@ -380,13 +377,7 @@ const runAIRequest = async (
       'Content-Type': 'application/json',
     };
 
-    if (hasApiKey) {
-      headers['Authorization'] = await getAuthorizationHeader(c.env.OPENAI_API_KEY, baseUrl, model);
-    }
-    
-    if (hasAigToken) {
-      headers['cf-aig-authorization'] = `Bearer ${c.env.CF_AIG_TOKEN}`;
-    }
+    headers['Authorization'] = await getAuthorizationHeader(c.env.OPENAI_API_KEY, baseUrl, model);
 
     let response: Response;
     let attempts = 0;
@@ -444,7 +435,6 @@ const runAIRequest = async (
         baseUrl,
         endpoint,
         model,
-        usingAig: hasAigToken,
         lastErrorType: failure.lastErrorType,
         retryHistory: failure.retryHistory,
         turn: currentTurn,
@@ -482,7 +472,6 @@ const runAIRequest = async (
         baseUrl,
         endpoint,
         model,
-        usingAig: hasAigToken,
         turn: currentTurn,
       });
       console.error('[ai] upstream non-OK response', {

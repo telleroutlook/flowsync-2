@@ -8,7 +8,7 @@
 - `components/` contains UI modules (PascalCase files like `GanttChart.tsx`).
 - `services/` contains external integrations (e.g., `aiService.ts`).
 - `types.ts` centralizes shared TypeScript types and enums.
-- `migrations/` contains Drizzle/PostgreSQL migration files.
+- `migrations_sqlite/` contains Drizzle/SQLite (D1) migration files.
 
 ## Build, Test, and Development Commands
 - `npm install` — install dependencies.
@@ -22,7 +22,7 @@
 
 ## Architecture & Tech Stack
 - **Backend**: Cloudflare Workers + Hono.
-- **Database**: PostgreSQL (via Drizzle ORM).
+- **Database**: Cloudflare D1 (via Drizzle ORM).
 - **Frontend**: React + Vite.
 - **Deployment**: Cloudflare Workers.
 
@@ -45,7 +45,7 @@
 - Link related issues/tickets when applicable.
 
 ## Security & Configuration Tips
-- Set `OPENAI_API_KEY` and `DATABASE_URL` in `.env` for local development.
+- Set `OPENAI_API_KEY` in `.env` for local development.
 - Do not commit secrets or local env files.
 - Keep external calls isolated in `services/` and validate inputs before use.
 
