@@ -285,7 +285,9 @@ CRITICAL - Date Calculations:
 
 CRITICAL - Interactive Suggestions:
 - PROACTIVE UX: The user interface supports clickable suggestion buttons. You MUST use the 'suggestActions' tool to provide these buttons.
-- LOCATION: These buttons appear BELOW your message. Refer to them as "suggested actions" or "options below". NEVER refer to them as "above".
+- LOCATION: These buttons appear BELOW your message bubble.
+- TERMINOLOGY: Refer to them as "suggested actions" or "options below". 
+- CHINESE GUIDANCE: NEVER use "上方" (above). ALWAYS use "下方" (below) or "下方的建议按钮". 
 - WHEN TO USE: 
   1. When asking for confirmation (e.g., "Confirm", "Cancel").
   2. When presenting multiple distinct options (e.g., "Option 1: Create New", "Option 2: Update Existing").

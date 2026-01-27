@@ -22,7 +22,7 @@ interface UseChatProps {
 }
 
 type AiHistoryItem = {
-  role: 'user' | 'model';
+  role: 'user' | 'model' | 'system';
   parts: { text: string }[];
 };
 
@@ -31,8 +31,13 @@ const buildAiHistory = (items: ChatMessage[]) => {
   const history: AiHistoryItem[] = items.slice(-10).map(m => {
     const text = m.text ?? '';
     if (text.length > MAX_HISTORY_PART_CHARS) truncatedCount += 1;
+    
+    let role: 'user' | 'model' | 'system' = 'model';
+    if (m.role === 'user') role = 'user';
+    else if (m.role === 'system') role = 'system';
+
     return {
-      role: m.role === 'user' ? 'user' : 'model',
+      role,
       parts: [{ text: text.slice(0, MAX_HISTORY_PART_CHARS) }]
     };
   });
