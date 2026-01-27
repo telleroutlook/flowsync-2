@@ -3,17 +3,46 @@ import { projects, tasks } from '../db/schema';
 import { toProjectRecord } from './serializers';
 import { generateId, now } from './utils';
 import type { ProjectRecord } from './types';
+import { seedProjects } from '../db/seed';
 
 export const listProjects = async (
   db: ReturnType<typeof import('../db').getDb>,
   workspaceId: string
 ): Promise<ProjectRecord[]> => {
-  const rows = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.workspaceId, workspaceId))
-    .orderBy(projects.createdAt);
-  return rows.map(toProjectRecord);
+  const cached = projectCache.get(workspaceId);
+  if (cached && isCacheFresh(cached.at)) {
+    return cached.data;
+  }
+
+  const rows = await retryOnce('projects_list_failed', () =>
+    db
+      .select()
+      .from(projects)
+      .where(eq(projects.workspaceId, workspaceId))
+      .orderBy(projects.createdAt)
+  ).catch((error) => {
+    if (cached) {
+      console.warn('projects_cache_fallback', { workspaceId });
+      return cached.data;
+    }
+    if (workspaceId === 'public') {
+      console.warn('projects_seed_fallback', { workspaceId });
+      return seedProjects.map((project) => ({
+        id: project.id,
+        workspaceId: 'public',
+        name: project.name,
+        description: project.description ?? null,
+        icon: project.icon ?? null,
+        createdAt: now(),
+        updatedAt: now(),
+      }));
+    }
+    throw error;
+  });
+
+  const data = rows.map(toProjectRecord);
+  projectCache.set(workspaceId, { data, at: now() });
+  return data;
 };
 
 export const getProjectById = async (
@@ -47,6 +76,7 @@ export const createProject = async (
     updatedAt,
   };
   await db.insert(projects).values(record);
+  projectCache.delete(data.workspaceId);
   return record;
 };
 
@@ -72,6 +102,7 @@ export const updateProject = async (
   };
 
   await db.update(projects).set(next).where(eq(projects.id, id));
+  projectCache.delete(workspaceId);
   return toProjectRecord({ ...existing, ...next });
 };
 
@@ -109,6 +140,35 @@ export const deleteProject = async (
       updatedAt: now(),
     });
   }
+  projectCache.delete(workspaceId);
 
   return { project: toProjectRecord(existing), deletedTasks: taskCount };
+};
+
+const PROJECT_CACHE_TTL_MS = 30_000;
+const projectCache = new Map<string, { data: ProjectRecord[]; at: number }>();
+
+const isCacheFresh = (timestamp: number) => now() - timestamp < PROJECT_CACHE_TTL_MS;
+
+const logDbError = (label: string, error: unknown) => {
+  if (error instanceof Error) {
+    const meta = {
+      name: error.name,
+      message: error.message,
+      cause: error.cause instanceof Error ? error.cause.message : error.cause,
+    };
+    console.error(label, meta);
+    return;
+  }
+  console.error(label, { message: String(error) });
+};
+
+const retryOnce = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error) {
+    logDbError(label, error);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return await fn();
+  }
 };

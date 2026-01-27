@@ -153,6 +153,7 @@ function App() {
   }, [t]);
 
   const handleExportChat = useCallback(() => {
+    if (typeof document === 'undefined') return;
     const exportDate = new Date();
     const fileStamp = exportDate.toISOString().slice(0, 10);
     const baseName = `ai-chat-history-${fileStamp}`;
@@ -212,8 +213,11 @@ function App() {
     const link = document.createElement('a');
     link.href = url;
     link.download = `${baseName}.txt`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }, [locale, messages, t]);
 
   // 3. Audit Logs

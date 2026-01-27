@@ -31,10 +31,26 @@ const buildHeaders = (headers?: HeadersInit) => {
 
 const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> => {
   const response = await fetch(input, { ...init, headers: buildHeaders(init?.headers) });
-  const payload: ApiResponse<T> = await response.json();
-  if (!response.ok || !payload.success || payload.data === undefined) {
-    throw new Error(payload.error?.message || 'Request failed.');
+  const text = await response.text();
+
+  let payload: ApiResponse<T> | null = null;
+  if (text) {
+    try {
+      payload = JSON.parse(text) as ApiResponse<T>;
+    } catch {
+      const snippet = text.slice(0, 160).replace(/\s+/g, ' ').trim();
+      throw new Error(`Invalid JSON response (${response.status}). ${snippet || 'Empty body.'}`);
+    }
   }
+
+  if (!payload) {
+    throw new Error(`Empty response (${response.status}).`);
+  }
+
+  if (!response.ok || !payload.success || payload.data === undefined) {
+    throw new Error(payload.error?.message || `Request failed (${response.status}).`);
+  }
+
   return payload.data;
 };
 

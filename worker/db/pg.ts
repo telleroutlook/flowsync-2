@@ -17,7 +17,18 @@ const resolveConnectionString = (env: Bindings) => {
 export const getPgDb = (env: Bindings) => {
   if (!db) {
     const connectionString = resolveConnectionString(env);
-    pool = new Pool({ connectionString });
+    pool = new Pool({
+      connectionString,
+      connectionTimeoutMillis: 1_500,
+      idleTimeoutMillis: 30_000,
+      max: 5,
+      query_timeout: 1_000,
+    });
+    pool.on('error', (error) => {
+      console.error('pg_pool_error', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
     db = drizzle(pool, { schema });
   }
   return db;

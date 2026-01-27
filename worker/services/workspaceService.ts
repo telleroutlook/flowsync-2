@@ -4,6 +4,44 @@ import { generateId, now } from './utils';
 import type { WorkspaceMembershipRecord, WorkspaceRecord } from './types';
 
 export const PUBLIC_WORKSPACE_ID = 'public';
+const PUBLIC_WORKSPACE_FALLBACK: WorkspaceRecord = {
+  id: PUBLIC_WORKSPACE_ID,
+  name: 'Public Workspace',
+  description: 'Default workspace for guests',
+  createdAt: 0,
+  createdBy: null,
+  isPublic: true,
+};
+const PUBLIC_CACHE_TTL_MS = 60_000;
+let cachedPublicWorkspace: WorkspaceRecord | null = null;
+let cachedPublicWorkspaceAt = 0;
+let cachedPublicList: WorkspaceWithMembership[] | null = null;
+let cachedPublicListAt = 0;
+
+const isCacheFresh = (timestamp: number) => now() - timestamp < PUBLIC_CACHE_TTL_MS;
+
+const logDbError = (label: string, error: unknown) => {
+  if (error instanceof Error) {
+    const meta = {
+      name: error.name,
+      message: error.message,
+      cause: error.cause instanceof Error ? error.cause.message : error.cause,
+    };
+    console.error(label, meta);
+    return;
+  }
+  console.error(label, { message: String(error) });
+};
+
+const retryOnce = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error) {
+    logDbError(label, error);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return await fn();
+  }
+};
 
 export type WorkspaceWithMembership = WorkspaceRecord & {
   membership: WorkspaceMembershipRecord | null;
@@ -46,10 +84,27 @@ export const getWorkspaceById = async (
   db: ReturnType<typeof import('../db').getDb>,
   id: string
 ): Promise<WorkspaceRecord | null> => {
-  const rows = await db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1);
+  if (id === PUBLIC_WORKSPACE_ID && cachedPublicWorkspace && isCacheFresh(cachedPublicWorkspaceAt)) {
+    return cachedPublicWorkspace;
+  }
+
+  const rows = await retryOnce('workspace_query_failed', () =>
+    db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1)
+  ).catch((error) => {
+    if (id === PUBLIC_WORKSPACE_ID && cachedPublicWorkspace) {
+      console.warn('workspace_cache_fallback', { id });
+      return [cachedPublicWorkspace];
+    }
+    if (id === PUBLIC_WORKSPACE_ID) {
+      console.warn('workspace_static_fallback', { id });
+      return [PUBLIC_WORKSPACE_FALLBACK];
+    }
+    throw error;
+  });
+
   const row = rows[0];
   if (!row) return null;
-  return {
+  const record = {
     id: row.id,
     name: row.name,
     description: row.description,
@@ -57,17 +112,36 @@ export const getWorkspaceById = async (
     createdBy: row.createdBy,
     isPublic: row.isPublic,
   };
+  if (id === PUBLIC_WORKSPACE_ID) {
+    cachedPublicWorkspace = record;
+    cachedPublicWorkspaceAt = now();
+  }
+  return record;
 };
 
 export const listPublicWorkspaces = async (
   db: ReturnType<typeof import('../db').getDb>
 ): Promise<WorkspaceWithMembership[]> => {
-  const rows = await db
-    .select()
-    .from(workspaces)
-    .where(eq(workspaces.isPublic, true))
-    .orderBy(workspaces.createdAt);
-  return rows.map((row) => ({
+  if (cachedPublicList && isCacheFresh(cachedPublicListAt)) {
+    return cachedPublicList;
+  }
+
+  const rows = await retryOnce('workspace_list_public_failed', () =>
+    db
+      .select()
+      .from(workspaces)
+      .where(eq(workspaces.isPublic, true))
+      .orderBy(workspaces.createdAt)
+  ).catch((error) => {
+    if (cachedPublicList) {
+      console.warn('workspace_list_cache_fallback', {});
+      return cachedPublicList;
+    }
+    console.warn('workspace_list_static_fallback', {});
+    return [PUBLIC_WORKSPACE_FALLBACK];
+  });
+
+  const list = rows.map((row) => ({
     id: row.id,
     name: row.name,
     description: row.description,
@@ -76,30 +150,35 @@ export const listPublicWorkspaces = async (
     isPublic: row.isPublic,
     membership: null,
   }));
+  cachedPublicList = list;
+  cachedPublicListAt = now();
+  return list;
 };
 
 export const listWorkspacesForUser = async (
   db: ReturnType<typeof import('../db').getDb>,
   userId: string
 ): Promise<WorkspaceWithMembership[]> => {
-  const rows = await db
-    .select({
-      id: workspaces.id,
-      name: workspaces.name,
-      description: workspaces.description,
-      createdAt: workspaces.createdAt,
-      createdBy: workspaces.createdBy,
-      isPublic: workspaces.isPublic,
-      role: workspaceMembers.role,
-      status: workspaceMembers.status,
-      memberCreatedAt: workspaceMembers.createdAt,
-    })
-    .from(workspaces)
-    .leftJoin(
-      workspaceMembers,
-      and(eq(workspaceMembers.workspaceId, workspaces.id), eq(workspaceMembers.userId, userId))
-    )
-    .orderBy(workspaces.createdAt);
+  const rows = await retryOnce('workspace_list_user_failed', () =>
+    db
+      .select({
+        id: workspaces.id,
+        name: workspaces.name,
+        description: workspaces.description,
+        createdAt: workspaces.createdAt,
+        createdBy: workspaces.createdBy,
+        isPublic: workspaces.isPublic,
+        role: workspaceMembers.role,
+        status: workspaceMembers.status,
+        memberCreatedAt: workspaceMembers.createdAt,
+      })
+      .from(workspaces)
+      .leftJoin(
+        workspaceMembers,
+        and(eq(workspaceMembers.workspaceId, workspaces.id), eq(workspaceMembers.userId, userId))
+      )
+      .orderBy(workspaces.createdAt)
+  );
 
   return rows.map((row) => ({
     id: row.id,

@@ -4,6 +4,7 @@ import { projects, tasks } from '../db/schema';
 import { toTaskRecord } from './serializers';
 import { clampNumber, generateId, now } from './utils';
 import type { Priority, TaskRecord, TaskStatus } from './types';
+import { seedTasks } from '../db/seed';
 
 export type TaskFilters = {
   projectId?: string;
@@ -49,28 +50,62 @@ export const listTasks = async (
   filters: TaskFilters,
   workspaceId: string
 ): Promise<{ data: TaskRecord[]; total: number; page: number; pageSize: number }> => {
+  const cacheKey = buildTaskCacheKey(filters, workspaceId);
+  const cached = taskCache.get(cacheKey);
+  if (cached && isCacheFresh(cached.at)) {
+    return cached.data;
+  }
+
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, filters.pageSize ?? 50));
   const whereClause = buildWhere(filters);
   const workspaceClause = eq(projects.workspaceId, workspaceId);
   const combinedClause = whereClause ? and(whereClause, workspaceClause) : workspaceClause;
 
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(tasks)
-    .innerJoin(projects, eq(tasks.projectId, projects.id))
-    .where(combinedClause);
+  const [{ count }] = await retryOnce('tasks_count_failed', () =>
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(tasks)
+      .innerJoin(projects, eq(tasks.projectId, projects.id))
+      .where(combinedClause)
+  ).catch((error) => {
+    if (cached) {
+      console.warn('tasks_cache_fallback', { workspaceId, cacheKey });
+      return [{ count: cached.data.total }];
+    }
+    if (workspaceId === 'public') {
+      const fallback = buildSeedTaskList(filters);
+      console.warn('tasks_seed_fallback', { workspaceId, cacheKey });
+      return [{ count: fallback.total }];
+    }
+    throw error;
+  });
 
-  const rows = await db
-    .select()
-    .from(tasks)
-    .innerJoin(projects, eq(tasks.projectId, projects.id))
-    .where(combinedClause)
-    .orderBy(tasks.createdAt)
-    .limit(pageSize)
-    .offset((page - 1) * pageSize);
+  const rows = await retryOnce('tasks_list_failed', () =>
+    db
+      .select()
+      .from(tasks)
+      .innerJoin(projects, eq(tasks.projectId, projects.id))
+      .where(combinedClause)
+      .orderBy(tasks.createdAt)
+      .limit(pageSize)
+      .offset((page - 1) * pageSize)
+  ).catch((error) => {
+    if (cached) {
+      console.warn('tasks_cache_fallback', { workspaceId, cacheKey });
+      return cached.data.data;
+    }
+    if (workspaceId === 'public') {
+      const fallback = buildSeedTaskList(filters);
+      console.warn('tasks_seed_fallback', { workspaceId, cacheKey });
+      return fallback.data;
+    }
+    throw error;
+  });
 
-  return { data: rows.map((row) => toTaskRecord(row.tasks)), total: count, page, pageSize };
+  const data = { data: rows.map((row) => toTaskRecord(row.tasks)), total: count, page, pageSize };
+  taskCache.set(cacheKey, { data, at: now() });
+  return data;
 };
 
 export const getTaskById = async (
@@ -137,6 +172,7 @@ export const createTask = async (
     updatedAt,
   };
   await db.insert(tasks).values(record);
+  invalidateTaskCache(workspaceId, record.projectId);
   return toTaskRecord(record);
 };
 
@@ -177,6 +213,7 @@ export const updateTask = async (
   };
 
   await db.update(tasks).set(next).where(eq(tasks.id, id));
+  invalidateTaskCache(workspaceId, existing.projectId);
   return { ...existing, ...next };
 };
 
@@ -188,5 +225,110 @@ export const deleteTask = async (
   const existing = await getTaskById(db, id, workspaceId);
   if (!existing) return null;
   await db.delete(tasks).where(eq(tasks.id, id));
+  invalidateTaskCache(workspaceId, existing.projectId);
   return existing;
+};
+
+const TASK_CACHE_TTL_MS = 15_000;
+const taskCache = new Map<
+  string,
+  { data: { data: TaskRecord[]; total: number; page: number; pageSize: number }; at: number }
+>();
+
+const isCacheFresh = (timestamp: number) => now() - timestamp < TASK_CACHE_TTL_MS;
+
+const logDbError = (label: string, error: unknown) => {
+  if (error instanceof Error) {
+    const meta = {
+      name: error.name,
+      message: error.message,
+      cause: error.cause instanceof Error ? error.cause.message : error.cause,
+    };
+    console.error(label, meta);
+    return;
+  }
+  console.error(label, { message: String(error) });
+};
+
+const retryOnce = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error) {
+    logDbError(label, error);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    return await fn();
+  }
+};
+
+const buildTaskCacheKey = (filters: TaskFilters, workspaceId: string) => {
+  const entries = Object.entries(filters)
+    .filter(([, value]) => value !== undefined)
+    .sort(([a], [b]) => a.localeCompare(b));
+  const payload = Object.fromEntries(entries);
+  return `${workspaceId}:${JSON.stringify(payload)}`;
+};
+
+const invalidateTaskCache = (workspaceId: string, projectId?: string) => {
+  for (const key of taskCache.keys()) {
+    if (!key.startsWith(`${workspaceId}:`)) continue;
+    if (!projectId || key.includes(`\"projectId\":\"${projectId}\"`)) {
+      taskCache.delete(key);
+    }
+  }
+};
+
+const buildSeedTaskList = (filters: TaskFilters) => {
+  const mapped: TaskRecord[] = seedTasks.map((task) => ({
+    id: task.id,
+    projectId: task.projectId,
+    title: task.title,
+    description: task.description ?? null,
+    status: task.status as TaskStatus,
+    priority: task.priority as Priority,
+    wbs: task.wbs ?? null,
+    createdAt: task.createdAt,
+    startDate: task.startDate ?? task.createdAt,
+    dueDate: task.dueDate ?? null,
+    completion: clampNumber(task.completion, 0, 100) ?? 0,
+    assignee: task.assignee ?? null,
+    isMilestone: task.isMilestone ?? false,
+    predecessors: task.predecessors ?? [],
+    updatedAt: task.createdAt,
+  }));
+
+  let filtered = mapped;
+  if (filters.projectId) filtered = filtered.filter((task) => task.projectId === filters.projectId);
+  if (filters.status) filtered = filtered.filter((task) => task.status === filters.status);
+  if (filters.priority) filtered = filtered.filter((task) => task.priority === filters.priority);
+  if (filters.assignee) filtered = filtered.filter((task) => task.assignee === filters.assignee);
+  if (filters.isMilestone !== undefined) {
+    filtered = filtered.filter((task) => task.isMilestone === filters.isMilestone);
+  }
+  if (filters.startDateFrom !== undefined) {
+    filtered = filtered.filter((task) => task.startDate >= filters.startDateFrom!);
+  }
+  if (filters.startDateTo !== undefined) {
+    filtered = filtered.filter((task) => task.startDate <= filters.startDateTo!);
+  }
+  if (filters.dueDateFrom !== undefined) {
+    filtered = filtered.filter((task) => (task.dueDate ?? 0) >= filters.dueDateFrom!);
+  }
+  if (filters.dueDateTo !== undefined) {
+    filtered = filtered.filter((task) => (task.dueDate ?? 0) <= filters.dueDateTo!);
+  }
+  if (filters.q) {
+    const q = filters.q.toLowerCase();
+    filtered = filtered.filter((task) => {
+      const title = task.title.toLowerCase();
+      const description = task.description?.toLowerCase() ?? '';
+      return title.includes(q) || description.includes(q);
+    });
+  }
+
+  const page = Math.max(1, filters.page ?? 1);
+  const pageSize = Math.min(100, Math.max(1, filters.pageSize ?? 50));
+  const start = (page - 1) * pageSize;
+  const paged = filtered.slice(start, start + pageSize);
+
+  return { data: paged, total: filtered.length, page, pageSize };
 };
