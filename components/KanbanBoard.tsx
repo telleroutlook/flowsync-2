@@ -65,14 +65,14 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect }) 
         <div className="absolute top-0 right-0 w-8 h-8 bg-gradient-to-bl from-joule-start/20 to-transparent -mr-4 -mt-4 rotate-45" aria-hidden="true" />
       )}
 
-      <div className="flex justify-between items-start mb-2">
+      <div className="flex justify-between items-center mb-2">
         <div className="min-w-0 pr-2">
           <h4 className={cn(
-            "font-semibold text-base leading-snug text-text-primary flex flex-wrap items-baseline gap-1",
+            "font-semibold text-base leading-snug text-text-primary inline-flex flex-wrap items-center gap-1",
             task.isMilestone ? "text-text-primary" : "text-text-primary"
           )}>
             {task.wbs && (
-              <span className="text-[10px] font-mono text-text-secondary tracking-tight shrink-0">
+              <span className="text-[10px] font-mono text-text-secondary tracking-tight shrink-0 leading-none">
                 [{task.wbs}]
               </span>
             )}
