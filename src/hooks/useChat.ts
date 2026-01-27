@@ -5,6 +5,7 @@ import { ChatMessage, ChatAttachment, DraftAction, Project, Task } from '../../t
 import { generateId } from '../utils';
 import { processToolCalls, type ApiClient, type ProcessingStep } from './ai';
 import { useI18n } from '../i18n';
+import { MAX_HISTORY_PART_CHARS } from '../../shared/aiLimits';
 
 interface UseChatProps {
   activeProjectId: string;
@@ -23,6 +24,19 @@ interface UseChatProps {
 type AiHistoryItem = {
   role: 'user' | 'model';
   parts: { text: string }[];
+};
+
+const buildAiHistory = (items: ChatMessage[]) => {
+  let truncatedCount = 0;
+  const history: AiHistoryItem[] = items.slice(-10).map(m => {
+    const text = m.text ?? '';
+    if (text.length > MAX_HISTORY_PART_CHARS) truncatedCount += 1;
+    return {
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: text.slice(0, MAX_HISTORY_PART_CHARS) }]
+    };
+  });
+  return { history, truncatedCount };
 };
 
 export const useChat = ({
@@ -308,10 +322,10 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
     try {
       pushProcessingStep(t('processing.preparing'));
 
-      const history: AiHistoryItem[] = messages.slice(-10).map(m => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.text }]
-      }));
+      const { history, truncatedCount } = buildAiHistory(messages);
+      if (truncatedCount > 0) {
+        appendSystemMessage(t('chat.history_truncated', { count: truncatedCount, max: MAX_HISTORY_PART_CHARS }));
+      }
 
       await processConversationTurn(history, userMsg.text, systemContext, 0);
 
@@ -369,10 +383,10 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
         return true;
       });
 
-      const history: AiHistoryItem[] = filteredMessages.slice(-10).map(m => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.text }]
-      }));
+      const { history, truncatedCount } = buildAiHistory(filteredMessages);
+      if (truncatedCount > 0) {
+        appendSystemMessage(t('chat.history_truncated', { count: truncatedCount, max: MAX_HISTORY_PART_CHARS }));
+      }
 
       await processConversationTurn(history, retryMessage.text, systemContext, 0);
     } catch {

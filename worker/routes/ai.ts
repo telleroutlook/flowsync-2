@@ -8,6 +8,7 @@ import { getAuthorizationHeader } from '../utils/bigmodelAuth';
 import { createToolRegistry } from '../services/aiToolRegistry';
 import type { Bindings, Variables } from '../types';
 import type { Context } from 'hono';
+import { MAX_HISTORY_PART_CHARS } from '../../shared/aiLimits';
 
 export const aiRoute = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 aiRoute.use('*', workspaceMiddleware);
@@ -225,7 +226,7 @@ const historySchema = z.array(
     role: z.enum(['user', 'model', 'system']),
     parts: z.array(
       z.object({
-        text: z.string().min(1).max(2000),
+        text: z.string().min(1).max(MAX_HISTORY_PART_CHARS),
       })
     ),
   })

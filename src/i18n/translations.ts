@@ -123,6 +123,7 @@ const en = {
   'chat.auto_retry': 'Auto Retry ({attempt}/{max})',
   'chat.attempt_fix': 'Attempting to fix results ({attempt}/{max})...',
   'chat.processing_request': 'Processing request...',
+  'chat.history_truncated': 'Some previous messages were truncated to {max} characters (count: {count}).',
 
   'processing.received': 'Request Received',
   'processing.preparing': 'Preparing Context',
@@ -430,6 +431,7 @@ const zh: Record<keyof typeof en, string> = {
   'chat.auto_retry': '自动重试（{attempt}/{max}）',
   'chat.attempt_fix': '正在尝试修复结果（{attempt}/{max}）…',
   'chat.processing_request': '正在处理请求…',
+  'chat.history_truncated': '部分历史消息已截断为 {max} 个字符（数量：{count}）。',
 
   'processing.received': '已接收请求',
   'processing.preparing': '准备上下文',

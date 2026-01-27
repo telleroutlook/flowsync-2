@@ -1,0 +1,1 @@
+export const MAX_HISTORY_PART_CHARS = 2000;
