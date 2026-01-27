@@ -90,17 +90,18 @@ export async function generateBigModelToken(apiKey: string, expSeconds: number =
 /**
  * Check if using Zhipu AI API
  */
-export function isBigModelApi(baseUrl: string): boolean {
-  return baseUrl.includes('bigmodel.cn');
+export function isBigModelApi(baseUrl: string, model?: string): boolean {
+  return baseUrl.includes('bigmodel.cn') || (model?.toLowerCase().startsWith('glm') ?? false);
 }
 
 /**
  * Get authorization header
  */
-export async function getAuthorizationHeader(apiKey: string, baseUrl: string): Promise<string> {
-  if (isBigModelApi(baseUrl)) {
-    const token = await generateBigModelToken(apiKey);
-    return `Bearer ${token}`;
-  }
+export async function getAuthorizationHeader(apiKey: string, baseUrl: string, model?: string): Promise<string> {
+  // Temporary: Disable JWT generation to test direct API Key support for 'coding' endpoint
+  // if (isBigModelApi(baseUrl, model)) {
+  //   const token = await generateBigModelToken(apiKey);
+  //   return `Bearer ${token}`;
+  // }
   return `Bearer ${apiKey}`;
 }

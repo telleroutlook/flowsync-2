@@ -292,6 +292,8 @@ const en = {
     'export.chat.empty_message': '(no content)',
     'export.chat.no_messages': 'No messages to export.',
     'import.failed_missing_headers': 'Import failed: Missing required CSV headers: {headers}',
+  'import.failed_invalid_json': 'Import failed: Invalid JSON file.',
+  'import.failed_invalid_version': 'Import failed: Unsupported export version.',
   'import.failed_invalid_rowtype': 'Import failed: rowType must be "project" or "task".',
   'import.failed_invalid_format': 'Import failed: only JSON, CSV, or TSV files are supported.',
   'import.no_tasks': 'No tasks found in the import file.',

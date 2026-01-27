@@ -310,7 +310,7 @@ const runAIRequest = async (
 
     emit?.('stage', { name: 'upstream_request', turn: currentTurn });
 
-    const authorization = await getAuthorizationHeader(c.env.OPENAI_API_KEY, baseUrl);
+    const authorization = await getAuthorizationHeader(c.env.OPENAI_API_KEY, baseUrl, model);
 
     let response: Response;
     let attempts = 0;
@@ -351,15 +351,22 @@ const runAIRequest = async (
       if (errorInfo instanceof StreamAbortError) {
         throw errorInfo;
       }
-      const detail = errorInfo && typeof errorInfo === 'object' && 'error' in errorInfo
-        ? String((errorInfo as { error: unknown }).error)
-        : 'Upstream request failed';
+      const err = (errorInfo as { error: unknown }).error;
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      const errorStack = err instanceof Error ? err.stack : undefined;
+      // Re-classify error type for logging
+      const isTimeout = errorMsg.includes('timeout') || errorMsg.includes('timed out');
+      const isNetwork = errorMsg.includes('ECONN') || errorMsg.includes('network') || errorMsg.includes('fetch failed');
+      const errorType = isTimeout ? 'timeout' : (isNetwork ? 'network' : 'unknown');
+      
+      const errorDetail = `Type: ${errorType}, Attempts: ${attempts}, Elapsed: ${elapsedMs}ms, Error: ${errorMsg}`;
+
       await recordLog(c.get('db'), 'error', {
         requestId,
-        message: 'Upstream request failed before response.',
-        detail,
+        message: 'Upstream request failed (Network/Timeout).',
+        detail: errorDetail + (errorStack ? `\nStack: ${errorStack}` : ''),
       });
-      throw new ApiError('OPENAI_ERROR', 'OpenAI request failed.', 502);
+      throw new ApiError('OPENAI_ERROR', `Request failed: ${errorMsg}`, 502);
     }
 
     assertNotAborted();
@@ -367,15 +374,18 @@ const runAIRequest = async (
 
     if (!response.ok) {
       const errorText = await response.text();
+      const statusText = response.statusText;
+      const headers = Object.fromEntries(response.headers.entries());
+      
       await recordLog(c.get('db'), 'error', {
         requestId,
-        message: 'OpenAI request failed.',
-        detail: errorText || `Status ${response.status}`,
+        message: `Upstream returned error status: ${response.status}`,
+        detail: `Status: ${response.status} ${statusText}\nHeaders: ${JSON.stringify(headers)}\nBody: ${errorText}`,
         status: response.status,
         attempts,
         elapsedMs,
       });
-      throw new ApiError('OPENAI_ERROR', errorText || 'OpenAI request failed.', 502);
+      throw new ApiError('OPENAI_ERROR', `Provider Error (${response.status}): ${errorText.slice(0, 200)}`, 502);
     }
 
     const responseJson = await response.json().catch(() => null);
