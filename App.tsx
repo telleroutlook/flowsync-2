@@ -268,71 +268,87 @@ function App() {
   }, [t]);
 
   const handleExportChat = useCallback(() => {
-    if (typeof document === 'undefined') return;
-    const exportDate = new Date();
-    const fileStamp = exportDate.toISOString().slice(0, 10);
-    const baseName = `ai-chat-history-${fileStamp}`;
-
-    // Memoize formatter outside callback to avoid recreation
-    const formatTimestamp = (value: number) => {
-      const date = new Date(value);
-      return date.toLocaleString(locale, {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-    };
-
-    const roleLabel = (role: ChatMessage['role']) => {
-      if (role === 'user') return t('export.chat.role.user');
-      if (role === 'model') return t('export.chat.role.model');
-      return t('export.chat.role.system');
-    };
-
-    const contentBlocks = messages.map((message, index) => {
-      const trimmedText = message.text.trim();
-      const lines: string[] = [
-        CHAT_EXPORT_SEPARATOR,
-        `${t('export.chat.message_label', { index: index + 1 })} | ${roleLabel(message.role)} | ${formatTimestamp(message.timestamp)}`,
-        `${t('export.chat.content_label')}:`,
-        trimmedText || t('export.chat.empty_message'),
-      ];
-
-      const attachments = message.attachments || [];
-      if (attachments.length > 0) {
-        lines.push('');
-        lines.push(`${t('export.chat.attachments_label')}:`);
-        attachments.forEach(attachment => {
-          const typeLabel = attachment.type?.trim() || t('export.chat.attachment_unknown_type');
-          lines.push(`- ${attachment.name} (${formatAttachmentSize(attachment.size)}, ${typeLabel})`);
-        });
+    try {
+      if (typeof document === 'undefined') return;
+      
+      if (!messages || messages.length === 0) {
+        console.warn('No messages to export');
+        return;
       }
 
-      return lines.join('\n');
-    });
+      const exportDate = new Date();
+      const fileStamp = exportDate.toISOString().slice(0, 10);
+      const baseName = `ai-chat-history-${fileStamp}`;
 
-    const output = [
-      t('export.chat.title'),
-      t('export.chat.exported_at', { date: formatTimestamp(exportDate.getTime()) }),
-      t('export.chat.total_messages', { count: messages.length }),
-      '',
-      ...contentBlocks,
-      '',
-    ].join('\n');
+      // Memoize formatter outside callback to avoid recreation
+      const formatTimestamp = (value: number) => {
+        try {
+          const date = new Date(value);
+          return date.toLocaleString(locale, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          });
+        } catch (e) {
+          return new Date(value).toISOString();
+        }
+      };
 
-    const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${baseName}.txt`;
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
+      const roleLabel = (role: ChatMessage['role']) => {
+        if (role === 'user') return t('export.chat.role.user');
+        if (role === 'model') return t('export.chat.role.model');
+        return t('export.chat.role.system');
+      };
+
+      const contentBlocks = messages.map((message, index) => {
+        const textContent = message.text || '';
+        const trimmedText = textContent.trim();
+        const lines: string[] = [
+          CHAT_EXPORT_SEPARATOR,
+          `${t('export.chat.message_label', { index: index + 1 })} | ${roleLabel(message.role)} | ${formatTimestamp(message.timestamp)}`,
+          `${t('export.chat.content_label')}:`,
+          trimmedText || t('export.chat.empty_message'),
+        ];
+
+        const attachments = message.attachments || [];
+        if (attachments.length > 0) {
+          lines.push('');
+          lines.push(`${t('export.chat.attachments_label')}:`);
+          attachments.forEach(attachment => {
+            const typeLabel = attachment.type?.trim() || t('export.chat.attachment_unknown_type');
+            lines.push(`- ${attachment.name} (${formatAttachmentSize(attachment.size)}, ${typeLabel})`);
+          });
+        }
+
+        return lines.join('\n');
+      });
+
+      const output = [
+        t('export.chat.title'),
+        t('export.chat.exported_at', { date: formatTimestamp(exportDate.getTime()) }),
+        t('export.chat.total_messages', { count: messages.length }),
+        '',
+        ...contentBlocks,
+        '',
+      ].join('\n');
+
+      const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${baseName}.txt`;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (error) {
+      console.error('Failed to export chat history:', error);
+      alert(t('app.error.generic') || 'Export failed');
+    }
   }, [locale, messages, t]);
 
   // 3. Audit Logs
