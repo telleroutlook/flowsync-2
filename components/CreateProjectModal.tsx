@@ -8,28 +8,40 @@ import { cn } from '../src/utils/cn';
 interface CreateProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreate: (name: string, description: string) => void;
+  onCreate: (name: string, description: string) => void | Promise<void>;
 }
 
 export const CreateProjectModal = memo<CreateProjectModalProps>(({ isOpen, onClose, onCreate }) => {
   const { t } = useI18n();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
         setName('');
         setDescription('');
+        setIsSubmitting(false);
         setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [isOpen]);
 
-  const handleSubmit = useCallback((e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onCreate(name.trim(), description.trim());
-    onClose();
+    
+    setIsSubmitting(true);
+    try {
+      await onCreate(name.trim(), description.trim());
+      onClose();
+    } catch (error) {
+      // If error occurs, we might want to show it. For now, we stop loading.
+      // Ideally, the parent handles error display or throws.
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
+    }
   }, [name, description, onCreate, onClose]);
 
   const handleNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,12 +89,14 @@ export const CreateProjectModal = memo<CreateProjectModalProps>(({ isOpen, onClo
             type="button"
             variant="outline"
             onClick={onClose}
+            disabled={isSubmitting}
           >
             {t('project.create.cancel')}
           </Button>
           <Button
             type="submit"
-            disabled={!name.trim()}
+            disabled={!name.trim() || isSubmitting}
+            isLoading={isSubmitting}
           >
             {t('project.create.submit')}
           </Button>

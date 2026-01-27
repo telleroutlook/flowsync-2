@@ -13,8 +13,8 @@ interface ChatInterfaceProps {
   setIsChatOpen: (isOpen: boolean) => void;
   pendingDraft: Draft | null;
   draftWarnings: string[];
-  onApplyDraft: (draftId: string) => void;
-  onDiscardDraft: (draftId: string) => void;
+  onApplyDraft: (draftId: string) => void | Promise<void>;
+  onDiscardDraft: (draftId: string) => void | Promise<void>;
   messages: ChatMessage[];
   isProcessing: boolean;
   processingSteps: { label: string; elapsedMs?: number }[];
@@ -58,6 +58,25 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   const { t } = useI18n();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const isAutoScrolling = React.useRef(false);
+  const [draftProcessingState, setDraftProcessingState] = React.useState<'applying' | 'discarding' | null>(null);
+
+  const handleApplyDraft = React.useCallback(async (draftId: string) => {
+    setDraftProcessingState('applying');
+    try {
+      await onApplyDraft(draftId);
+    } finally {
+      setDraftProcessingState(null);
+    }
+  }, [onApplyDraft]);
+
+  const handleDiscardDraft = React.useCallback(async (draftId: string) => {
+    setDraftProcessingState('discarding');
+    try {
+      await onDiscardDraft(draftId);
+    } finally {
+      setDraftProcessingState(null);
+    }
+  }, [onDiscardDraft]);
 
   // Smart scrolling logic
   const scrollToBottom = React.useCallback((behavior: ScrollBehavior = 'smooth') => {
@@ -204,7 +223,9 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
               <Button
                 variant="default"
                 size="sm"
-                onClick={() => onApplyDraft(pendingDraft.id)}
+                onClick={() => handleApplyDraft(pendingDraft.id)}
+                isLoading={draftProcessingState === 'applying'}
+                disabled={draftProcessingState !== null}
                 className="flex-1 h-8 bg-success hover:bg-success/90 text-success-foreground"
               >
                 {t('chat.accept')}
@@ -212,7 +233,9 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => onDiscardDraft(pendingDraft.id)}
+                onClick={() => handleDiscardDraft(pendingDraft.id)}
+                isLoading={draftProcessingState === 'discarding'}
+                disabled={draftProcessingState !== null}
                 className="flex-1 h-8"
               >
                 {t('chat.discard')}
