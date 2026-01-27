@@ -48,6 +48,10 @@ export interface ChatMessage {
   text: string;
   timestamp: number;
   isThinking?: boolean;
+  thinking?: {
+    preview?: string;
+    steps?: { label: string; elapsedMs?: number }[];
+  };
   attachments?: ChatAttachment[];
   suggestions?: string[];
 }

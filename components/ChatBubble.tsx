@@ -1,8 +1,9 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { ChatMessage, ChatAttachment } from '../types';
-import { Paperclip, RotateCcw } from 'lucide-react';
+import { Paperclip, RotateCcw, ChevronDown, ChevronRight, BrainCircuit } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useI18n } from '../src/i18n';
 import { cn } from '../src/utils/cn';
 import { Button } from './ui/Button';
@@ -116,6 +117,7 @@ MarkdownContent.displayName = 'MarkdownContent';
 
 export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessing, onSuggestionClick }) => {
   const { t, locale } = useI18n();
+  const [isThinkingOpen, setIsThinkingOpen] = useState(false);
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const hasText = message.text.trim().length > 0;
@@ -148,6 +150,48 @@ export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessin
             : "bg-surface text-text-primary border border-border-subtle rounded-bl-none"
         )}
       >
+        {message.thinking && message.thinking.steps && message.thinking.steps.length > 0 && !isUser && (
+          <div className="mb-3 border-b border-border-subtle/50 pb-2">
+            <button 
+              onClick={() => setIsThinkingOpen(!isThinkingOpen)}
+              className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-primary transition-colors select-none w-full text-left"
+            >
+              <div className={cn("p-0.5 rounded-md transition-colors shrink-0", isThinkingOpen ? "bg-primary/10 text-primary" : "bg-secondary/10 text-text-secondary")}>
+                 {isThinkingOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              </div>
+              <span className="opacity-80 hover:opacity-100">{t('chat.thinking_process') || 'Thinking Process'}</span>
+              <span className="text-[10px] opacity-50 ml-auto font-mono shrink-0">
+                {message.thinking.steps.length} steps
+              </span>
+            </button>
+            
+            <AnimatePresence>
+              {isThinkingOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="pt-2 pl-1 space-y-2 mt-1">
+                     {message.thinking.steps.map((step, idx) => (
+                       <div key={idx} className="flex items-start gap-2 text-[11px] text-text-secondary/80">
+                          <div className="w-1 h-1 rounded-full bg-primary/40 mt-1.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <span className="break-words leading-relaxed">{step.label}</span>
+                            {typeof step.elapsedMs === 'number' && (
+                              <span className="ml-1.5 text-[10px] opacity-40 font-mono">{(step.elapsedMs / 1000).toFixed(1)}s</span>
+                            )}
+                          </div>
+                       </div>
+                     ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
         {hasText && <MarkdownContent content={message.text} isUser={isUser} codeLabel={t('chat.code')} />}
 
         {attachments.length > 0 && (

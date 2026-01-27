@@ -146,24 +146,33 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
     initialHistory: AiHistoryItem[],
     userMessage: string,
     systemContext: string,
-    attempt: number = 0
+    attempt: number = 0,
+    accumulatedSteps: ProcessingStep[] = []
   ) => {
       const MAX_RETRIES = 3;
+      const fullProcessingSteps: ProcessingStep[] = [...accumulatedSteps];
+      let currentThinkingPreview = '';
 
-      pushProcessingStep(t('processing.calling_ai'));
+      const recordStep = (label: string, elapsedMs?: number) => {
+        fullProcessingSteps.push({ label, elapsedMs });
+        pushProcessingStep(label, elapsedMs);
+      };
+
+      recordStep(t('processing.calling_ai'));
       setThinkingPreview(t('chat.processing_request'));
       
       if (attempt > MAX_RETRIES) {
         throw new Error(t('chat.max_retries'));
       }
       if (attempt > 0) {
-        pushProcessingStep(t('chat.auto_retry', { attempt, max: MAX_RETRIES }));
+        recordStep(t('chat.auto_retry', { attempt, max: MAX_RETRIES }));
         setThinkingPreview(t('chat.attempt_fix', { attempt, max: MAX_RETRIES }));
       }
 
     const updateThinkingPreview = (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
+      currentThinkingPreview = trimmed;
       const maxLen = 160;
       const start = Math.max(0, trimmed.length - maxLen);
       const tail = trimmed.slice(start);
@@ -181,7 +190,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
 
           if (event === 'assistant_text' && typeof data.text === 'string') {
             updateThinkingPreview(data.text);
-            pushProcessingStep(t('processing.generating'), elapsedMs);
+            recordStep(t('processing.generating'), elapsedMs);
             return;
           }
           if (event === 'result' && typeof data.text === 'string') {
@@ -189,16 +198,16 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
             return;
           }
           if (event === 'tool_start' && typeof data.name === 'string') {
-            pushProcessingStep(t('processing.executing_tool', { name: data.name }), elapsedMs);
+            recordStep(t('processing.executing_tool', { name: data.name }), elapsedMs);
             return;
           }
           if (event === 'stage' && typeof data.name === 'string') {
             const label = stageLabels[data.name];
-            if (label) pushProcessingStep(label, elapsedMs);
+            if (label) recordStep(label, elapsedMs);
             return;
           }
           if (event === 'retry') {
-            pushProcessingStep(t('chat.retrying'), elapsedMs);
+            recordStep(t('chat.retrying'), elapsedMs);
           }
         }
       );
@@ -208,7 +217,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
 
       // Process tool calls if any
       if (response.toolCalls && response.toolCalls.length > 0) {
-        pushProcessingStep(t('processing.executing_tool_call'));
+        recordStep(t('processing.executing_tool_call'));
         // Create API client context for tool handlers
         const apiClient: ApiClient = {
           listProjects: () => apiService.listProjects(),
@@ -226,7 +235,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
             api: apiClient,
             activeProjectId,
             generateId,
-            pushProcessingStep,
+            pushProcessingStep: (step) => recordStep(step),
             t,
           }
         );
@@ -241,13 +250,13 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
             ...initialHistory,
             { role: 'model', parts: [{ text: response.text || 'I will plan the changes.' }] }
           ];
-          await processConversationTurn(nextHistory, `System Alert: ${result.retryReason}`, systemContext, attempt + 1);
+          await processConversationTurn(nextHistory, `System Alert: ${result.retryReason}`, systemContext, attempt + 1, fullProcessingSteps);
           return;
         }
 
         // Submit draft if there are actions to apply
         if (result.draftActions.length > 0) {
-          pushProcessingStep(t('processing.submitting_draft'));
+          recordStep(t('processing.submitting_draft'));
           try {
             const draft = await submitDraft(result.draftActions, {
               createdBy: 'agent',
@@ -264,19 +273,19 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
 
         // Display tool results
         if (result.outputs.length > 0) {
-      pushProcessingStep(t('processing.aggregating_tool_results'));
+      recordStep(t('processing.aggregating_tool_results'));
       
       // const summaryRequest: RequestInput = {
       //   history: [...messages, ...newMessages],
       //   message: 'The tool has been executed. Please verify the results and provide feedback or next steps based on the tool\'s output.',
       // };
       
-      pushProcessingStep(t('processing.generating'));
+      recordStep(t('processing.generating'));
           appendSystemMessage(result.outputs.join(' | '));
           if (!finalText) finalText = t('chat.draft_created_review');
         }
       } else {
-        pushProcessingStep(t('processing.generating'));
+        recordStep(t('processing.generating'));
       }
 
       // Add final AI message to chat
@@ -285,7 +294,11 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
         role: 'model',
         text: finalText || t('chat.processed'),
         timestamp: Date.now(),
-        suggestions: suggestions.length > 0 ? suggestions : undefined
+        suggestions: suggestions.length > 0 ? suggestions : undefined,
+        thinking: {
+          steps: fullProcessingSteps,
+          preview: currentThinkingPreview || undefined
+        }
       }]);
 
     } catch (error) {
@@ -294,7 +307,11 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
         id: generateId(),
         role: 'model',
         text: t('chat.error_prefix', { error: errorMessage }),
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        thinking: {
+          steps: fullProcessingSteps,
+          preview: currentThinkingPreview || undefined
+        }
       }]);
     }
   }, [activeProjectId, submitDraft, appendSystemMessage, pushProcessingStep, setMessages, setThinkingPreview, t, stageLabels]);
