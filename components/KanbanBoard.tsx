@@ -66,13 +66,17 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect }) 
       )}
 
       <div className="flex justify-between items-start mb-2">
-        <div className="flex flex-col gap-0.5 min-w-0 pr-2">
-          {task.wbs && <span className="text-[10px] font-mono text-text-secondary tracking-tight">WBS: {task.wbs}</span>}
+        <div className="min-w-0 pr-2">
           <h4 className={cn(
-            "font-semibold text-base leading-snug break-words",
+            "font-semibold text-base leading-snug text-text-primary flex flex-wrap items-baseline gap-1",
             task.isMilestone ? "text-text-primary" : "text-text-primary"
           )}>
-            {task.title}
+            {task.wbs && (
+              <span className="text-[10px] font-mono text-text-secondary tracking-tight shrink-0">
+                [{task.wbs}]
+              </span>
+            )}
+            <span className="min-w-0 break-words">{task.title}</span>
           </h4>
         </div>
         <span className={cn(
@@ -158,7 +162,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTa
   return (
     <div className="flex flex-1 gap-4 overflow-x-auto pb-2 h-full snap-x">
       {([TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.DONE] as TaskStatus[]).map((status) => (
-        <div key={status} className="flex-1 min-w-0 flex flex-col bg-background/50 rounded-2xl border border-border-subtle shadow-inner snap-center">
+        <div key={status} className="flex-1 min-w-0 min-h-0 flex flex-col bg-background/50 rounded-2xl border border-border-subtle shadow-inner snap-center">
           <div className="p-4 flex justify-between items-center sticky top-0 z-10">
             <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
               <span className={cn("w-2.5 h-2.5 rounded-md", STATUS_INDICATOR_COLORS[status])} aria-hidden="true" />
@@ -169,7 +173,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTa
             </span>
           </div>
 
-          <div className="p-3 pt-0 flex flex-col gap-3 overflow-y-auto flex-1 custom-scrollbar pb-4">
+          <div className="p-3 pt-0 flex flex-col gap-3 overflow-y-auto flex-1 min-h-0 custom-scrollbar pb-4">
             {groupedTasks[status].length === 0 ? (
               <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed border-border-subtle rounded-xl m-1 bg-surface/30">
                  <div className="w-12 h-12 rounded-full bg-surface shadow-sm border border-border-subtle flex items-center justify-center mb-3">
