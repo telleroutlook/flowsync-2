@@ -163,41 +163,43 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTa
   }, [tasks]);
 
   return (
-    <div className="flex flex-1 gap-4 overflow-x-auto pb-2 h-full snap-x">
-      {([TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.DONE] as TaskStatus[]).map((status) => (
-        <div key={status} className="flex-1 min-w-0 min-h-0 flex flex-col bg-background/50 rounded-2xl border border-border-subtle shadow-inner snap-center">
-          <div className="p-4 flex justify-between items-center sticky top-0 z-10">
-            <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
-              <span className={cn("w-2.5 h-2.5 rounded-md", STATUS_INDICATOR_COLORS[status])} aria-hidden="true" />
-              {getStatusLabel(status, t)}
-            </h3>
-            <span className="bg-surface border border-border-subtle text-text-secondary font-mono text-xs px-2 py-0.5 rounded-full shadow-sm" aria-label={`${groupedTasks[status].length} tasks`}>
-              {groupedTasks[status].length}
-            </span>
-          </div>
+    <div className="h-full w-full overflow-auto">
+      <div className="flex h-full min-h-[500px] min-w-full gap-4 pb-2 snap-x px-1">
+        {([TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.DONE] as TaskStatus[]).map((status) => (
+          <div key={status} className="flex-1 min-w-[320px] flex flex-col bg-background/50 rounded-2xl border border-border-subtle shadow-inner snap-center h-full">
+            <div className="p-4 flex justify-between items-center sticky top-0 z-10">
+              <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
+                <span className={cn("w-2.5 h-2.5 rounded-md", STATUS_INDICATOR_COLORS[status])} aria-hidden="true" />
+                {getStatusLabel(status, t)}
+              </h3>
+              <span className="bg-surface border border-border-subtle text-text-secondary font-mono text-xs px-2 py-0.5 rounded-full shadow-sm" aria-label={`${groupedTasks[status].length} tasks`}>
+                {groupedTasks[status].length}
+              </span>
+            </div>
 
-          <div className="p-3 pt-0 flex flex-col gap-3 overflow-y-auto flex-1 min-h-0 custom-scrollbar pb-4">
-            {groupedTasks[status].length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed border-border-subtle rounded-xl m-1 bg-surface/30">
-                 <div className="w-12 h-12 rounded-full bg-surface shadow-sm border border-border-subtle flex items-center justify-center mb-3">
-                    <ClipboardList className="w-6 h-6 text-text-secondary/50" />
-                 </div>
-                 <p className="text-sm font-semibold text-text-secondary">{t('kanban.empty_title')}</p>
-                 <p className="text-xs text-text-secondary/70 mt-1">{t('kanban.empty_subtitle')}</p>
-              </div>
-            ) : (
-              groupedTasks[status].map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  isSelected={selectedTaskId === task.id}
-                  onSelect={onSelectTask}
-                />
-              ))
-            )}
+            <div className="p-3 pt-0 flex flex-col gap-3 overflow-y-auto flex-1 min-h-0 custom-scrollbar pb-4">
+              {groupedTasks[status].length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed border-border-subtle rounded-xl m-1 bg-surface/30">
+                   <div className="w-12 h-12 rounded-full bg-surface shadow-sm border border-border-subtle flex items-center justify-center mb-3">
+                      <ClipboardList className="w-6 h-6 text-text-secondary/50" />
+                   </div>
+                   <p className="text-sm font-semibold text-text-secondary">{t('kanban.empty_title')}</p>
+                   <p className="text-xs text-text-secondary/70 mt-1">{t('kanban.empty_subtitle')}</p>
+                </div>
+              ) : (
+                groupedTasks[status].map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    isSelected={selectedTaskId === task.id}
+                    onSelect={onSelectTask}
+                  />
+                ))
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 });
