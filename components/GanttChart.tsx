@@ -2,18 +2,19 @@ import React, { useMemo, useRef, useState, useEffect, useId, memo, useCallback }
 import { Task, Priority } from '../types';
 import { useI18n } from '../src/i18n';
 import { cn } from '../src/utils/cn';
+import { DAY_MS, GANTT_VIEW_SETTINGS, type GanttViewMode } from '../src/constants/gantt';
 
 interface GanttChartProps {
   tasks: Task[];
   projectId?: string;
   zoom?: number;
-  onViewModeChange?: (mode: ViewMode) => void;
+  onViewModeChange?: (mode: GanttViewMode) => void;
   selectedTaskId?: string | null;
   onSelectTask?: (id: string) => void;
   onUpdateTaskDates?: (id: string, startDate: number, dueDate: number) => void;
 }
 
-type ViewMode = 'Day' | 'Week' | 'Month' | 'Year';
+type ViewMode = GanttViewMode;
 
 type DragMode = 'move' | 'start' | 'end';
 
@@ -26,16 +27,6 @@ type DragState = {
 };
 
 type TaskEntry = Task & { startMs: number; endMs: number };
-
-const DAY_MS = 86400000;
-
-// Move outside component to avoid recreation
-const VIEW_SETTINGS: Record<ViewMode, { pxPerDay: number; tickLabelFormat: Intl.DateTimeFormatOptions }> = {
-  Day: { pxPerDay: 60, tickLabelFormat: { day: 'numeric', month: 'short' } },
-  Week: { pxPerDay: 30, tickLabelFormat: { day: 'numeric', month: 'short' } },
-  Month: { pxPerDay: 10, tickLabelFormat: { month: 'long', year: 'numeric' } },
-  Year: { pxPerDay: 1.5, tickLabelFormat: { year: 'numeric' } },
-} as const;
 
 // Move outside component and use record lookup for better performance
 const TASK_COLOR_CLASSES: Record<Priority, string> = {
@@ -85,7 +76,7 @@ const computeTimelineRange = (entries: TaskEntry[], viewMode: ViewMode) => {
 const estimateTotalWidth = (entries: TaskEntry[], viewMode: ViewMode, zoom: number) => {
   const range = computeTimelineRange(entries, viewMode);
   if (!range) return 0;
-  const settings = VIEW_SETTINGS[viewMode];
+  const settings = GANTT_VIEW_SETTINGS[viewMode];
   return (range.endMs - range.startMs) * ((settings.pxPerDay * zoom) / DAY_MS);
 };
 
@@ -190,8 +181,8 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
 
     const sMs = range.startMs;
     const eMs = range.endMs;
-    
-    const settings = VIEW_SETTINGS[viewMode];
+
+    const settings = GANTT_VIEW_SETTINGS[viewMode];
     const pxPerMsValue = (settings.pxPerDay * zoom) / DAY_MS;
     const totalW = (eMs - sMs) * pxPerMsValue;
 
@@ -200,13 +191,16 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
     const cursor = new Date(sMs);
 
     // Use different iteration strategies based on view mode for efficiency
+    // Use viewMode settings from shared constants
+    const tickFormat = GANTT_VIEW_SETTINGS[viewMode].tickLabelFormat;
+
     if (viewMode === 'Day') {
       while (cursor.getTime() <= eMs) {
         const time = cursor.getTime();
         const x = (time - sMs) * pxPerMsValue;
         lines.push({
           time,
-          label: cursor.toLocaleDateString(locale, settings.tickLabelFormat),
+          label: cursor.toLocaleDateString(locale, tickFormat),
           x,
           isMajor: cursor.getDay() === 1
         });
@@ -220,7 +214,7 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
         const x = (time - sMs) * pxPerMsValue;
         lines.push({
           time,
-          label: cursor.toLocaleDateString(locale, settings.tickLabelFormat),
+          label: cursor.toLocaleDateString(locale, tickFormat),
           x,
           isMajor: true
         });

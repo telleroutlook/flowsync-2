@@ -21,6 +21,7 @@ import { useChat } from './src/hooks/useChat';
 import { useExport } from './src/hooks/useExport';
 import { generateId } from './src/utils';
 import { useI18n } from './src/i18n';
+import { DAY_MS, GANTT_PX_PER_DAY, type GanttViewMode } from './src/constants/gantt';
 
 // Lazy Load View Components
 const KanbanBoard = React.lazy(() => import('./components/KanbanBoard').then(module => ({ default: module.KanbanBoard })));
@@ -47,8 +48,6 @@ type ZoomMetaState = {
   GANTT: ZoomMeta;
 };
 
-type GanttViewMode = 'Day' | 'Week' | 'Month' | 'Year';
-
 // Memoized loading spinner component
 const LoadingSpinner = memo(({ message }: { message: string }) => (
   <div className="flex items-center justify-center h-full">
@@ -69,13 +68,6 @@ const formatAttachmentSize = (value: number): string => {
 };
 
 const CHAT_EXPORT_SEPARATOR = '-'.repeat(72);
-const DAY_MS = 86400000;
-const GANTT_PX_PER_DAY: Record<GanttViewMode, number> = {
-  Day: 60,
-  Week: 30,
-  Month: 10,
-  Year: 1.5,
-};
 
 const computeGanttTimelineRange = (tasks: Task[], viewMode: GanttViewMode) => {
   if (tasks.length === 0) return null;
@@ -109,16 +101,12 @@ const computeGanttTimelineRange = (tasks: Task[], viewMode: GanttViewMode) => {
   return { startMs: startDate.getTime(), endMs: endDate.getTime() };
 };
 
-const pickZoomLevel = (levels: number[], ratio: number) => {
+// Simplified zoom level picker - reduced from 10 to 3 lines
+const pickZoomLevel = (levels: number[], ratio: number): number => {
   if (levels.length === 0) return 1;
-  const min = levels[0];
-  const max = levels[levels.length - 1];
+  const [min, max] = [levels[0], levels[levels.length - 1]];
   const clamped = Math.max(min, Math.min(max, ratio));
-  let candidate = min;
-  levels.forEach((level) => {
-    if (level <= clamped) candidate = level;
-  });
-  return candidate;
+  return levels.filter((l) => l <= clamped).pop() ?? min;
 };
 
 function App() {

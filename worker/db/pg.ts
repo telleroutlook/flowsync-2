@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
 import type { Bindings } from '../types';
+import { sleep, createRetryDelay } from '../../src/utils/retry';
 
 let pool: Pool | null = null;
 let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
@@ -29,22 +30,11 @@ const RETRYABLE_PG_ERROR_CODES = new Set([
   '53300',
 ]);
 
-const sleep = (ms: number) =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-
-const getRetryDelay = (attempt: number, retryAfterHeader?: string | null) => {
-  if (retryAfterHeader) {
-    const retryAfterSeconds = Number(retryAfterHeader);
-    if (!Number.isNaN(retryAfterSeconds) && retryAfterSeconds > 0) {
-      return Math.min(retryAfterSeconds * 1000, MAX_RETRY_DELAY_MS);
-    }
-  }
-  const jitter = Math.floor(Math.random() * 120);
-  const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt) + jitter;
-  return Math.min(delay, MAX_RETRY_DELAY_MS);
-};
+const getRetryDelay = createRetryDelay({
+  maxRetries: MAX_QUERY_RETRIES,
+  baseDelayMs: BASE_RETRY_DELAY_MS,
+  maxDelayMs: MAX_RETRY_DELAY_MS,
+});
 
 const getErrorCode = (error: unknown): string | null => {
   if (!error || typeof error !== 'object') return null;

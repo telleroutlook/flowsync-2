@@ -18,6 +18,12 @@ const PRIORITY_COLORS: Record<Priority, string> = {
   [Priority.HIGH]: 'bg-negative/10 text-negative border-negative/20 ring-negative/30',
 } as const;
 
+const STATUS_INDICATOR_COLORS: Record<TaskStatus, string> = {
+  [TaskStatus.TODO]: 'bg-text-secondary',
+  [TaskStatus.IN_PROGRESS]: 'bg-primary shadow-sm shadow-primary/30',
+  [TaskStatus.DONE]: 'bg-success shadow-sm shadow-success/30',
+} as const;
+
 interface TaskCardProps {
   task: Task;
   isSelected?: boolean;
@@ -155,11 +161,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTa
         <div key={status} className="flex-1 min-w-0 flex flex-col bg-background/50 rounded-2xl border border-border-subtle shadow-inner snap-center">
           <div className="p-4 flex justify-between items-center sticky top-0 z-10">
             <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
-              <span className={cn(
-                "w-2.5 h-2.5 rounded-md",
-                status === TaskStatus.TODO ? 'bg-text-secondary' :
-                status === TaskStatus.IN_PROGRESS ? 'bg-primary shadow-sm shadow-primary/30' : 'bg-success shadow-sm shadow-success/30'
-              )} aria-hidden="true" />
+              <span className={cn("w-2.5 h-2.5 rounded-md", STATUS_INDICATOR_COLORS[status])} aria-hidden="true" />
               {getStatusLabel(status, t)}
             </h3>
             <span className="bg-surface border border-border-subtle text-text-secondary font-mono text-xs px-2 py-0.5 rounded-full shadow-sm" aria-label={`${groupedTasks[status].length} tasks`}>

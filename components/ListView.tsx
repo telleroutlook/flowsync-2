@@ -26,12 +26,11 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
 interface TaskRowProps {
   task: Task;
   isSelected: boolean;
-  locale: string;
   onSelectTask?: (id: string) => void;
-  t: ReturnType<typeof useI18n>['t'];
 }
 
-const TaskRow = memo(({ task, isSelected, locale, onSelectTask, t }: TaskRowProps) => {
+const TaskRow = memo(({ task, isSelected, onSelectTask }: TaskRowProps) => {
+  const { t, locale } = useI18n();
   const handleClick = useCallback(() => {
     onSelectTask?.(task.id);
   }, [onSelectTask, task.id]);
@@ -163,9 +162,7 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
                   key={task.id}
                   task={task}
                   isSelected={selectedTaskId === task.id}
-                  locale={locale}
                   onSelectTask={onSelectTask}
-                  t={t}
                 />
               ))
             )}
