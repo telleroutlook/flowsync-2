@@ -66,24 +66,28 @@ export const listTasks = async (
   let projectValidated = false;
 
   if (projectScoped) {
-    const projectRows = await retryOnce('tasks_project_validate_failed', () =>
-      db
-        .select({ id: projects.id })
-        .from(projects)
-        .where(and(eq(projects.id, filters.projectId!), workspaceClause))
-        .limit(1)
-    ).catch((error) => {
+    let projectExists: boolean | null = null;
+    try {
+      const projectRows = await retryOnce('tasks_project_validate_failed', () =>
+        db
+          .select({ id: projects.id })
+          .from(projects)
+          .where(and(eq(projects.id, filters.projectId!), workspaceClause))
+          .limit(1)
+      );
+      projectExists = projectRows.length > 0;
+    } catch (error) {
       console.warn('tasks_project_validate_failed', {
         workspaceId,
         projectId: filters.projectId,
         error: error instanceof Error ? error.message : String(error),
       });
-      return [];
-    });
-    if (projectRows.length === 0) {
+      projectExists = null;
+    }
+    if (projectExists === false) {
       return { data: [], total: 0, page, pageSize };
     }
-    projectValidated = true;
+    projectValidated = projectExists === true;
   }
 
   let countValue: number | null = null;
