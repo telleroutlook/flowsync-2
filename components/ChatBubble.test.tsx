@@ -69,4 +69,21 @@ describe('ChatBubble', () => {
     // User messages use rounded-2xl
     expect(messageContainer).toHaveClass('rounded-2xl');
   });
+
+  it('shows retry button for OpenAI request failed errors', () => {
+    const errorMessage: ChatMessage = {
+      id: 'm2',
+      role: 'model',
+      text: 'Error: OpenAI request failed.',
+      timestamp: Date.now(),
+    };
+
+    render(
+      <I18nProvider>
+        <ChatBubble message={errorMessage} onRetry={vi.fn()} isProcessing={false} />
+      </I18nProvider>
+    );
+
+    expect(screen.getByText('chat.retry')).toBeInTheDocument();
+  });
 });

@@ -1,5 +1,64 @@
 import type { ApiResponse, AuditLog, Draft, DraftAction, Project, Task, User, Workspace, WorkspaceJoinRequest, WorkspaceMember, WorkspaceMemberActionResult, WorkspaceMembership, WorkspaceWithMembership } from '../types';
 
+const MAX_FETCH_RETRIES = 2;
+const BASE_RETRY_DELAY_MS = 300;
+const MAX_RETRY_DELAY_MS = 2000;
+
+const sleep = (ms: number) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const shouldRetryStatus = (status: number) =>
+  status === 408 || status === 429 || (status >= 500 && status <= 599);
+
+const isIdempotentMethod = (method?: string) => {
+  const normalized = (method || 'GET').toUpperCase();
+  return normalized === 'GET' || normalized === 'HEAD';
+};
+
+const getRetryDelay = (attempt: number, retryAfterHeader?: string | null) => {
+  if (retryAfterHeader) {
+    const retryAfterSeconds = Number(retryAfterHeader);
+    if (!Number.isNaN(retryAfterSeconds) && retryAfterSeconds > 0) {
+      return Math.min(retryAfterSeconds * 1000, MAX_RETRY_DELAY_MS);
+    }
+  }
+  const jitter = Math.floor(Math.random() * 120);
+  const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt) + jitter;
+  return Math.min(delay, MAX_RETRY_DELAY_MS);
+};
+
+const fetchWithRetry = async (input: RequestInfo, init?: RequestInit): Promise<Response> => {
+  const canRetry = isIdempotentMethod(init?.method);
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= MAX_FETCH_RETRIES; attempt += 1) {
+    if (init?.signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    try {
+      const response = await fetch(input, init);
+      if (!canRetry || !shouldRetryStatus(response.status) || attempt === MAX_FETCH_RETRIES) {
+        return response;
+      }
+      const delayMs = getRetryDelay(attempt, response.headers.get('Retry-After'));
+      await sleep(delayMs);
+    } catch (error) {
+      lastError = error;
+      if (!canRetry) throw error;
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw error;
+      }
+      if (attempt === MAX_FETCH_RETRIES) {
+        throw error;
+      }
+      const delayMs = getRetryDelay(attempt);
+      await sleep(delayMs);
+    }
+  }
+  throw lastError;
+};
+
 const buildQueryString = (params: Record<string, string | number | boolean | undefined | null>): string => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -30,7 +89,7 @@ const buildHeaders = (headers?: HeadersInit) => {
 };
 
 const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> => {
-  const response = await fetch(input, { ...init, headers: buildHeaders(init?.headers) });
+  const response = await fetchWithRetry(input, { ...init, headers: buildHeaders(init?.headers) });
   const text = await response.text();
 
   let payload: ApiResponse<T> | null = null;

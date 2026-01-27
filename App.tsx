@@ -245,7 +245,7 @@ function App() {
   // 5. Chat Logic
   const {
     inputText, setInputText, isProcessing, pendingAttachments,
-    handleAttachFiles, handleRemoveAttachment, handleSendMessage, processingSteps, thinkingPreview,
+    handleAttachFiles, handleRemoveAttachment, handleSendMessage, handleRetryLastMessage, processingSteps, thinkingPreview,
     messagesEndRef, fileInputRef
   } = useChat({
     activeProjectId,
@@ -622,8 +622,20 @@ function App() {
         </div>
 
         {dataError && (
-          <div className="px-6 py-3 text-sm font-medium bg-negative/5 text-negative border-b border-negative/20" role="alert">
-            {t('app.error.load_data', { error: dataError })}
+          <div className="px-6 py-3 text-sm font-medium bg-negative/5 text-negative border-b border-negative/20 flex items-center justify-between gap-3" role="alert">
+            <span>{t('app.error.load_data', { error: dataError })}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                void refreshData();
+              }}
+              disabled={isLoadingData}
+              className="h-7 px-2 text-xs"
+            >
+              {t('common.retry')}
+            </Button>
           </div>
         )}
 
@@ -747,6 +759,7 @@ function App() {
         thinkingPreview={thinkingPreview}
         messagesEndRef={messagesEndRef}
         onSendMessage={handleSendMessage}
+        onRetryLastMessage={handleRetryLastMessage}
         pendingAttachments={pendingAttachments}
         onRemoveAttachment={handleRemoveAttachment}
         fileInputRef={fileInputRef}

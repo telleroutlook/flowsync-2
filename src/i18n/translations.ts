@@ -9,6 +9,7 @@ const en = {
   'common.na': 'N/A',
   'common.close': 'Close',
   'common.optional': 'Optional',
+  'common.retry': 'Retry',
 
   'app.sidebar.open': 'Open Sidebar',
   'app.sidebar.close': 'Close Sidebar',
@@ -110,6 +111,7 @@ const en = {
   'chat.sent_attachments': 'Sent attachment(s).',
   'chat.error_prefix': 'Error: {error}',
   'chat.error_generic': 'Sorry, something went wrong.',
+  'chat.retry': 'Retry',
   'chat.processed': 'Processed.',
   'chat.draft_created_review': 'Draft created. Review pending changes before applying.',
   'chat.max_retries': 'Max retries exceeded',
@@ -309,6 +311,7 @@ const zh: Record<keyof typeof en, string> = {
   'common.na': '无',
   'common.close': '关闭',
   'common.optional': '可选',
+  'common.retry': '重试',
 
   'app.sidebar.open': '打开侧边栏',
   'app.sidebar.close': '关闭侧边栏',
@@ -410,6 +413,7 @@ const zh: Record<keyof typeof en, string> = {
   'chat.sent_attachments': '已发送附件。',
   'chat.error_prefix': '错误：{error}',
   'chat.error_generic': '抱歉，出现了问题。',
+  'chat.retry': '重试',
   'chat.processed': '已处理。',
   'chat.draft_created_review': '草案已创建。应用前请先审核更改。',
   'chat.max_retries': '已超过最大重试次数',

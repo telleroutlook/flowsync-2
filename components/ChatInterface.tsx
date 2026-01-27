@@ -21,6 +21,7 @@ interface ChatInterfaceProps {
   thinkingPreview: string;
   messagesEndRef: React.RefObject<HTMLDivElement>;
   onSendMessage: (e?: React.FormEvent) => void;
+  onRetryLastMessage: () => void;
   pendingAttachments: ChatAttachment[];
   onRemoveAttachment: (id: string) => void;
   fileInputRef: React.RefObject<HTMLInputElement>;
@@ -43,6 +44,7 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   thinkingPreview,
   messagesEndRef,
   onSendMessage,
+  onRetryLastMessage,
   pendingAttachments,
   onRemoveAttachment,
   fileInputRef,
@@ -213,7 +215,12 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
         className="flex-1 min-h-0 overflow-y-auto p-4 custom-scrollbar bg-background scroll-smooth"
       >
         {messages.map((msg) => (
-          <ChatBubble key={msg.id} message={msg} />
+          <ChatBubble
+            key={msg.id}
+            message={msg}
+            onRetry={onRetryLastMessage}
+            isProcessing={isProcessing}
+          />
         ))}
 
 

@@ -46,6 +46,7 @@ export const useChat = ({
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastUserMessageRef = useRef<ChatMessage | null>(null);
   const stageLabels = useMemo<Record<string, string>>(() => ({
     received: t('processing.received'),
     prepare_request: t('processing.preparing'),
@@ -123,6 +124,8 @@ ${selectedTaskInfo}
 Available Projects: ${projectList}.
 Task IDs in Active Project (JSON): ${mappingJson}.`;
   }, [projectId, projectName, activeTaskCount, taskIdsAndTitles, selectedTaskId, selectedTaskTitle, selectedTaskStatus, selectedTaskStart, selectedTaskDue, projectList]);
+
+  const isRetryableOpenAIError = useCallback((text: string) => text.includes('OpenAI request failed.'), []);
 
   // Process a single conversation turn with the AI
   const processConversationTurn = useCallback(async (
@@ -294,6 +297,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
       attachments: hasAttachments ? pendingAttachments : undefined,
     };
 
+    lastUserMessageRef.current = userMsg;
     setMessages(prev => [...prev, userMsg]);
     setInputText('');
     setPendingAttachments([]);
@@ -334,6 +338,65 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
     t
   ]);
 
+  const handleRetryLastMessage = useCallback(async () => {
+    if (isProcessing) return;
+    const lastUserMessage = lastUserMessageRef.current;
+    if (!lastUserMessage || !lastUserMessage.text.trim()) return;
+
+    const retryMessage: ChatMessage = {
+      ...lastUserMessage,
+      id: generateId(),
+      timestamp: Date.now(),
+    };
+
+    setMessages(prev => [...prev, retryMessage]);
+    setIsProcessing(true);
+    setProcessingSteps([]);
+    setThinkingPreview('');
+
+    try {
+      pushProcessingStep(t('processing.preparing'));
+
+      const filteredMessages = messages.filter((message, index) => {
+        if (message.role === 'system') return false;
+        if (
+          index === messages.length - 1 &&
+          message.role === 'model' &&
+          isRetryableOpenAIError(message.text)
+        ) {
+          return false;
+        }
+        return true;
+      });
+
+      const history: AiHistoryItem[] = filteredMessages.slice(-10).map(m => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.text }]
+      }));
+
+      await processConversationTurn(history, retryMessage.text, systemContext, 0);
+    } catch {
+      setMessages(prev => [...prev, {
+        id: generateId(),
+        role: 'model',
+        text: t('chat.error_generic'),
+        timestamp: Date.now()
+      }]);
+    } finally {
+      setIsProcessing(false);
+      setProcessingSteps([]);
+      setThinkingPreview('');
+    }
+  }, [
+    isProcessing,
+    messages,
+    processConversationTurn,
+    pushProcessingStep,
+    systemContext,
+    t,
+    isRetryableOpenAIError
+  ]);
+
   return {
     messages,
     setMessages,
@@ -346,6 +409,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
     handleAttachFiles,
     handleRemoveAttachment,
     handleSendMessage,
+    handleRetryLastMessage,
     messagesEndRef,
     fileInputRef
   };

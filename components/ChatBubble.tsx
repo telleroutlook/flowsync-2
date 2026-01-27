@@ -1,13 +1,16 @@
-import React, { memo, useMemo, useCallback } from 'react';
+import React, { memo, useMemo } from 'react';
 import { ChatMessage, ChatAttachment } from '../types';
-import { Paperclip } from 'lucide-react';
+import { Paperclip, RotateCcw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useI18n } from '../src/i18n';
 import { cn } from '../src/utils/cn';
+import { Button } from './ui/Button';
 
 interface ChatBubbleProps {
   message: ChatMessage;
+  onRetry?: () => void;
+  isProcessing?: boolean;
 }
 
 const formatBytes = (value: number): string => {
@@ -110,12 +113,13 @@ const MarkdownContent = memo<MarkdownContentProps>(({ content, isUser, codeLabel
 });
 MarkdownContent.displayName = 'MarkdownContent';
 
-export const ChatBubble = memo<ChatBubbleProps>(({ message }) => {
+export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessing }) => {
   const { t, locale } = useI18n();
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const hasText = message.text.trim().length > 0;
   const attachments = message.attachments || [];
+  const isRetryableError = !isUser && !isSystem && message.text.includes('OpenAI request failed.');
 
   const timestamp = useMemo(() =>
     new Date(message.timestamp).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
@@ -149,6 +153,22 @@ export const ChatBubble = memo<ChatBubbleProps>(({ message }) => {
             {attachments.map((attachment) => (
               <Attachment key={attachment.id} attachment={attachment} isUser={isUser} />
             ))}
+          </div>
+        )}
+
+        {isRetryableError && onRetry && (
+          <div className="mt-2 flex justify-start">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onRetry}
+              disabled={isProcessing}
+              className="h-7 px-2 text-xs"
+            >
+              <RotateCcw className="w-3 h-3 mr-1" />
+              {t('chat.retry')}
+            </Button>
           </div>
         )}
 

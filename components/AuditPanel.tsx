@@ -240,8 +240,16 @@ export const AuditPanel = memo<AuditPanelProps>(({
         </div>
 
         {error && (
-          <div className="mt-3 rounded-lg border border-negative/20 bg-negative/10 px-3 py-2 text-sm text-negative" role="alert">
-            {error}
+          <div className="mt-3 rounded-lg border border-negative/20 bg-negative/10 px-3 py-2 text-sm text-negative flex items-center justify-between gap-3" role="alert">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="rounded-lg border border-negative/30 px-2.5 py-1 text-xs font-semibold text-negative hover:border-negative hover:bg-negative/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {t('common.retry')}
+            </button>
           </div>
         )}
 
