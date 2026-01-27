@@ -12,11 +12,11 @@ This document covers local development, deployment, and debugging for the Cloudf
 
 Update `wrangler.toml`:
 - `[[hyperdrive]]` -> set the correct `id`
-- `localConnectionString` is intentionally omitted (production only)
+- `localConnectionString` can be set for local development only (do not commit real passwords)
 
 ## 3) Secrets (Required)
 
-Based on `flowsync-1/.env`, the only runtime secret used by the Worker is:
+The only runtime secrets used by the Worker are:
 
 ```bash
 wrangler secret put OPENAI_API_KEY
@@ -31,7 +31,7 @@ Notes:
 ## 4) Local vs Production Config
 
 Local development:
-- Use `.env` for `OPENAI_API_KEY` and `DATABASE_URL`.
+- Use `.env` for `OPENAI_API_KEY` and `DATABASE_URL` (or a dev-only `localConnectionString` in `wrangler.toml`).
 - Run `npm run dev` + `npm run dev:worker`.
 
 Production (Cloudflare):
@@ -71,6 +71,11 @@ psql "$DATABASE_URL" -f migrations/0001_auth_workspace.sql
 
 Notes:
 - The Hyperdrive database is usually not directly reachable from this machine. Run these commands from the same network/VPC as the database.
+- If the database runs locally on this host (e.g., Docker), you can pipe the SQL into the Postgres container:
+  ```bash
+  cat migrations/0000_icy_spitfire.sql | docker exec -i <postgres-container> psql -U <user> -d <db> -v ON_ERROR_STOP=1
+  cat migrations/0001_auth_workspace.sql | docker exec -i <postgres-container> psql -U <user> -d <db> -v ON_ERROR_STOP=1
+  ```
 - Migrations are idempotent only where explicitly written (e.g., `ON CONFLICT DO NOTHING`); do not re-run arbitrarily.
 
 ## 7) Build & Deploy
@@ -96,7 +101,26 @@ What init does:
 - Creates the `public` workspace if missing.
 - Seeds default projects/tasks if the database is empty.
 
-## 7) Common Debug Commands
+## 8) Directus / Cloudflare Tunnel Connectivity Checks
+
+Use these to confirm the Directus API and the tunneled Postgres endpoint are reachable.
+
+Directus API health (expect 200):
+```bash
+curl -sS -o /dev/null -w "%{http_code}\n" https://db.workchatly.com/server/info
+```
+
+Postgres over tunnel (replace values, keep `connect_timeout`):
+```bash
+psql "postgresql://<user>:<password>@<tunnel-host>:5432/<db>?sslmode=require&connect_timeout=10" -c "select 1;"
+```
+
+If your Postgres TLS is self-signed, add a CA file:
+```bash
+PGSSLROOTCERT=/path/to/server.crt psql "postgresql://<user>:<password>@<tunnel-host>:5432/<db>?sslmode=require&connect_timeout=10" -c "select 1;"
+```
+
+## 9) Common Debug Commands
 
 View live Worker logs:
 ```bash
@@ -113,7 +137,7 @@ List deployments:
 wrangler deployments list
 ```
 
-## 8) Runtime Checklist
+## 10) Runtime Checklist
 
 - `OPENAI_API_KEY` is set via `wrangler secret`
 - `INIT_TOKEN` is set via `wrangler secret`
@@ -121,7 +145,7 @@ wrangler deployments list
 - `wrangler.toml` assets directory points to `dist`
 - `npm run build:prod` executed before deploy
 
-## 9) Known Gotchas
+## 11) Known Gotchas
 
 - Do not commit database passwords to `wrangler.toml`.
 - Hyperdrive requires `nodejs_compat_v2` for `pg`.
