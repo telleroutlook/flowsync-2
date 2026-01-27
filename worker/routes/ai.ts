@@ -138,9 +138,10 @@ const fetchWithRetry = async (
         throw { error: lastError, attempts: attempt + 1, elapsedMs: totalElapsedMs };
       }
 
-      // Use longer delays for connection errors (cold start, network issues)
+      // Aggressive retry for first network error (Double Tap)
+      // If the first request fails due to network/handshake, try again immediately.
       const delayMs = lastErrorType === 'network' && attempt === 0
-        ? Math.min(2000, getRetryDelay(attempt) * 2)  // First network error: wait up to 2s
+        ? 10 // Almost immediate retry for first network glitch
         : getRetryDelay(attempt);
 
       onRetry?.({ attempt: attempt + 1, delayMs, error: String(error) });
@@ -266,8 +267,11 @@ const runAIRequest = async (
   assertNotAborted();
   emit?.('stage', { name: 'received' });
 
-  if (!c.env.OPENAI_API_KEY) {
-    throw new ApiError('MISSING_API_KEY', 'Missing OPENAI_API_KEY binding.', 500);
+  const hasApiKey = !!c.env.OPENAI_API_KEY;
+  const hasAigToken = !!c.env.CF_AIG_TOKEN;
+
+  if (!hasApiKey && !hasAigToken) {
+    throw new ApiError('MISSING_API_KEY', 'Missing API Key or AI Gateway Token.', 500);
   }
 
   assertNotAborted();
@@ -286,6 +290,7 @@ const runAIRequest = async (
     history: history.slice(-MAX_HISTORY_MESSAGES),
     messageLength: message.length,
     systemContextLength: systemContext?.length || 0,
+    usingAig: hasAigToken,
   });
 
   const boundedHistory = history.slice(-MAX_HISTORY_MESSAGES);
@@ -310,7 +315,17 @@ const runAIRequest = async (
 
     emit?.('stage', { name: 'upstream_request', turn: currentTurn });
 
-    const authorization = await getAuthorizationHeader(c.env.OPENAI_API_KEY, baseUrl, model);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (hasApiKey) {
+      headers['Authorization'] = await getAuthorizationHeader(c.env.OPENAI_API_KEY, baseUrl, model);
+    }
+    
+    if (hasAigToken) {
+      headers['cf-aig-authorization'] = `Bearer ${c.env.CF_AIG_TOKEN}`;
+    }
 
     let response: Response;
     let attempts = 0;
@@ -320,10 +335,7 @@ const runAIRequest = async (
         endpoint,
         {
           method: 'POST',
-          headers: {
-            Authorization: authorization,
-            'Content-Type': 'application/json',
-          },
+          headers,
           body: JSON.stringify({
             model,
             messages,

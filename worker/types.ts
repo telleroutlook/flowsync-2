@@ -10,11 +10,13 @@ export type Variables = {
   workspaceMembership: WorkspaceMembershipRecord | null;
 };
 
-export type Bindings = {
+export interface Bindings {
+  DATABASE_URL: string;
   OPENAI_API_KEY: string;
   OPENAI_BASE_URL?: string;
   OPENAI_MODEL?: string;
-  HYPERDRIVE: { connectionString: string };
-  ASSETS?: { fetch: (request: Request) => Promise<Response> };
+  CF_AIG_TOKEN?: string;
   INIT_TOKEN?: string;
-};
+  HYPERDRIVE: Hyperdrive;
+  ASSETS: Fetcher;
+}
