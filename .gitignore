@@ -28,3 +28,4 @@ dist-server
 *.njsproj
 *.sln
 *.sw?
+.wrangler/
