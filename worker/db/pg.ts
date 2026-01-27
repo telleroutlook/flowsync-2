@@ -1,5 +1,6 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
+import type { QueryResult } from 'pg';
 import * as schema from './schema';
 import type { Bindings } from '../types';
 import { sleep, createRetryDelay } from '../../src/utils/retry';
@@ -102,7 +103,7 @@ export const getPgDb = (env: Bindings) => {
     });
     const retryPool = pool as Pool & { __retryWrapped?: boolean };
     if (!retryPool.__retryWrapped) {
-      const originalQuery: Pool['query'] = pool.query.bind(pool);
+      const originalQuery = pool.query.bind(pool) as (...args: Parameters<Pool['query']>) => Promise<QueryResult>;
       const wrappedQuery = (async (...args: Parameters<Pool['query']>) => {
         const firstArg = args[0];
         const queryText = typeof firstArg === 'string'

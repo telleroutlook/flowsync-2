@@ -119,8 +119,8 @@ export const listTasks = async (
     }
   }
 
-  const rows = await retryOnce('tasks_list_failed', () =>
-    (projectValidated
+  const rows = await retryOnce('tasks_list_failed', async () => {
+    const query = (projectValidated
       ? db
           .select()
           .from(tasks)
@@ -132,8 +132,9 @@ export const listTasks = async (
           .where(combinedClause))
       .orderBy(tasks.createdAt)
       .limit(pageSize)
-      .offset((page - 1) * pageSize)
-  ).catch((error) => {
+      .offset((page - 1) * pageSize);
+    return await query;
+  }).catch((error) => {
     if (cached) {
       console.warn('tasks_cache_fallback', { workspaceId, cacheKey });
       return cached.data.data;
@@ -150,7 +151,11 @@ export const listTasks = async (
     countValue = rows.length;
     console.warn('tasks_count_estimated', { workspaceId, cacheKey, total: countValue });
   }
-  const data = { data: rows.map((row) => toTaskRecord(row.tasks)), total: countValue, page, pageSize };
+  type TaskRow = typeof tasks.$inferSelect;
+  type TaskJoinRow = { tasks: TaskRow; projects: typeof projects.$inferSelect };
+  const toRecord = (row: TaskRow | TaskJoinRow | TaskRecord) =>
+    ('tasks' in row ? toTaskRecord(row.tasks) : toTaskRecord(row));
+  const data = { data: rows.map((row) => toRecord(row as TaskRow | TaskJoinRow | TaskRecord)), total: countValue, page, pageSize };
   taskCache.set(cacheKey, { data, at: now() });
   return data;
 };
@@ -297,7 +302,7 @@ const logDbError = (label: string, error: unknown) => {
   console.error(label, { message: String(error) });
 };
 
-const retryOnce = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
+const retryOnce = async <T>(label: string, fn: () => PromiseLike<T>): Promise<T> => {
   try {
     return await fn();
   } catch (error) {
