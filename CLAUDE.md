@@ -6,10 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 FlowSync AI Studio is a data-driven project management application with:
 - **Frontend**: React 19.2.3 + Vite 6.2.0
-- **Backend**: Hono (Node.js server) on port 3000
-- **Database**: PostgreSQL with Drizzle ORM
-- **AI Integration**: OpenAI API for task/project assistance
-- **Deployment**: SAP BTP (Cloud Foundry)
+- **Backend**: Hono on Cloudflare Workers
+- **Database**: PostgreSQL with Drizzle ORM via Hyperdrive
+- **AI Integration**: OpenAI-compatible API for task/project assistance
+- **Deployment**: Cloudflare Workers
 
 The application features project/task management with multiple views (Kanban, List, Gantt), a draft-first workflow for changes, comprehensive audit logging with rollback capabilities, and AI-powered chat assistance.
 
@@ -18,11 +18,11 @@ The application features project/task management with multiple views (Kanban, Li
 ### Local Development
 ```bash
 npm install                  # Install dependencies
-npm run dev                  # Start frontend (http://localhost:3000)
-npm run dev:server           # Start backend (http://localhost:8788)
+npm run dev                  # Start frontend (http://localhost:5173)
+npm run dev:worker           # Start Workers backend (http://127.0.0.1:8787)
 ```
 
-Vite proxies `/api` requests to the backend server at `http://127.0.0.1:8788`.
+Vite proxies `/api` requests to the Workers dev server at `http://127.0.0.1:8787`.
 
 ### Database Operations
 ```bash
@@ -33,9 +33,8 @@ npm run db:studio            # Open Drizzle Studio for database inspection
 
 ### Build & Deploy
 ```bash
-npm run build:prod           # Production build (frontend + backend)
-npm run start:prod           # Run production server
-cf push                      # Deploy to SAP BTP
+npm run build:prod           # Production build (frontend assets)
+npm run deploy               # Deploy to Cloudflare Workers
 ```
 
 ### Testing & Linting
@@ -47,10 +46,10 @@ npm run lint                 # Type check with no emit
 
 ## Architecture
 
-### Dual Server Architecture
-- **Frontend server** (Vite): React SPA, handles UI state and user interactions
-- **Backend server** (Hono): REST API at `/api/*`, manages data persistence and business logic
-- Clear separation: Frontend calls backend API via `services/apiService.ts`
+### Single Worker Architecture
+- **Frontend assets** (Vite build): served from the Worker `assets` binding
+- **Backend API** (Hono): REST API at `/api/*`, manages data persistence and business logic
+- Frontend calls backend API via `services/apiService.ts`
 
 ### Data Flow
 ```
@@ -64,7 +63,7 @@ Example: `TaskDetailPanel.tsx` → `useProjectData.ts` → `apiService.ts` → `
   - `hooks/` - Custom React hooks (useProjectData, useDrafts, useAuditLogs, useChat, useExport)
   - `test/` - Test setup and utilities
 - `worker/` - Backend API code
-  - `routes/` - API route handlers (projects, tasks, drafts, audit, ai)
+  - `routes/` - API route handlers (projects, tasks, drafts, audit, ai, system)
   - `services/` - Business logic layer
   - `db/` - Database schema and connection
 - `components/` - React UI components (lazy-loaded views: KanbanBoard, ListView, GanttChart)
@@ -138,20 +137,21 @@ project,id,title,status,priority,assignee,wbs,startDate,dueDate,completion,isMil
 
 ## Environment Setup
 
-Copy `.env.example` to `.env` and configure:
-- `DATABASE_URL` - PostgreSQL connection string (required)
+Local dev uses `.env`:
+- `DATABASE_URL` - PostgreSQL connection string (required for local dev)
 - `OPENAI_API_KEY` - OpenAI API key (required)
 - `OPENAI_BASE_URL` - Custom OpenAI endpoint (optional)
 - `OPENAI_MODEL` - Model name (optional, default: `gpt-4`)
 
-## Deployment: SAP BTP
+Production uses Cloudflare bindings:
+- `HYPERDRIVE` binding for database connectivity
+- `OPENAI_API_KEY` via `wrangler secret put`
+- `INIT_TOKEN` via `wrangler secret put` (used by `POST /api/system/init`)
+- `OPENAI_BASE_URL` and `OPENAI_MODEL` in `wrangler.toml` `[vars]`
 
-1. Build: `npm run build:prod`
-2. Create PostgreSQL service: `cf create-service postgresql db-small flowsync-postgres-db`
-3. Set environment variables: `cf set-env flowsync-ai OPENAI_API_KEY <key>`
-4. Deploy: `cf push`
-
-See `manifest.yml` for deployment configuration.
+### Initialization
+Run once after tables exist:
+`POST /api/system/init` with header `X-Init-Token: <INIT_TOKEN>`
 
 ## Coding Conventions
 
@@ -174,5 +174,5 @@ See `manifest.yml` for deployment configuration.
 - All timestamps are Unix milliseconds in bigint format
 - Draft warnings (e.g., constraint violations) are returned but don't block draft creation
 - Audit logs support rollback via `POST /api/audit/:id/rollback`
-- The Vite dev server runs on port 5173, proxying API calls to port 8788
-- PostgreSQL connection is initialized once in `src/server.ts` and injected into Hono context
+- The Vite dev server runs on port 5173, proxying API calls to port 8787
+- PostgreSQL connection is initialized once in `worker/db/pg.ts` and injected into Hono context

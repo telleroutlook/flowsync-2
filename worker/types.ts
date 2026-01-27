@@ -16,4 +16,5 @@ export type Bindings = {
   OPENAI_MODEL?: string;
   HYPERDRIVE: { connectionString: string };
   ASSETS?: { fetch: (request: Request) => Promise<Response> };
+  INIT_TOKEN?: string;
 };

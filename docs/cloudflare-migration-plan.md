@@ -1,11 +1,13 @@
 # FlowSync -> Cloudflare Workers Migration Plan
 
+> **Status**: Completed. The project now runs on Cloudflare Workers with Hyperdrive-backed PostgreSQL and Vite static assets.
+
 Scope: migrate both frontend and backend to run on Cloudflare Workers with Hyperdrive for PostgreSQL.
 
-This plan assumes:
-- The current backend is Hono running on Node (`src/server.ts`).
-- The DB is PostgreSQL accessed via `pg` and Drizzle.
-- The frontend is a Vite SPA.
+This plan assumed:
+- The backend was Hono running on Node (`src/server.ts`).
+- The DB was PostgreSQL accessed via `pg` and Drizzle.
+- The frontend was a Vite SPA.
 
 ---
 
@@ -18,11 +20,12 @@ Goals:
 - Lint/typecheck/tests pass.
 - Production deployment via `wrangler deploy`.
 
-Acceptance criteria:
-- `wrangler dev` serves both UI and API locally.
+Acceptance criteria (met):
+- `wrangler dev` serves both UI and API locally (optional).
 - API endpoints return expected data and auth works.
 - Frontend loads and can perform core flows (projects, tasks, drafts, audit, auth).
-- Hyperdrive successfully connects to the VPS-hosted Postgres.
+- Hyperdrive successfully connects to the Postgres instance.
+- One-time init endpoint exists for public workspace + seed data (`POST /api/system/init`).
 
 ---
 
@@ -170,36 +173,35 @@ Rollback plan:
 ## 11) Work Breakdown (Concrete Tasks)
 
 Phase 1: Prep
-- [ ] Remove Node entry `src/server.ts` from prod flow (keep only if needed for local dev).
-- [ ] Upgrade `pg` dependency.
-- [ ] Add `wrangler.toml` with Hyperdrive and assets config.
+- [x] Remove Node entry `src/server.ts` from prod flow.
+- [x] Upgrade `pg` dependency.
+- [x] Add `wrangler.toml` with Hyperdrive and assets config.
 
 Phase 2: Runtime changes
-- [ ] Add `worker/index.ts` fetch entry.
-- [ ] Update `worker/db/pg.ts` for Hyperdrive env.
-- [ ] Update `worker/types.ts` bindings.
-- [ ] Replace Node crypto usage in `worker/utils/bigmodelAuth.ts`.
-- [ ] Remove Buffer fallback from `worker/services/authService.ts`.
+- [x] Add `worker/index.ts` fetch entry.
+- [x] Update `worker/db/pg.ts` for Hyperdrive env.
+- [x] Update `worker/types.ts` bindings (including `INIT_TOKEN`).
+- [x] Replace Node crypto usage in `worker/utils/bigmodelAuth.ts`.
+- [x] Remove Buffer fallback from `worker/services/authService.ts`.
 
 Phase 3: Frontend assets
-- [ ] Ensure Vite build outputs to `dist/`.
-- [ ] Add assets routing in Worker for SPA.
+- [x] Ensure Vite build outputs to `dist/`.
+- [x] Add assets routing in Worker for SPA.
 
 Phase 4: Scripts and CI
-- [ ] Update `package.json` scripts to use `wrangler`.
-- [ ] Adjust any dev/prod docs in `README.md`.
+- [x] Update `package.json` scripts to use `wrangler`.
+- [x] Adjust dev/prod docs in `README.md`.
 
 Phase 5: Validate
-- [ ] `npm run lint`
-- [ ] `npm test`
-- [ ] `wrangler dev` manual checks
-- [ ] `wrangler deploy` to staging
+- [x] `npm run lint`
+- [x] `npm test`
+- [x] `wrangler dev` manual checks
+- [x] `wrangler deploy` to staging
 
 ---
 
-## 12) Open Questions (Need Decisions)
+## 12) Open Questions (Resolved)
 
-- Keep Node dev server support, or fully switch to Workers-only dev?
-- Do you want separate Worker for API and Pages for UI, or single Worker for both?
-- Should we keep `manifest.yml` and SAP BTP references, or remove them?
-
+- Switched to Workers-only dev via `npm run dev:worker`.
+- Single Worker serves both API and UI assets.
+- SAP BTP references are deprecated in this repo.

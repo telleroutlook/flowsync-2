@@ -1,8 +1,8 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/server.ts` is the Node.js entry point for the Hono backend.
-- `worker/` contains backend routes, services, and database schemas (migrated from Cloudflare Workers).
+- `worker/index.ts` is the Cloudflare Workers entry point for the Hono backend.
+- `worker/` contains backend routes, services, and database schemas.
 - `App.tsx` hosts the main UI state and page layout.
 - `index.tsx` is the React entry point; `index.html` is the Vite HTML shell.
 - `components/` contains UI modules (PascalCase files like `GanttChart.tsx`).
@@ -13,18 +13,18 @@
 ## Build, Test, and Development Commands
 - `npm install` — install dependencies.
 - `npm run dev` — start the Vite dev server (frontend).
-- `npm run dev:server` — start the Node.js backend server (Hono + Postgres).
-- `npm run build:prod` — build both frontend and backend for production.
-- `npm run start:prod` — start the production server.
+- `npm run dev:worker` — start the Workers backend server.
+- `npm run build:prod` — build frontend assets for production.
+- `npm run deploy` — deploy to Cloudflare Workers.
 - `npm test` — run unit tests via Vitest.
 - `npm run db:push` — push Drizzle schema changes to the database.
 - `npm run db:studio` — open Drizzle Studio to inspect the database.
 
 ## Architecture & Tech Stack
-- **Backend**: Node.js + Hono (was Cloudflare Workers).
+- **Backend**: Cloudflare Workers + Hono.
 - **Database**: PostgreSQL (via Drizzle ORM).
 - **Frontend**: React + Vite.
-- **Deployment**: SAP BTP (Cloud Foundry) via `manifest.yml`.
+- **Deployment**: Cloudflare Workers.
 
 ## Coding Style & Naming Conventions
 - TypeScript + React with ES modules (`"type": "module"`).

@@ -10,8 +10,6 @@ binding = "ASSETS"
 [[hyperdrive]]
 binding = "HYPERDRIVE"
 id = "165e16e1c93849e09e95097ed1c83141"
-# NOTE: Do not commit real credentials. Replace the password locally when running wrangler dev.
-localConnectionString = "postgres://directus:<REPLACE_WITH_DB_PASSWORD>@pgdb.workchatly.com:5432/directus?sslmode=require"
 
 [vars]
 OPENAI_BASE_URL = "https://open.bigmodel.cn/api/coding/paas/v4"

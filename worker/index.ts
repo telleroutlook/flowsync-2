@@ -19,16 +19,34 @@ const getApp = (env: Bindings) => {
 
 export default {
   async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
-    const url = new URL(request.url);
+    try {
+      const url = new URL(request.url);
 
-    if (url.pathname.startsWith('/api')) {
+      if (url.pathname.startsWith('/api')) {
+        return getApp(env).fetch(request, env, ctx);
+      }
+
+      if (env.ASSETS) {
+        return env.ASSETS.fetch(request);
+      }
+
       return getApp(env).fetch(request, env, ctx);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      console.error('fetch_error', {
+        method: request.method,
+        path: new URL(request.url).pathname,
+        message,
+        stack,
+      });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: { code: 'INTERNAL_ERROR', message: 'Internal server error.' },
+        }),
+        { status: 500, headers: { 'content-type': 'application/json' } }
+      );
     }
-
-    if (env.ASSETS) {
-      return env.ASSETS.fetch(request);
-    }
-
-    return getApp(env).fetch(request, env, ctx);
   },
 };

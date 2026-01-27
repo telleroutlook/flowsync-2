@@ -11,7 +11,7 @@ logging, and rollback via audit snapshots.
 
 **Deployment Platform:** Cloudflare Workers
 
-## Run Locally
+## Run Locally (Optional)
 
 **Prerequisites:** Node.js, PostgreSQL
 
@@ -24,7 +24,7 @@ logging, and rollback via audit snapshots.
    - Required: `OPENAI_API_KEY`
    - Optional: `OPENAI_BASE_URL` (default: `https://api.openai.com/v1`)
    - Optional: `OPENAI_MODEL` (default: `gpt-4`)
-4. Setup database:
+4. Setup database (local PostgreSQL):
    `npm run db:push`
 5. Start local development:
    - Frontend: `npm run dev` (http://localhost:5173)
@@ -59,10 +59,19 @@ npm run db:studio
 2. Configure Hyperdrive binding and secrets:
    - Set `HYPERDRIVE` binding in Cloudflare
    - `wrangler secret put OPENAI_API_KEY`
+   - `wrangler secret put INIT_TOKEN` (used by `/api/system/init`)
    - `OPENAI_BASE_URL` and `OPENAI_MODEL` are configured in `wrangler.toml` `[vars]`
 
 3. Deploy:
    `npm run deploy`
+
+4. Initialize base data (one-time):
+   - Call `POST /api/system/init` with header `X-Init-Token: <INIT_TOKEN>`
+   - This creates the public workspace and seed data if missing
+
+### Production Database
+- The Worker expects Postgres tables to exist in the Hyperdrive database.
+- Apply SQL migrations from `migrations/*.sql` to the target database before calling `/api/system/init`.
 
 ## API Notes
 - Draft-first flow: `POST /api/drafts` then `POST /api/drafts/:id/apply`
