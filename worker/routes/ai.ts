@@ -294,7 +294,7 @@ CRITICAL - Interactive Suggestions:
   3. When suggesting the next logical steps after a task is completed.
 - BAD PRACTICE: "Do you want to (1) Create a task or (2) Update it?" (Text-only is bad UX).
 - GOOD PRACTICE: Call 'suggestActions' with ["Create a task", "Update existing task"].
-- ALWAYS include 2-4 relevant short suggestions at the end of your response when appropriate.
+- ALWAYS include 2-3 relevant short suggestions at the end of your response when appropriate.
 
 Workflow:
 - Understand the user's intent
