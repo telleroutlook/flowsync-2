@@ -102,6 +102,8 @@ const pickZoomLevel = (levels: number[], ratio: number): number => {
 function App() {
   const { t } = useI18n();
   const zoomLevels = useMemo(() => [0.6, 0.8, 1, 1.2, 1.4], []);
+  const exportButtonRef = useRef<HTMLButtonElement | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
 
   // UI State
   const [viewMode, setViewMode] = useState<ViewMode>('GANTT'); 
@@ -350,13 +352,18 @@ function App() {
     }
   }, [tasks, selectedTaskId]);
 
-  // Handle outside click for export menu - optimized to prevent memory leaks
+  // Handle outside click for export menu - avoid capture to keep menu item clicks working
   useEffect(() => {
     if (!isExportOpen) return;
-    const handleWindowClick = () => setIsExportOpen(false);
-    const options = { capture: true } as const;
-    window.addEventListener('click', handleWindowClick, options);
-    return () => window.removeEventListener('click', handleWindowClick, options);
+    const handleWindowClick = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (exportMenuRef.current?.contains(target)) return;
+      if (exportButtonRef.current?.contains(target)) return;
+      setIsExportOpen(false);
+    };
+    window.addEventListener('click', handleWindowClick);
+    return () => window.removeEventListener('click', handleWindowClick);
   }, [isExportOpen]);
 
   // Manual Project Actions
@@ -763,6 +770,7 @@ function App() {
                   event.stopPropagation();
                   setIsExportOpen(prev => !prev);
                  }}
+                 ref={exportButtonRef}
                  className="h-9 px-3 gap-2"
                >
                  <span>{t('app.header.export')}</span>
@@ -771,6 +779,7 @@ function App() {
                {isExportOpen && (
                  <div
                    onClick={(event) => event.stopPropagation()}
+                   ref={exportMenuRef}
                    className="absolute right-0 mt-2 w-64 rounded-xl border border-border-subtle bg-surface shadow-xl z-50 p-2 animate-fade-in"
                    role="menu"
                  >
