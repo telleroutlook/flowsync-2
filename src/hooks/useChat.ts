@@ -263,6 +263,10 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
         // Submit draft if there are actions to apply
         if (result.draftActions.length > 0) {
           recordStep(t('processing.submitting_draft'));
+          // CRITICAL: If a draft is created, clear any suggestions. 
+          // The UI will show the "Review Pending Draft" panel, which is the only valid interaction path.
+          suggestions = []; 
+          
           try {
             const draft = await submitDraft(result.draftActions, {
               createdBy: 'agent',
