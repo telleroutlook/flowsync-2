@@ -40,6 +40,7 @@ const en = {
   'app.header.export_all': 'All Projects',
   'app.header.format': 'Format',
   'app.header.export_chat': 'Chat History',
+  'app.header.export_quick': 'Quick Export',
   'app.header.toggle_chat': 'Toggle AI Chat',
 
   'workspace.title': 'Workspace',
@@ -350,6 +351,7 @@ const zh: Record<keyof typeof en, string> = {
   'app.header.export_all': '全部项目',
   'app.header.format': '格式',
   'app.header.export_chat': '对话记录',
+  'app.header.export_quick': '快速导出',
   'app.header.toggle_chat': '切换 AI 聊天',
 
   'workspace.title': '工作区',

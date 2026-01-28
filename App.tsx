@@ -773,8 +773,18 @@ function App() {
               </Button>
             </div>
 
-            {/* Export Button */}
-            <div className="relative">
+             {/* Export Button */}
+             <div className="relative">
+              <Button
+                 variant="outline"
+                 size="sm"
+                 onClick={() => {
+                  void handleExportTasks(lastExportFormat);
+                 }}
+                 className="h-9 px-3 gap-2 mr-2"
+               >
+                 <span>{t('app.header.export_quick')}</span>
+               </Button>
               <Button
                  variant="outline"
                  size="sm"
