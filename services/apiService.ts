@@ -1,6 +1,7 @@
 import type { ApiResponse, AuditLog, Draft, DraftAction, Project, Task, User, Workspace, WorkspaceJoinRequest, WorkspaceMember, WorkspaceMemberActionResult, WorkspaceMembership, WorkspaceWithMembership } from '../types';
 import { sleep, getRetryDelay } from '../src/utils/retry';
 import { storageGet } from '../src/utils/storage';
+import { buildAuthHeaders } from './aiService';
 
 const MAX_FETCH_RETRIES = 2;
 
@@ -54,11 +55,11 @@ const buildQueryString = (params: Record<string, string | number | boolean | und
 };
 
 const buildHeaders = (headers?: HeadersInit) => {
-  const merged = new Headers(headers || {});
-  const token = storageGet('authToken');
-  if (token) merged.set('Authorization', `Bearer ${token}`);
-  const workspaceId = storageGet('activeWorkspaceId');
-  if (workspaceId) merged.set('X-Workspace-Id', workspaceId);
+  const merged = new Headers(buildAuthHeaders());
+  if (headers) {
+    const additional = new Headers(headers);
+    additional.forEach((value, key) => merged.set(key, value));
+  }
   return merged;
 };
 

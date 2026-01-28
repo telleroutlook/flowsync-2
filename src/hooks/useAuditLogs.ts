@@ -44,7 +44,7 @@ export const useAuditLogs = ({ activeProjectId, refreshData, appendSystemMessage
       actor: auditFilters.actor,
       action: auditFilters.action,
       entityType: auditFilters.entityType,
-      q: auditFilters.q.trim(),
+      q: auditFilters.q.trim?.() ?? auditFilters.q,
       from: auditFilters.from,
       to: auditFilters.to,
     }),

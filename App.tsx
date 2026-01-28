@@ -108,12 +108,9 @@ function App() {
   // UI State
   const [viewMode, setViewMode] = useState<ViewMode>('GANTT'); 
   const [viewZoom, setViewZoom] = useState<ZoomState>(() => {
-    if (typeof window === 'undefined') {
-      return { BOARD: 1, LIST: 1, GANTT: 1 };
-    }
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('flowsync:viewZoom') : null;
+    if (!raw) return { BOARD: 1, LIST: 1, GANTT: 1 };
     try {
-      const raw = window.localStorage.getItem('flowsync:viewZoom');
-      if (!raw) return { BOARD: 1, LIST: 1, GANTT: 1 };
       const parsed = JSON.parse(raw) as Partial<ZoomState>;
       return {
         BOARD: typeof parsed.BOARD === 'number' ? parsed.BOARD : 1,
@@ -125,7 +122,8 @@ function App() {
     }
   });
   const [zoomMeta, setZoomMeta] = useState<ZoomMetaState>(() => {
-    if (typeof window === 'undefined') {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('flowsync:viewZoomMeta') : null;
+    if (!raw) {
       return {
         BOARD: { signature: null, userOverride: false },
         LIST: { signature: null, userOverride: false },
@@ -133,14 +131,6 @@ function App() {
       };
     }
     try {
-      const raw = window.localStorage.getItem('flowsync:viewZoomMeta');
-      if (!raw) {
-        return {
-          BOARD: { signature: null, userOverride: false },
-          LIST: { signature: null, userOverride: false },
-          GANTT: { signature: null, userOverride: false },
-        };
-      }
       const parsed = JSON.parse(raw) as Partial<ZoomMetaState>;
       const normalize = (value?: ZoomMeta): ZoomMeta => ({
         signature: value?.signature ?? null,
@@ -184,11 +174,7 @@ function App() {
   // Guest Thinking State
   const [guestThinking, setGuestThinking] = useState(() => {
     if (typeof window === 'undefined') return false;
-    try {
-      return window.localStorage.getItem('flowsync:guestThinking') === 'true';
-    } catch {
-      return false;
-    }
+    return localStorage.getItem('flowsync:guestThinking') === 'true';
   });
 
   const effectiveAllowThinking = user ? (user.allowThinking ?? false) : guestThinking;
@@ -600,7 +586,7 @@ function App() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem('flowsync:viewZoom', JSON.stringify(viewZoom));
+      localStorage.setItem('flowsync:viewZoom', JSON.stringify(viewZoom));
     } catch {
       // ignore storage errors
     }
@@ -609,7 +595,7 @@ function App() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem('flowsync:viewZoomMeta', JSON.stringify(zoomMeta));
+      localStorage.setItem('flowsync:viewZoomMeta', JSON.stringify(zoomMeta));
     } catch {
       // ignore storage errors
     }

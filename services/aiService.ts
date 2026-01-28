@@ -1,13 +1,17 @@
 import { storageGet } from '../src/utils/storage';
 
+export function buildAuthHeaders(): Headers {
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  const token = storageGet('authToken');
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const workspaceId = storageGet('activeWorkspaceId');
+  if (workspaceId) headers.set('X-Workspace-Id', workspaceId);
+  return headers;
+}
+
 export class AIService {
   private buildHeaders() {
-    const headers = new Headers({ 'Content-Type': 'application/json' });
-    const token = storageGet('authToken');
-    if (token) headers.set('Authorization', `Bearer ${token}`);
-    const workspaceId = storageGet('activeWorkspaceId');
-    if (workspaceId) headers.set('X-Workspace-Id', workspaceId);
-    return headers;
+    return buildAuthHeaders();
   }
 
   async sendMessageStream(

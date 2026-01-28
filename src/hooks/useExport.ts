@@ -1,126 +1,29 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Project, Task, DraftAction, TaskStatus, Priority, Draft } from '../../types';
+import { useState, useEffect, useCallback } from 'react';
+import { Project, Task, DraftAction, Draft } from '../../types';
 import { apiService } from '../../services/apiService';
-import { generateId, getTaskStart, getTaskEnd, formatExportDate, parseDateFlexible, storageGet, storageSet } from '../utils';
+import {
+  generateId,
+  storageGet,
+  storageSet,
+  clampCompletion,
+  formatExportTimestamp,
+  makeSafeFileName,
+  formatCsvValue,
+  normalizeStatus,
+  normalizePriority,
+  parseBoolean,
+  parseNumeric,
+  parseCompletion,
+  parseDelimitedContent,
+  buildDisplayRows,
+  buildExportRows,
+  EXPORT_HEADERS,
+  DISPLAY_HEADERS,
+} from '../utils';
 import { useI18n } from '../i18n';
 
 export type ExportFormat = 'csv' | 'tsv' | 'json' | 'markdown' | 'pdf';
 export type ImportStrategy = 'append' | 'merge';
-
-const clampCompletion = (value: number) => Math.min(100, Math.max(0, value));
-
-const formatExportTimestamp = (value?: number) => {
-  if (value === undefined || value === null) return '';
-  return new Date(value).toISOString();
-};
-
-const makeSafeFileName = (value: string) => {
-  const cleaned = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-  return cleaned || 'project';
-};
-
-const formatCsvValue = (value: string, delimiter: string) => {
-  const escaped = value.replace(/"/g, '""');
-  if (escaped.includes('"') || escaped.includes('\n') || escaped.includes(delimiter)) {
-    return `"${escaped}"`;
-  }
-  return escaped;
-};
-
-const normalizeStatus = (value?: string): TaskStatus => {
-  const normalized = (value || '').toUpperCase().replace(/[- ]/g, '_');
-  switch (normalized) {
-    case 'DONE':
-      return TaskStatus.DONE;
-    case 'IN_PROGRESS':
-      return TaskStatus.IN_PROGRESS;
-    default:
-      return TaskStatus.TODO;
-  }
-};
-
-const normalizePriority = (value?: string): Priority => {
-  const normalized = (value || '').toUpperCase();
-  switch (normalized) {
-    case 'HIGH':
-      return Priority.HIGH;
-    case 'MEDIUM':
-      return Priority.MEDIUM;
-    default:
-      return Priority.LOW;
-  }
-};
-
-const parseBoolean = (value?: string) => {
-  if (!value) return undefined;
-  const normalized = value.trim().toLowerCase();
-  if (normalized === 'true' || normalized === 'yes' || normalized === '1') return true;
-  if (normalized === 'false' || normalized === 'no' || normalized === '0') return false;
-  return undefined;
-};
-
-const parseNumeric = (value: unknown) => {
-  if (typeof value === 'number' && !Number.isNaN(value)) return value;
-  if (typeof value === 'string') return parseDateFlexible(value);
-  return undefined;
-};
-
-const parseCompletion = (value: unknown) => {
-  if (typeof value === 'number' && !Number.isNaN(value)) return clampCompletion(value);
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return undefined;
-    const numeric = Number(trimmed);
-    if (!Number.isNaN(numeric)) return clampCompletion(numeric);
-  }
-  return undefined;
-};
-
-const parseDelimitedLine = (line: string, delimiter: string) => {
-  const cells: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    const next = line[i + 1];
-    if (char === '"' && inQuotes && next === '"') {
-      current += '"';
-      i += 1;
-      continue;
-    }
-    if (char === '"') {
-      inQuotes = !inQuotes;
-      continue;
-    }
-    if (char === delimiter && !inQuotes) {
-      cells.push(current);
-      current = '';
-      continue;
-    }
-    current += char;
-  }
-  cells.push(current);
-  return cells.map(cell => cell.trim());
-};
-
-const parseDelimitedContent = (content: string) => {
-  const delimiter = content.includes('\t') ? '\t' : ',';
-  const rows = content.split(/\r?\n/).filter(line => line.trim().length > 0);
-  if (rows.length === 0) return { headers: [], records: [] };
-  const headers = parseDelimitedLine(rows[0], delimiter).map(h => h.trim().toLowerCase());
-  const records = rows.slice(1).map(line => {
-    const cells = parseDelimitedLine(line, delimiter);
-    const record: Record<string, string> = {};
-    headers.forEach((header, index) => {
-      record[header] = cells[index] ?? '';
-    });
-    return record;
-  });
-  return { headers, records };
-};
 
 type ImportTask = Task & { projectName?: string };
 
@@ -200,128 +103,12 @@ export const useExport = ({
     link.remove();
   }, [downloadFallback]);
 
-  const exportHeaders = [
-    'rowType',
-    'projectId',
-    'project',
-    'projectDescription',
-    'projectIcon',
-    'projectCreatedAt',
-    'projectUpdatedAt',
-    'id',
-    'title',
-    'status',
-    'priority',
-    'assignee',
-    'wbs',
-    'startDate',
-    'dueDate',
-    'completion',
-    'isMilestone',
-    'predecessors',
-    'description',
-    'createdAt',
-    'updatedAt',
-  ];
-
-  const displayHeaders = [
-    'project',
-    'id',
-    'title',
-    'status',
-    'priority',
-    'assignee',
-    'wbs',
-    'startDate',
-    'dueDate',
-    'completion',
-    'isMilestone',
-    'predecessors',
-    'description',
-    'createdAt',
-  ];
-
-  const buildDisplayRows = useCallback((sourceTasks: Task[], exportProjects: Project[]) => {
-    const projectLookup = exportProjects.reduce<Record<string, Project>>((acc, project) => {
-      acc[project.id] = project;
-      return acc;
-    }, {});
-    return sourceTasks.map(task => {
-      const project = projectLookup[task.projectId] || activeProject;
-      return {
-        project: project.name,
-        id: task.id,
-        title: task.title,
-        status: task.status,
-        priority: task.priority,
-        assignee: task.assignee || '',
-        wbs: task.wbs || '',
-        startDate: formatExportDate(getTaskStart(task)),
-        dueDate: formatExportDate(getTaskEnd(task)),
-        completion: task.completion ?? 0,
-        isMilestone: task.isMilestone ? 'yes' : 'no',
-        predecessors: (task.predecessors || []).join(','),
-        description: task.description || '',
-        createdAt: formatExportDate(task.createdAt),
-      };
-    });
+  const buildDisplayRowsCallback = useCallback((sourceTasks: Task[], exportProjects: Project[]) => {
+    return buildDisplayRows(sourceTasks, exportProjects, activeProject);
   }, [activeProject]);
 
-  const buildExportRows = useCallback((sourceTasks: Task[], exportProjects: Project[]) => {
-    const projectLookup = exportProjects.reduce<Record<string, Project>>((acc, project) => {
-      acc[project.id] = project;
-      return acc;
-    }, {});
-    const projectRows = exportProjects.map(project => ({
-      rowType: 'project',
-      projectId: project.id,
-      project: project.name,
-      projectDescription: project.description || '',
-      projectIcon: project.icon || '',
-      projectCreatedAt: formatExportTimestamp(project.createdAt),
-      projectUpdatedAt: formatExportTimestamp(project.updatedAt),
-      id: '',
-      title: '',
-      status: '',
-      priority: '',
-      assignee: '',
-      wbs: '',
-      startDate: '',
-      dueDate: '',
-      completion: '',
-      isMilestone: '',
-      predecessors: '',
-      description: '',
-      createdAt: '',
-      updatedAt: '',
-    }));
-    const taskRows = sourceTasks.map(task => {
-      const project = projectLookup[task.projectId] || activeProject;
-      return {
-        rowType: 'task',
-        projectId: project.id,
-        project: project.name,
-        projectDescription: project.description || '',
-        projectIcon: project.icon || '',
-        projectCreatedAt: formatExportTimestamp(project.createdAt),
-        projectUpdatedAt: formatExportTimestamp(project.updatedAt),
-        id: task.id,
-        title: task.title,
-        status: task.status,
-        priority: task.priority,
-        assignee: task.assignee || '',
-        wbs: task.wbs || '',
-        startDate: formatExportTimestamp(task.startDate),
-        dueDate: formatExportTimestamp(task.dueDate),
-        completion: task.completion ?? 0,
-        isMilestone: task.isMilestone ? 'true' : 'false',
-        predecessors: (task.predecessors || []).join(','),
-        description: task.description || '',
-        createdAt: formatExportTimestamp(task.createdAt),
-        updatedAt: formatExportTimestamp(task.updatedAt),
-      };
-    });
-    return [...projectRows, ...taskRows];
+  const buildExportRowsCallback = useCallback((sourceTasks: Task[], exportProjects: Project[]) => {
+    return buildExportRows(sourceTasks, exportProjects, activeProject);
   }, [activeProject]);
 
   const handleExportTasks = useCallback(async (format: ExportFormat) => {
@@ -331,8 +118,8 @@ export const useExport = ({
       const baseName = `${makeSafeFileName(activeProject.name)}-tasks-${fileStamp}`;
       const exportProjects = [activeProject];
       const sourceTasks = activeTasks;
-      const rows = buildExportRows(sourceTasks, exportProjects);
-      const displayRows = buildDisplayRows(sourceTasks, exportProjects);
+      const rows = buildExportRowsCallback(sourceTasks, exportProjects);
+      const displayRows = buildDisplayRowsCallback(sourceTasks, exportProjects);
 
       if (format === 'json') {
         const payload = {
@@ -356,7 +143,7 @@ export const useExport = ({
         ]);
         const autoTable = autoTableModule.default;
         const doc = new jsPDF({ orientation: 'landscape', unit: 'pt' });
-        const headers = displayHeaders.slice(0, 12);
+        const headers = [...DISPLAY_HEADERS].slice(0, 12);
         const body = displayRows.map(row => ([
           row.project,
           row.id,
@@ -409,7 +196,7 @@ export const useExport = ({
           scope: 'project',
           exportedAt: exportDate.toISOString(),
         };
-        const headers = displayHeaders;
+        const headers = [...DISPLAY_HEADERS];
         const escapeMd = (value: string) => value.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
         const body = displayRows.map(row => [
           row.project,
@@ -446,7 +233,7 @@ export const useExport = ({
       }
 
       const delimiter = format === 'tsv' ? '\t' : ',';
-      const headers = exportHeaders;
+      const headers = [...EXPORT_HEADERS];
       const lines = [
         headers.join(delimiter),
         ...rows.map(row => headers
@@ -462,7 +249,7 @@ export const useExport = ({
       console.error('Failed to export tasks:', error);
       alert(t('app.error.generic') || 'Export failed');
     }
-  }, [activeProject, activeTasks, buildExportRows, buildDisplayRows, recordExportPreference, t, triggerDownload]);
+  }, [activeProject, activeTasks, buildExportRowsCallback, buildDisplayRowsCallback, recordExportPreference, t, triggerDownload]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -632,7 +419,7 @@ export const useExport = ({
         }
       } else if (lowerName.endsWith('.csv') || lowerName.endsWith('.tsv')) {
         const { headers, records } = parseDelimitedContent(content);
-        const requiredHeaders = exportHeaders.map(header => header.toLowerCase());
+        const requiredHeaders = EXPORT_HEADERS.map(header => header.toLowerCase());
         const headerSet = new Set(headers);
         const hasRequiredHeaders = requiredHeaders.every(header => headerSet.has(header));
         if (!hasRequiredHeaders) {
