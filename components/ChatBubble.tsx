@@ -13,6 +13,7 @@ interface ChatBubbleProps {
   onRetry?: () => void;
   isProcessing?: boolean;
   onSuggestionClick?: (suggestion: string) => void;
+  hideSuggestions?: boolean;
 }
 
 const formatBytes = (value: number): string => {
@@ -115,7 +116,7 @@ const MarkdownContent = memo<MarkdownContentProps>(({ content, isUser, codeLabel
 });
 MarkdownContent.displayName = 'MarkdownContent';
 
-export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessing, onSuggestionClick }) => {
+export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessing, onSuggestionClick, hideSuggestions }) => {
   const { t, locale } = useI18n();
   const [isThinkingOpen, setIsThinkingOpen] = useState(false);
   const isUser = message.role === 'user';
@@ -224,7 +225,7 @@ export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessin
         </div>
       </div>
 
-      {suggestions.length > 0 && !isUser && (
+      {suggestions.length > 0 && !isUser && !hideSuggestions && (
         <div className="flex flex-wrap gap-2 mt-2 ml-1 max-w-[92%]">
           {suggestions.map((suggestion, index) => (
             <button

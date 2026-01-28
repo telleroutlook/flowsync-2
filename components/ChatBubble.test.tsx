@@ -86,4 +86,32 @@ describe('ChatBubble', () => {
 
     expect(screen.getByText('chat.retry')).toBeInTheDocument();
   });
+
+  it('hides suggestions when hideSuggestions is true', () => {
+    const messageWithSuggestions: ChatMessage = {
+      id: 'm3',
+      role: 'model',
+      text: 'Here is a suggestion',
+      timestamp: Date.now(),
+      suggestions: ['Suggestion 1', 'Suggestion 2']
+    };
+
+    const { rerender } = render(
+      <I18nProvider>
+        <ChatBubble message={messageWithSuggestions} />
+      </I18nProvider>
+    );
+
+    expect(screen.getByText('Suggestion 1')).toBeInTheDocument();
+    expect(screen.getByText('Suggestion 2')).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider>
+        <ChatBubble message={messageWithSuggestions} hideSuggestions={true} />
+      </I18nProvider>
+    );
+
+    expect(screen.queryByText('Suggestion 1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Suggestion 2')).not.toBeInTheDocument();
+  });
 });

@@ -182,68 +182,7 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
         </div>
       </div>
 
-      {/* Pending Draft Notification */}
-      <AnimatePresence>
-        {pendingDraft && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="px-4 py-3 border-b border-border-subtle border-l-4 border-l-critical bg-surface shrink-0"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-3.5 h-3.5 text-critical" aria-hidden="true" />
-                <p className="text-xs font-bold text-text-primary">{t('chat.pending.title')}</p>
-              </div>
-              <span className="text-xs font-semibold text-critical bg-critical/10 px-2 py-0.5 rounded-full border border-critical/20">
-                {t('chat.pending.action_count', { count: pendingDraft.actions.length })}
-              </span>
-            </div>
-            <div className="space-y-1 pl-5 mb-3">
-              {pendingDraft.actions.slice(0, 3).map(action => (
-                <div key={action.id} className="text-xs text-text-secondary truncate font-medium">
-                  {getActionLabel(action.action, t)} <span className="opacity-75">{getEntityLabel(action.entityType, t)}</span>
-                </div>
-              ))}
-              {pendingDraft.actions.length > 3 && (
-                <div className="text-xs text-critical italic">{t('chat.pending.more', { count: pendingDraft.actions.length - 3 })}</div>
-              )}
-            </div>
-            {draftWarnings.length > 0 && (
-              <div className="space-y-1 pl-5 mb-3">
-                {draftWarnings.map((warning, index) => (
-                  <div key={index} className="text-xs text-critical break-words">
-                    {warning}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex gap-2 pl-5">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => handleApplyDraft(pendingDraft.id)}
-                isLoading={draftProcessingState === 'applying'}
-                disabled={draftProcessingState !== null}
-                className="flex-1 h-8 bg-success hover:bg-success/90 text-success-foreground"
-              >
-                {t('chat.accept')}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleDiscardDraft(pendingDraft.id)}
-                isLoading={draftProcessingState === 'discarding'}
-                disabled={draftProcessingState !== null}
-                className="flex-1 h-8"
-              >
-                {t('chat.discard')}
-              </Button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Pending Draft Notification - Moved to bottom */}
 
       {/* Messages Area */}
       <div 
@@ -257,6 +196,7 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
             onRetry={onRetryLastMessage}
             isProcessing={isProcessing}
             onSuggestionClick={handleSuggestionClick}
+            hideSuggestions={!!pendingDraft}
           />
         ))}
 
@@ -322,6 +262,69 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
         </AnimatePresence>
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Pending Draft Notification */}
+      <AnimatePresence>
+        {pendingDraft && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="px-4 py-3 border-t border-border-subtle border-l-4 border-l-critical bg-surface shrink-0"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-critical" aria-hidden="true" />
+                <p className="text-xs font-bold text-text-primary">{t('chat.pending.title')}</p>
+              </div>
+              <span className="text-xs font-semibold text-critical bg-critical/10 px-2 py-0.5 rounded-full border border-critical/20">
+                {t('chat.pending.action_count', { count: pendingDraft.actions.length })}
+              </span>
+            </div>
+            <div className="space-y-1 pl-5 mb-3">
+              {pendingDraft.actions.slice(0, 3).map(action => (
+                <div key={action.id} className="text-xs text-text-secondary truncate font-medium">
+                  {getActionLabel(action.action, t)} <span className="opacity-75">{getEntityLabel(action.entityType, t)}</span>
+                </div>
+              ))}
+              {pendingDraft.actions.length > 3 && (
+                <div className="text-xs text-critical italic">{t('chat.pending.more', { count: pendingDraft.actions.length - 3 })}</div>
+              )}
+            </div>
+            {draftWarnings.length > 0 && (
+              <div className="space-y-1 pl-5 mb-3">
+                {draftWarnings.map((warning, index) => (
+                  <div key={index} className="text-xs text-critical break-words">
+                    {warning}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2 pl-5">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => handleApplyDraft(pendingDraft.id)}
+                isLoading={draftProcessingState === 'applying'}
+                disabled={draftProcessingState !== null}
+                className="flex-1 h-8 bg-success hover:bg-success/90 text-success-foreground"
+              >
+                {t('chat.accept')}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDiscardDraft(pendingDraft.id)}
+                isLoading={draftProcessingState === 'discarding'}
+                disabled={draftProcessingState !== null}
+                className="flex-1 h-8"
+              >
+                {t('chat.discard')}
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Input Area */}
       <div className="p-4 border-t border-border-subtle bg-surface z-20 shrink-0">
