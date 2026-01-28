@@ -17,6 +17,7 @@ import {
   parseDelimitedContent,
   buildDisplayRows,
   buildExportRows,
+  triggerDownload,
   EXPORT_HEADERS,
   DISPLAY_HEADERS,
 } from '../utils';
@@ -68,19 +69,6 @@ export const useExport = ({
   const recordImportPreference = useCallback((strategy: ImportStrategy) => {
     setImportStrategy(strategy);
     storageSet('importStrategy', strategy);
-  }, []);
-
-  const triggerDownload = useCallback((blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.rel = 'noopener';
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 100);
   }, []);
 
   const buildDisplayRowsCallback = useCallback((sourceTasks: Task[], exportProjects: Project[]) => {
@@ -229,7 +217,7 @@ export const useExport = ({
       console.error('Failed to export tasks:', error);
       alert(t('app.error.generic') || 'Export failed');
     }
-  }, [activeProject, activeTasks, buildExportRowsCallback, buildDisplayRowsCallback, recordExportPreference, t, triggerDownload]);
+  }, [activeProject, activeTasks, buildExportRowsCallback, buildDisplayRowsCallback, recordExportPreference, t]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -238,11 +226,11 @@ export const useExport = ({
       void handleExportTasks(format);
     };
     window.addEventListener('flowsync:export', handler);
-    (window as unknown as { flowsyncExportReady?: boolean }).flowsyncExportReady = true;
+    window.flowsyncExportReady = true;
     return () => {
       window.removeEventListener('flowsync:export', handler);
-      if ((window as unknown as { flowsyncExportReady?: boolean }).flowsyncExportReady) {
-        delete (window as unknown as { flowsyncExportReady?: boolean }).flowsyncExportReady;
+      if (window.flowsyncExportReady) {
+        delete window.flowsyncExportReady;
       }
     };
   }, [handleExportTasks, lastExportFormat]);

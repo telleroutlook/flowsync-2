@@ -241,3 +241,21 @@ export const DISPLAY_HEADERS = [
   'description',
   'createdAt',
 ] as const;
+
+/**
+ * Triggers a file download by creating a temporary anchor element
+ * @param blob - The file content as a Blob
+ * @param filename - The name of the file to download
+ */
+export function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+}

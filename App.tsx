@@ -19,7 +19,7 @@ import { useDrafts } from './src/hooks/useDrafts';
 import { useAuditLogs } from './src/hooks/useAuditLogs';
 import { useChat } from './src/hooks/useChat';
 import { useExport } from './src/hooks/useExport';
-import { generateId } from './src/utils';
+import { generateId, storageGet, storageSet, storageGetJSON, storageSetJSON } from './src/utils';
 import { useI18n } from './src/i18n';
 import { DAY_MS, GANTT_PX_PER_DAY, type GanttViewMode } from './src/constants/gantt';
 
@@ -46,6 +46,14 @@ type ZoomMetaState = {
   BOARD: ZoomMeta;
   LIST: ZoomMeta;
   GANTT: ZoomMeta;
+};
+
+const DEFAULT_ZOOM_STATE: ZoomState = { BOARD: 1, LIST: 1, GANTT: 1 };
+
+const DEFAULT_ZOOM_META: ZoomMetaState = {
+  BOARD: { signature: null, userOverride: false },
+  LIST: { signature: null, userOverride: false },
+  GANTT: { signature: null, userOverride: false },
 };
 
 // Memoized loading spinner component
@@ -106,49 +114,13 @@ function App() {
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
 
   // UI State
-  const [viewMode, setViewMode] = useState<ViewMode>('GANTT'); 
-  const [viewZoom, setViewZoom] = useState<ZoomState>(() => {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('flowsync:viewZoom') : null;
-    if (!raw) return { BOARD: 1, LIST: 1, GANTT: 1 };
-    try {
-      const parsed = JSON.parse(raw) as Partial<ZoomState>;
-      return {
-        BOARD: typeof parsed.BOARD === 'number' ? parsed.BOARD : 1,
-        LIST: typeof parsed.LIST === 'number' ? parsed.LIST : 1,
-        GANTT: typeof parsed.GANTT === 'number' ? parsed.GANTT : 1,
-      };
-    } catch {
-      return { BOARD: 1, LIST: 1, GANTT: 1 };
-    }
-  });
-  const [zoomMeta, setZoomMeta] = useState<ZoomMetaState>(() => {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('flowsync:viewZoomMeta') : null;
-    if (!raw) {
-      return {
-        BOARD: { signature: null, userOverride: false },
-        LIST: { signature: null, userOverride: false },
-        GANTT: { signature: null, userOverride: false },
-      };
-    }
-    try {
-      const parsed = JSON.parse(raw) as Partial<ZoomMetaState>;
-      const normalize = (value?: ZoomMeta): ZoomMeta => ({
-        signature: value?.signature ?? null,
-        userOverride: value?.userOverride ?? false,
-      });
-      return {
-        BOARD: normalize(parsed.BOARD),
-        LIST: normalize(parsed.LIST),
-        GANTT: normalize(parsed.GANTT),
-      };
-    } catch {
-      return {
-        BOARD: { signature: null, userOverride: false },
-        LIST: { signature: null, userOverride: false },
-        GANTT: { signature: null, userOverride: false },
-      };
-    }
-  });
+  const [viewMode, setViewMode] = useState<ViewMode>('GANTT');
+  const [viewZoom, setViewZoom] = useState<ZoomState>(() =>
+    storageGetJSON('viewZoom', DEFAULT_ZOOM_STATE)
+  );
+  const [zoomMeta, setZoomMeta] = useState<ZoomMetaState>(() =>
+    storageGetJSON('viewZoomMeta', DEFAULT_ZOOM_META)
+  );
   const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>('Month');
   const viewContainerRef = useRef<HTMLDivElement>(null);
   const [viewContainerSize, setViewContainerSize] = useState({ width: 0, height: 0 });
@@ -172,10 +144,9 @@ function App() {
   const { user, error: authError, login, register, logout, updateProfile } = useAuth();
   
   // Guest Thinking State
-  const [guestThinking, setGuestThinking] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem('flowsync:guestThinking') === 'true';
-  });
+  const [guestThinking, setGuestThinking] = useState(() =>
+    storageGet('guestThinking') === 'true'
+  );
 
   const effectiveAllowThinking = user ? (user.allowThinking ?? false) : guestThinking;
 
@@ -185,9 +156,7 @@ function App() {
         await updateProfile({ allowThinking: enabled });
       } else {
         setGuestThinking(enabled);
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem('flowsync:guestThinking', String(enabled));
-        }
+        storageSet('guestThinking', String(enabled));
       }
     } catch (err) {
       console.error('Failed to toggle thinking:', err);
@@ -230,14 +199,12 @@ function App() {
 
   // 2. Chat State (Lifted)
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('flowsync_chat_history');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch {
-          localStorage.removeItem('flowsync_chat_history');
-        }
+    const saved = storageGet('chat_history');
+    if (saved) {
+      try {
+        return JSON.parse(saved) as ChatMessage[];
+      } catch {
+        // Invalid JSON, fall through to default
       }
     }
     return [{
@@ -250,7 +217,7 @@ function App() {
 
   // Persist chat messages
   useEffect(() => {
-    localStorage.setItem('flowsync_chat_history', JSON.stringify(messages));
+    storageSet('chat_history', JSON.stringify(messages));
   }, [messages]);
 
   const appendSystemMessage = useCallback((text: string) => {
@@ -270,7 +237,7 @@ function App() {
       timestamp: Date.now(),
     };
     setMessages([initialMsg]);
-    localStorage.removeItem('flowsync_chat_history');
+    storageSet('chat_history', '');
   }, [t]);
 
   // 3. Audit Logs
@@ -359,14 +326,14 @@ function App() {
         void handleExportTasks(lastExportFormat);
       }
     };
-    (window as any).flowsyncExport = (format?: 'csv' | 'pdf' | 'json' | 'markdown') => {
+    window.flowsyncExport = (format?: 'csv' | 'pdf' | 'json' | 'markdown') => {
       void handleExportTasks(format ?? lastExportFormat);
     };
     window.addEventListener('keydown', handler);
     return () => {
       window.removeEventListener('keydown', handler);
-      if ((window as any).flowsyncExport) {
-        delete (window as any).flowsyncExport;
+      if (window.flowsyncExport) {
+        delete window.flowsyncExport;
       }
     };
   }, [handleExportTasks, lastExportFormat]);
@@ -583,21 +550,11 @@ function App() {
   }, [computeAutoZoom, computeSignature, isMajorChange, updateZoom, viewMode, zoomMeta]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem('flowsync:viewZoom', JSON.stringify(viewZoom));
-    } catch {
-      // ignore storage errors
-    }
+    storageSetJSON('viewZoom', viewZoom);
   }, [viewZoom]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem('flowsync:viewZoomMeta', JSON.stringify(zoomMeta));
-    } catch {
-      // ignore storage errors
-    }
+    storageSetJSON('viewZoomMeta', zoomMeta);
   }, [zoomMeta]);
 
   return (

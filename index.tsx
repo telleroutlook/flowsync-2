@@ -8,7 +8,7 @@ const flowsyncExport = (format?: 'csv' | 'pdf' | 'json' | 'markdown') => {
   window.dispatchEvent(new CustomEvent('flowsync:export', { detail: { format } }));
 };
 
-(window as unknown as { flowsyncExport?: typeof flowsyncExport }).flowsyncExport = flowsyncExport;
+window.flowsyncExport = flowsyncExport;
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

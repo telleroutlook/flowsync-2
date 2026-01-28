@@ -247,22 +247,31 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       return { output: t('tool.error.invalid_actions') };
     }
 
+    type RawAction = {
+      id?: string;
+      entityType?: string;
+      action?: string;
+      entityId?: string;
+      after?: Record<string, unknown>;
+    };
+
     const draftActions: DraftAction[] = args.actions
-      .map((action: any) => {
+      .map((action: unknown) => {
         if (!action || typeof action !== 'object') {
           return null;
         }
+        const rawAction = action as RawAction;
 
-        const processedAfter = { ...(action.after || {}) };
-        if (action.entityType === 'task' && action.action === 'create' && !processedAfter.projectId) {
+        const processedAfter = { ...(rawAction.after || {}) };
+        if (rawAction.entityType === 'task' && rawAction.action === 'create' && !processedAfter.projectId) {
           processedAfter.projectId = activeProjectId;
         }
 
         return {
-          id: action.id || generateId(),
-          entityType: action.entityType,
-          action: action.action,
-          entityId: action.entityId,
+          id: rawAction.id || generateId(),
+          entityType: rawAction.entityType as DraftAction['entityType'],
+          action: rawAction.action as DraftAction['action'],
+          entityId: rawAction.entityId,
           after: processedAfter,
         };
       })
