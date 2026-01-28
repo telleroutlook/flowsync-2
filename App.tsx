@@ -367,6 +367,25 @@ function App() {
     return () => window.removeEventListener('click', handleWindowClick);
   }, [isExportOpen]);
 
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'e') {
+        event.preventDefault();
+        void handleExportTasks(lastExportFormat);
+      }
+    };
+    (window as any).flowsyncExport = (format?: 'csv' | 'pdf' | 'json' | 'markdown') => {
+      void handleExportTasks(format ?? lastExportFormat);
+    };
+    window.addEventListener('keydown', handler);
+    return () => {
+      window.removeEventListener('keydown', handler);
+      if ((window as any).flowsyncExport) {
+        delete (window as any).flowsyncExport;
+      }
+    };
+  }, [handleExportTasks, lastExportFormat]);
+
   const handleExportMenuPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null;
     const button = target?.closest<HTMLButtonElement>('[data-export-format]');
