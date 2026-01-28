@@ -82,7 +82,7 @@ describe('useExport', () => {
     );
 
     await act(async () => {
-      await result.current.handleExportTasks('csv', 'active');
+      await result.current.handleExportTasks('csv');
     });
 
     expect(createObjectURL).toHaveBeenCalled();

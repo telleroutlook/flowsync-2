@@ -329,7 +329,7 @@ function App() {
 
   // 6. Export/Import
   const {
-    isExportOpen, setIsExportOpen, exportScope, setExportScope,
+    isExportOpen, setIsExportOpen,
     lastExportFormat, importStrategy, recordImportPreference,
     handleExportTasks, handleImportFile
   } = useExport({
@@ -774,28 +774,6 @@ function App() {
                    className="absolute right-0 mt-2 w-64 rounded-xl border border-border-subtle bg-surface shadow-xl z-50 p-2 animate-fade-in"
                    role="menu"
                  >
-                   <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-text-secondary/50">{t('app.header.export_scope')}</div>
-                   <div className="flex gap-1 p-1 bg-background rounded-lg mb-2">
-                     <Button
-                       variant={exportScope === 'active' ? 'secondary' : 'ghost'}
-                       size="sm"
-                       onClick={() => setExportScope('active')}
-                       className="flex-1 h-7 text-xs"
-                       role="menuitemradio"
-                       aria-checked={exportScope === 'active'}
-                     >
-                       {t('app.header.export_current')}
-                     </Button>
-                     <Button
-                       variant={exportScope === 'all' ? 'secondary' : 'ghost'}
-                       size="sm"
-                       onClick={() => setExportScope('all')}
-                       className="flex-1 h-7 text-xs"
-                     >
-                       {t('app.header.export_all')}
-                     </Button>
-                   </div>
-                   
                    <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-text-secondary/50">{t('app.header.format')}</div>
                    <div className="grid grid-cols-1 gap-1">
                      {([
@@ -808,7 +786,7 @@ function App() {
                          key={item.id}
                          type="button"
                          onClick={() => {
-                           void handleExportTasks(item.id, exportScope);
+                           void handleExportTasks(item.id);
                            setIsExportOpen(false);
                          }}
                          className={cn(

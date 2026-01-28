@@ -5,7 +5,6 @@ import { generateId, getTaskStart, getTaskEnd, formatExportDate, parseDateFlexib
 import { useI18n } from '../i18n';
 
 export type ExportFormat = 'csv' | 'tsv' | 'json' | 'markdown' | 'pdf';
-export type ExportScope = 'active' | 'all';
 export type ImportStrategy = 'append' | 'merge';
 
 const clampCompletion = (value: number) => Math.min(100, Math.max(0, value));
@@ -144,17 +143,12 @@ export const useExport = ({
 }: UseExportProps) => {
   const { t } = useI18n();
   const [isExportOpen, setIsExportOpen] = useState(false);
-  const [exportScope, setExportScope] = useState<ExportScope>('active');
   const [lastExportFormat, setLastExportFormat] = useState<ExportFormat>('csv');
   const [importStrategy, setImportStrategy] = useState<ImportStrategy>('append');
 
   useEffect(() => {
-    const storedScope = window.localStorage.getItem('flowsync:exportScope');
     const storedFormat = window.localStorage.getItem('flowsync:exportFormat');
     const storedImportStrategy = window.localStorage.getItem('flowsync:importStrategy');
-    if (storedScope === 'active' || storedScope === 'all') {
-      setExportScope(storedScope);
-    }
     if (storedFormat === 'csv' || storedFormat === 'tsv' || storedFormat === 'json' || storedFormat === 'markdown' || storedFormat === 'pdf') {
       setLastExportFormat(storedFormat);
     }
@@ -163,10 +157,9 @@ export const useExport = ({
     }
   }, []);
 
-  const recordExportPreference = useCallback((format: ExportFormat, scope: ExportScope) => {
+  const recordExportPreference = useCallback((format: ExportFormat) => {
     setLastExportFormat(format);
     window.localStorage.setItem('flowsync:exportFormat', format);
-    window.localStorage.setItem('flowsync:exportScope', scope);
   }, []);
 
   const recordImportPreference = useCallback((strategy: ImportStrategy) => {
@@ -310,28 +303,27 @@ export const useExport = ({
     return [...projectRows, ...taskRows];
   }, [activeProject]);
 
-  const handleExportTasks = useCallback(async (format: ExportFormat, scope: ExportScope) => {
+  const handleExportTasks = useCallback(async (format: ExportFormat) => {
     try {
       const exportDate = new Date();
       const fileStamp = exportDate.toISOString().slice(0, 10);
-      const scopeLabel = scope === 'all' ? 'all-projects' : makeSafeFileName(activeProject.name);
-      const baseName = `${scopeLabel}-tasks-${fileStamp}`;
-      const exportProjects = scope === 'all' ? projects : [activeProject];
-      const sourceTasks = scope === 'all' ? await fetchAllTasks() : activeTasks;
+      const baseName = `${makeSafeFileName(activeProject.name)}-tasks-${fileStamp}`;
+      const exportProjects = [activeProject];
+      const sourceTasks = activeTasks;
       const rows = buildExportRows(sourceTasks, exportProjects);
       const displayRows = buildDisplayRows(sourceTasks, exportProjects);
 
       if (format === 'json') {
         const payload = {
           version: 2,
-          scope,
+          scope: 'project',
           exportedAt: exportDate.toISOString(),
           projects: exportProjects,
           tasks: sourceTasks,
         };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         triggerDownload(blob, `${baseName}.json`);
-        recordExportPreference(format, scope);
+        recordExportPreference(format);
         return;
       }
 
@@ -359,13 +351,7 @@ export const useExport = ({
           row.predecessors,
         ]));
         doc.setFontSize(12);
-        doc.text(
-          scope === 'all'
-            ? t('export.pdf.title_all')
-            : t('export.pdf.title_project', { project: activeProject.name }),
-          40,
-          32
-        );
+        doc.text(t('export.pdf.title_project', { project: activeProject.name }), 40, 32);
         doc.setFontSize(9);
         doc.text(t('export.exported_at', { date: exportDate.toISOString() }), 40, 48);
         autoTable(doc, {
@@ -392,13 +378,13 @@ export const useExport = ({
           margin: { left: 40, right: 40 },
         });
         doc.save(`${baseName}.pdf`);
-        recordExportPreference(format, scope);
+        recordExportPreference(format);
         return;
       }
 
       if (format === 'markdown') {
         const payload = {
-          scope,
+          scope: 'project',
           exportedAt: exportDate.toISOString(),
         };
         const headers = displayHeaders;
@@ -421,9 +407,7 @@ export const useExport = ({
         ].map(cell => escapeMd(String(cell))).join(' | '));
 
         const markdown = [
-          scope === 'all'
-            ? t('export.markdown.title_all')
-            : t('export.markdown.title_project', { project: activeProject.name }),
+          t('export.markdown.title_project', { project: activeProject.name }),
           '',
           t('export.markdown.exported_at', { date: payload.exportedAt }),
           '',
@@ -435,7 +419,7 @@ export const useExport = ({
 
         const blob = new Blob([markdown], { type: 'text/markdown' });
         triggerDownload(blob, `${baseName}.md`);
-        recordExportPreference(format, scope);
+        recordExportPreference(format);
         return;
       }
 
@@ -451,12 +435,12 @@ export const useExport = ({
       const mime = format === 'tsv' ? 'text/tab-separated-values' : 'text/csv';
       const blob = new Blob([lines.join('\n')], { type: `${mime};charset=utf-8;` });
       triggerDownload(blob, `${baseName}.${format}`);
-      recordExportPreference(format, scope);
+      recordExportPreference(format);
     } catch (error) {
       console.error('Failed to export tasks:', error);
       alert(t('app.error.generic') || 'Export failed');
     }
-  }, [activeProject, activeTasks, projects, fetchAllTasks, buildExportRows, buildDisplayRows, recordExportPreference, t, triggerDownload]);
+  }, [activeProject, activeTasks, buildExportRows, buildDisplayRows, recordExportPreference, t, triggerDownload]);
 
   const handleImportFile = useCallback((file: File) => {
     const reader = new FileReader();
@@ -823,8 +807,6 @@ export const useExport = ({
   return {
     isExportOpen,
     setIsExportOpen,
-    exportScope,
-    setExportScope,
     lastExportFormat,
     importStrategy,
     recordImportPreference,
