@@ -37,7 +37,6 @@ describe('ChatInterface', () => {
           isChatOpen
           setIsChatOpen={vi.fn()}
           onResetChat={vi.fn()}
-          onExportChat={vi.fn()}
           pendingDraft={draft}
           draftWarnings={['Missing assignee']}
           onApplyDraft={onApplyDraft}
@@ -78,7 +77,6 @@ describe('ChatInterface', () => {
           isChatOpen
           setIsChatOpen={vi.fn()}
           onResetChat={vi.fn()}
-          onExportChat={vi.fn()}
           pendingDraft={null}
           draftWarnings={[]}
           onApplyDraft={vi.fn()}
@@ -109,7 +107,6 @@ describe('ChatInterface', () => {
           isChatOpen
           setIsChatOpen={vi.fn()}
           onResetChat={vi.fn()}
-          onExportChat={vi.fn()}
           pendingDraft={null}
           draftWarnings={[]}
           onApplyDraft={vi.fn()}

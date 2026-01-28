@@ -2,7 +2,7 @@ import React, { memo, useCallback, useMemo } from 'react';
 import { ChatBubble } from './ChatBubble';
 import { ChatMessage, ChatAttachment, Draft } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, RotateCcw, X, Paperclip, Send, File, XCircle, AlertTriangle, Download } from 'lucide-react';
+import { Sparkles, RotateCcw, X, Paperclip, Send, File, XCircle, AlertTriangle } from 'lucide-react';
 import { useI18n } from '../src/i18n';
 import { getActionLabel, getEntityLabel } from '../src/i18n/labels';
 import { cn } from '../src/utils/cn';
@@ -29,7 +29,6 @@ interface ChatInterfaceProps {
   inputText: string;
   setInputText: (text: string) => void;
   onResetChat: () => void;
-  onExportChat: () => void;
 }
 
 export const ChatInterface = memo<ChatInterfaceProps>(({
@@ -53,7 +52,6 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   inputText,
   setInputText,
   onResetChat,
-  onExportChat,
 }) => {
   const { t } = useI18n();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -158,13 +156,6 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <button
-             onClick={onExportChat}
-             className="text-text-secondary hover:text-primary p-2 rounded-lg hover:bg-background transition-colors"
-             title={t('app.header.export_chat')}
-          >
-             <Download className="w-4 h-4" />
-          </button>
           <button
              onClick={onResetChat}
              className="text-text-secondary hover:text-primary p-2 rounded-lg hover:bg-background transition-colors"

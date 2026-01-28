@@ -174,6 +174,18 @@ export const useExport = ({
     window.localStorage.setItem('flowsync:importStrategy', strategy);
   }, []);
 
+  const triggerDownload = useCallback((blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 200);
+  }, []);
+
   const exportHeaders = [
     'rowType',
     'projectId',
@@ -299,162 +311,152 @@ export const useExport = ({
   }, [activeProject]);
 
   const handleExportTasks = useCallback(async (format: ExportFormat, scope: ExportScope) => {
-    const exportDate = new Date();
-    const fileStamp = exportDate.toISOString().slice(0, 10);
-    const scopeLabel = scope === 'all' ? 'all-projects' : makeSafeFileName(activeProject.name);
-    const baseName = `${scopeLabel}-tasks-${fileStamp}`;
-    const exportProjects = scope === 'all' ? projects : [activeProject];
-    const sourceTasks = scope === 'all' ? await fetchAllTasks() : activeTasks;
-    const rows = buildExportRows(sourceTasks, exportProjects);
-    const displayRows = buildDisplayRows(sourceTasks, exportProjects);
+    try {
+      const exportDate = new Date();
+      const fileStamp = exportDate.toISOString().slice(0, 10);
+      const scopeLabel = scope === 'all' ? 'all-projects' : makeSafeFileName(activeProject.name);
+      const baseName = `${scopeLabel}-tasks-${fileStamp}`;
+      const exportProjects = scope === 'all' ? projects : [activeProject];
+      const sourceTasks = scope === 'all' ? await fetchAllTasks() : activeTasks;
+      const rows = buildExportRows(sourceTasks, exportProjects);
+      const displayRows = buildDisplayRows(sourceTasks, exportProjects);
 
-    if (format === 'json') {
-      const payload = {
-        version: 2,
-        scope,
-        exportedAt: exportDate.toISOString(),
-        projects: exportProjects,
-        tasks: sourceTasks,
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${baseName}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
+      if (format === 'json') {
+        const payload = {
+          version: 2,
+          scope,
+          exportedAt: exportDate.toISOString(),
+          projects: exportProjects,
+          tasks: sourceTasks,
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        triggerDownload(blob, `${baseName}.json`);
+        recordExportPreference(format, scope);
+        return;
+      }
+
+      if (format === 'pdf') {
+          // Dynamically import jspdf
+        const [{ jsPDF }, autoTableModule] = await Promise.all([
+          import('jspdf'),
+          import('jspdf-autotable'),
+        ]);
+        const autoTable = autoTableModule.default;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'pt' });
+        const headers = displayHeaders.slice(0, 12);
+        const body = displayRows.map(row => ([
+          row.project,
+          row.id,
+          row.title,
+          row.status,
+          row.priority,
+          row.assignee,
+          row.wbs,
+          row.startDate,
+          row.dueDate,
+          String(row.completion),
+          row.isMilestone,
+          row.predecessors,
+        ]));
+        doc.setFontSize(12);
+        doc.text(
+          scope === 'all'
+            ? t('export.pdf.title_all')
+            : t('export.pdf.title_project', { project: activeProject.name }),
+          40,
+          32
+        );
+        doc.setFontSize(9);
+        doc.text(t('export.exported_at', { date: exportDate.toISOString() }), 40, 48);
+        autoTable(doc, {
+          head: [headers],
+          body,
+          startY: 64,
+          styles: { fontSize: 8, cellPadding: 3 },
+          headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255] },
+          alternateRowStyles: { fillColor: [248, 250, 252] },
+          columnStyles: {
+            0: { cellWidth: 90 },
+            1: { cellWidth: 60 },
+            2: { cellWidth: 150 },
+            3: { cellWidth: 70 },
+            4: { cellWidth: 70 },
+            5: { cellWidth: 80 },
+            6: { cellWidth: 50 },
+            7: { cellWidth: 60 },
+            8: { cellWidth: 60 },
+            9: { cellWidth: 70 },
+            10: { cellWidth: 70 },
+            11: { cellWidth: 100 },
+          },
+          margin: { left: 40, right: 40 },
+        });
+        doc.save(`${baseName}.pdf`);
+        recordExportPreference(format, scope);
+        return;
+      }
+
+      if (format === 'markdown') {
+        const payload = {
+          scope,
+          exportedAt: exportDate.toISOString(),
+        };
+        const headers = displayHeaders;
+        const escapeMd = (value: string) => value.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+        const body = displayRows.map(row => [
+          row.project,
+          row.id,
+          row.title,
+          row.status,
+          row.priority,
+          row.assignee,
+          row.wbs,
+          row.startDate,
+          row.dueDate,
+          String(row.completion),
+          row.isMilestone,
+          row.predecessors,
+          row.description,
+          row.createdAt,
+        ].map(cell => escapeMd(String(cell))).join(' | '));
+
+        const markdown = [
+          scope === 'all'
+            ? t('export.markdown.title_all')
+            : t('export.markdown.title_project', { project: activeProject.name }),
+          '',
+          t('export.markdown.exported_at', { date: payload.exportedAt }),
+          '',
+          `| ${headers.join(' | ')} |`,
+          `| ${headers.map(() => '---').join(' | ')} |`,
+          ...body.map(line => `| ${line} |`),
+          '',
+        ].join('\n');
+
+        const blob = new Blob([markdown], { type: 'text/markdown' });
+        triggerDownload(blob, `${baseName}.md`);
+        recordExportPreference(format, scope);
+        return;
+      }
+
+      const delimiter = format === 'tsv' ? '\t' : ',';
+      const headers = exportHeaders;
+      const lines = [
+        headers.join(delimiter),
+        ...rows.map(row => headers
+          .map(header => formatCsvValue(String((row as Record<string, unknown>)[header] ?? ''), delimiter))
+          .join(delimiter)),
+      ];
+
+      const mime = format === 'tsv' ? 'text/tab-separated-values' : 'text/csv';
+      const blob = new Blob([lines.join('\n')], { type: `${mime};charset=utf-8;` });
+      triggerDownload(blob, `${baseName}.${format}`);
       recordExportPreference(format, scope);
-      return;
+    } catch (error) {
+      console.error('Failed to export tasks:', error);
+      alert(t('app.error.generic') || 'Export failed');
     }
-
-    if (format === 'pdf') {
-        // Dynamically import jspdf
-      const [{ jsPDF }, autoTableModule] = await Promise.all([
-        import('jspdf'),
-        import('jspdf-autotable'),
-      ]);
-      const autoTable = autoTableModule.default;
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt' });
-      const headers = displayHeaders.slice(0, 12);
-      const body = displayRows.map(row => ([
-        row.project,
-        row.id,
-        row.title,
-        row.status,
-        row.priority,
-        row.assignee,
-        row.wbs,
-        row.startDate,
-        row.dueDate,
-        String(row.completion),
-        row.isMilestone,
-        row.predecessors,
-      ]));
-      doc.setFontSize(12);
-      doc.text(
-        scope === 'all'
-          ? t('export.pdf.title_all')
-          : t('export.pdf.title_project', { project: activeProject.name }),
-        40,
-        32
-      );
-      doc.setFontSize(9);
-      doc.text(t('export.exported_at', { date: exportDate.toISOString() }), 40, 48);
-      autoTable(doc, {
-        head: [headers],
-        body,
-        startY: 64,
-        styles: { fontSize: 8, cellPadding: 3 },
-        headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255] },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
-        columnStyles: {
-          0: { cellWidth: 90 },
-          1: { cellWidth: 60 },
-          2: { cellWidth: 150 },
-          3: { cellWidth: 70 },
-          4: { cellWidth: 70 },
-          5: { cellWidth: 80 },
-          6: { cellWidth: 50 },
-          7: { cellWidth: 60 },
-          8: { cellWidth: 60 },
-          9: { cellWidth: 70 },
-          10: { cellWidth: 70 },
-          11: { cellWidth: 100 },
-        },
-        margin: { left: 40, right: 40 },
-      });
-      doc.save(`${baseName}.pdf`);
-      recordExportPreference(format, scope);
-      return;
-    }
-
-    if (format === 'markdown') {
-      const payload = {
-        scope,
-        exportedAt: exportDate.toISOString(),
-      };
-      const headers = displayHeaders;
-      const escapeMd = (value: string) => value.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
-      const body = displayRows.map(row => [
-        row.project,
-        row.id,
-        row.title,
-        row.status,
-        row.priority,
-        row.assignee,
-        row.wbs,
-        row.startDate,
-        row.dueDate,
-        String(row.completion),
-        row.isMilestone,
-        row.predecessors,
-        row.description,
-        row.createdAt,
-      ].map(cell => escapeMd(String(cell))).join(' | '));
-
-      const markdown = [
-        scope === 'all'
-          ? t('export.markdown.title_all')
-          : t('export.markdown.title_project', { project: activeProject.name }),
-        '',
-        t('export.markdown.exported_at', { date: payload.exportedAt }),
-        '',
-        `| ${headers.join(' | ')} |`,
-        `| ${headers.map(() => '---').join(' | ')} |`,
-        ...body.map(line => `| ${line} |`),
-        '',
-      ].join('\n');
-
-      const blob = new Blob([markdown], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${baseName}.md`;
-      link.click();
-      URL.revokeObjectURL(url);
-      recordExportPreference(format, scope);
-      return;
-    }
-
-    const delimiter = format === 'tsv' ? '\t' : ',';
-    const headers = exportHeaders;
-    const lines = [
-      headers.join(delimiter),
-      ...rows.map(row => headers
-        .map(header => formatCsvValue(String((row as Record<string, unknown>)[header] ?? ''), delimiter))
-        .join(delimiter)),
-    ];
-
-    const mime = format === 'tsv' ? 'text/tab-separated-values' : 'text/csv';
-    const blob = new Blob([lines.join('\n')], { type: `${mime};charset=utf-8;` });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${baseName}.${format}`;
-    link.click();
-    URL.revokeObjectURL(url);
-    recordExportPreference(format, scope);
-  }, [activeProject, activeTasks, projects, fetchAllTasks, buildExportRows, buildDisplayRows, recordExportPreference, t]);
+  }, [activeProject, activeTasks, projects, fetchAllTasks, buildExportRows, buildDisplayRows, recordExportPreference, t, triggerDownload]);
 
   const handleImportFile = useCallback((file: File) => {
     const reader = new FileReader();
