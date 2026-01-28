@@ -4,6 +4,12 @@ import './src/index.css';
 import App from './App';
 import { I18nProvider } from './src/i18n';
 
+const flowsyncExport = (format?: 'csv' | 'pdf' | 'json' | 'markdown') => {
+  window.dispatchEvent(new CustomEvent('flowsync:export', { detail: { format } }));
+};
+
+(window as unknown as { flowsyncExport?: typeof flowsyncExport }).flowsyncExport = flowsyncExport;
+
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");

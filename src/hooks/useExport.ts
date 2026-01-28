@@ -464,6 +464,22 @@ export const useExport = ({
     }
   }, [activeProject, activeTasks, buildExportRows, buildDisplayRows, recordExportPreference, t, triggerDownload]);
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ format?: ExportFormat }>).detail;
+      const format = detail?.format ?? lastExportFormat;
+      void handleExportTasks(format);
+    };
+    window.addEventListener('flowsync:export', handler);
+    (window as unknown as { flowsyncExportReady?: boolean }).flowsyncExportReady = true;
+    return () => {
+      window.removeEventListener('flowsync:export', handler);
+      if ((window as unknown as { flowsyncExportReady?: boolean }).flowsyncExportReady) {
+        delete (window as unknown as { flowsyncExportReady?: boolean }).flowsyncExportReady;
+      }
+    };
+  }, [handleExportTasks, lastExportFormat]);
+
   const handleImportFile = useCallback((file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
