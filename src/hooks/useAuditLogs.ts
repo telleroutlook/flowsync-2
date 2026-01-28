@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { apiService } from '../../services/apiService';
 import { AuditLog } from '../../types';
 import { useI18n } from '../i18n';
@@ -9,24 +9,47 @@ interface UseAuditLogsProps {
   appendSystemMessage: (text: string) => void;
 }
 
+interface AuditFilters {
+  actor: string;
+  action: string;
+  entityType: string;
+  q: string;
+  from: string;
+  to: string;
+}
+
+const DEFAULT_FILTERS: AuditFilters = {
+  actor: 'all',
+  action: 'all',
+  entityType: 'all',
+  q: '',
+  from: '',
+  to: '',
+};
+
 export const useAuditLogs = ({ activeProjectId, refreshData, appendSystemMessage }: UseAuditLogsProps) => {
   const { t } = useI18n();
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
   const [isAuditLoading, setIsAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
-  
-  // Pagination & Filtering
+
   const [auditPage, setAuditPage] = useState(1);
   const [auditPageSize, setAuditPageSize] = useState(8);
-  const [auditFilters, setAuditFilters] = useState({
-    actor: 'all',
-    action: 'all',
-    entityType: 'all',
-    q: '',
-    from: '',
-    to: '',
-  });
+  const [auditFilters, setAuditFilters] = useState<AuditFilters>(DEFAULT_FILTERS);
+
+  // Memoize filter values to use as dependencies
+  const filterValues = useMemo(
+    () => ({
+      actor: auditFilters.actor,
+      action: auditFilters.action,
+      entityType: auditFilters.entityType,
+      q: auditFilters.q.trim(),
+      from: auditFilters.from,
+      to: auditFilters.to,
+    }),
+    [auditFilters]
+  );
 
   const refreshAuditLogs = useCallback(async (projectId?: string, pageOverride?: number, pageSizeOverride?: number) => {
     const targetProjectId = projectId || activeProjectId;
@@ -38,17 +61,18 @@ export const useAuditLogs = ({ activeProjectId, refreshData, appendSystemMessage
     try {
       setIsAuditLoading(true);
       setAuditError(null);
-      const from = auditFilters.from ? new Date(`${auditFilters.from}T00:00:00`).getTime() : undefined;
-      const to = auditFilters.to ? new Date(`${auditFilters.to}T23:59:59`).getTime() : undefined;
+
+      const from = filterValues.from ? new Date(`${filterValues.from}T00:00:00`).getTime() : undefined;
+      const to = filterValues.to ? new Date(`${filterValues.to}T23:59:59`).getTime() : undefined;
 
       const result = await apiService.listAuditLogs({
         projectId: targetProjectId,
         page: pageOverride ?? auditPage,
         pageSize: pageSizeOverride ?? auditPageSize,
-        actor: auditFilters.actor === 'all' ? undefined : auditFilters.actor,
-        action: auditFilters.action === 'all' ? undefined : auditFilters.action,
-        entityType: auditFilters.entityType === 'all' ? undefined : auditFilters.entityType,
-        q: auditFilters.q.trim() ? auditFilters.q.trim() : undefined,
+        actor: filterValues.actor === 'all' ? undefined : filterValues.actor,
+        action: filterValues.action === 'all' ? undefined : filterValues.action,
+        entityType: filterValues.entityType === 'all' ? undefined : filterValues.entityType,
+        q: filterValues.q || undefined,
         from,
         to,
       });
@@ -60,9 +84,9 @@ export const useAuditLogs = ({ activeProjectId, refreshData, appendSystemMessage
     } finally {
       setIsAuditLoading(false);
     }
-  }, [activeProjectId, auditPage, auditPageSize, auditFilters]);
+  }, [activeProjectId, auditPage, auditPageSize, filterValues, t]);
 
-  // Effects
+  // Reset page when filters or page size changes
   useEffect(() => {
     setAuditPage(1);
   }, [auditFilters, auditPageSize]);
@@ -95,6 +119,6 @@ export const useAuditLogs = ({ activeProjectId, refreshData, appendSystemMessage
     setAuditPageSize,
     auditFilters,
     setAuditFilters,
-    refreshAuditLogs
+    refreshAuditLogs,
   };
 };

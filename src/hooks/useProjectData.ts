@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiService } from '../../services/apiService';
+import { storageGet, storageSet } from '../utils/storage';
 import { Project, Task } from '../../types';
 import { useI18n } from '../i18n';
 
 const PAGE_SIZE = 100;
+
+const getProjectStorageKey = (workspaceId: string): string =>
+  workspaceId ? `activeProjectId:${workspaceId}` : 'activeProjectId';
 
 export const useProjectData = (workspaceId: string) => {
   const { t } = useI18n();
@@ -13,7 +17,6 @@ export const useProjectData = (workspaceId: string) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Track if component is mounted to avoid state updates after unmount
   const isMountedRef = useRef(true);
   const activeProjectIdRef = useRef<string>('');
 
@@ -56,8 +59,8 @@ export const useProjectData = (workspaceId: string) => {
 
       setProjects(projectList);
 
-      const storageKey = workspaceId ? `flowsync:activeProjectId:${workspaceId}` : 'flowsync:activeProjectId';
-      const stored = window.localStorage.getItem(storageKey);
+      const storageKey = getProjectStorageKey(workspaceId);
+      const stored = storageGet(storageKey);
       const candidate = stored && projectList.find(project => project.id === stored) ? stored : activeProjectIdRef.current;
       const finalId = candidate && projectList.find(project => project.id === candidate)
           ? candidate
@@ -66,7 +69,6 @@ export const useProjectData = (workspaceId: string) => {
       setActiveProjectId(finalId);
       activeProjectIdRef.current = finalId;
 
-      // Only fetch tasks for the active project
       const taskList = await fetchAllTasks(finalId);
       if (!isMountedRef.current) return;
       setTasks(taskList);
@@ -83,8 +85,8 @@ export const useProjectData = (workspaceId: string) => {
   const handleSelectProject = useCallback(async (id: string) => {
     setActiveProjectId(id);
     activeProjectIdRef.current = id;
-    const storageKey = workspaceId ? `flowsync:activeProjectId:${workspaceId}` : 'flowsync:activeProjectId';
-    window.localStorage.setItem(storageKey, id);
+    const storageKey = getProjectStorageKey(workspaceId);
+    storageSet(storageKey, id);
     try {
       setIsLoading(true);
       const newTasks = await fetchAllTasks(id);
@@ -100,7 +102,6 @@ export const useProjectData = (workspaceId: string) => {
     }
   }, [fetchAllTasks, t, workspaceId]);
 
-  // Initial load
   useEffect(() => {
     isMountedRef.current = true;
     refreshData();
@@ -108,13 +109,12 @@ export const useProjectData = (workspaceId: string) => {
     return () => {
       isMountedRef.current = false;
     };
-  }, [refreshData, workspaceId]); // re-run when workspace changes
+  }, [refreshData, workspaceId]);
 
-  // Persist active project selection
   useEffect(() => {
     if (activeProjectId) {
-      const storageKey = workspaceId ? `flowsync:activeProjectId:${workspaceId}` : 'flowsync:activeProjectId';
-      window.localStorage.setItem(storageKey, activeProjectId);
+      const storageKey = getProjectStorageKey(workspaceId);
+      storageSet(storageKey, activeProjectId);
     }
   }, [activeProjectId, workspaceId]);
 

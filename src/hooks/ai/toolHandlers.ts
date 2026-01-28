@@ -34,6 +34,24 @@ type ToolHandlerFunction = (
   context: ToolHandlerContext
 ) => Promise<ToolExecutionResult> | ToolExecutionResult;
 
+// Helper to format task dates consistently
+const formatTaskDate = (ts: number | null | undefined, t: TFunction) => {
+  if (!ts) return t('common.na');
+  return new Date(ts).toISOString().split('T')[0];
+};
+
+// Helper to extract string parameter safely
+const getStringParam = (args: Record<string, unknown>, key: string): string | undefined =>
+  typeof args[key] === 'string' ? args[key] : undefined;
+
+// Helper to extract boolean parameter safely
+const getBoolParam = (args: Record<string, unknown>, key: string): boolean | undefined =>
+  typeof args[key] === 'boolean' ? args[key] : undefined;
+
+// Helper to extract number parameter safely
+const getNumberParam = (args: Record<string, unknown>, key: string): number | undefined =>
+  typeof args[key] === 'number' ? args[key] : undefined;
+
 const toolHandlers: Record<string, ToolHandlerFunction> = {
   // Read-only tools
   listProjects: async (_args, { api, pushProcessingStep, t }) => {
@@ -47,36 +65,33 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
   },
 
   getProject: async (args, { api, pushProcessingStep, t }) => {
-    if (typeof args.id !== 'string') {
+    const id = getStringParam(args, 'id');
+    if (!id) {
       return { output: t('tool.error.invalid_project_id') };
     }
     pushProcessingStep?.(t('processing.reading_project_details'));
-    const project = await api.getProject(args.id);
+    const project = await api.getProject(id);
     return { output: t('tool.project_details', { name: project.name, id: project.id }) };
   },
 
   listTasks: async (args, { api, pushProcessingStep, t }) => {
     pushProcessingStep?.(t('processing.reading_task_list'));
     const result = await api.listTasks({
-      projectId: typeof args.projectId === 'string' ? args.projectId : undefined,
-      status: typeof args.status === 'string' ? args.status : undefined,
-      priority: typeof args.priority === 'string' ? args.priority : undefined,
-      assignee: typeof args.assignee === 'string' ? args.assignee : undefined,
-      isMilestone: typeof args.isMilestone === 'boolean' ? args.isMilestone : undefined,
-      q: typeof args.q === 'string' ? args.q : undefined,
-      startDateFrom: typeof args.startDateFrom === 'number' ? args.startDateFrom : undefined,
-      startDateTo: typeof args.startDateTo === 'number' ? args.startDateTo : undefined,
-      dueDateFrom: typeof args.dueDateFrom === 'number' ? args.dueDateFrom : undefined,
-      dueDateTo: typeof args.dueDateTo === 'number' ? args.dueDateTo : undefined,
-      page: typeof args.page === 'number' ? args.page : undefined,
-      pageSize: typeof args.pageSize === 'number' ? args.pageSize : undefined,
+      projectId: getStringParam(args, 'projectId'),
+      status: getStringParam(args, 'status'),
+      priority: getStringParam(args, 'priority'),
+      assignee: getStringParam(args, 'assignee'),
+      isMilestone: getBoolParam(args, 'isMilestone'),
+      q: getStringParam(args, 'q'),
+      startDateFrom: getNumberParam(args, 'startDateFrom'),
+      startDateTo: getNumberParam(args, 'startDateTo'),
+      dueDateFrom: getNumberParam(args, 'dueDateFrom'),
+      dueDateTo: getNumberParam(args, 'dueDateTo'),
+      page: getNumberParam(args, 'page'),
+      pageSize: getNumberParam(args, 'pageSize'),
     });
-    const formatDate = (ts: number | null | undefined) => {
-      if (!ts) return t('common.na');
-      return new Date(ts).toISOString().split('T')[0];
-    };
     const sample = result.data.slice(0, 5).map(task => {
-      return `${task.title} (${formatDate(task.startDate)} - ${formatDate(task.dueDate)})`;
+      return `${task.title} (${formatTaskDate(task.startDate, t)} - ${formatTaskDate(task.dueDate, t)})`;
     }).join(', ');
     const output = t('tool.tasks_list', {
       count: result.total,
@@ -90,20 +105,17 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
   },
 
   getTask: async (args, { api, pushProcessingStep, t }) => {
-    if (typeof args.id !== 'string') {
+    const id = getStringParam(args, 'id');
+    if (!id) {
       return { output: t('tool.error.invalid_task_id') };
     }
     pushProcessingStep?.(t('processing.reading_task_details'));
-    const task = await api.getTask(args.id);
-    const formatDate = (ts: number | null | undefined) => {
-      if (!ts) return t('common.na');
-      return new Date(ts).toISOString().split('T')[0];
-    };
+    const task = await api.getTask(id);
     const output = t('tool.task_details', {
       title: task.title,
       id: task.id,
-      start: formatDate(task.startDate),
-      due: formatDate(task.dueDate),
+      start: formatTaskDate(task.startDate, t),
+      due: formatTaskDate(task.dueDate, t),
       status: task.status,
     });
     return { output };
@@ -124,7 +136,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     return {
       output: '',
       draftActions,
-      draftReason: typeof args.reason === 'string' ? args.reason : undefined,
+      draftReason: getStringParam(args, 'reason'),
     };
   },
 
@@ -133,7 +145,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       id: generateId(),
       entityType: 'project',
       action: 'update',
-      entityId: args.id as string | undefined,
+      entityId: getStringParam(args, 'id'),
       after: {
         name: args.name,
         description: args.description,
@@ -143,7 +155,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     return {
       output: '',
       draftActions,
-      draftReason: typeof args.reason === 'string' ? args.reason : undefined,
+      draftReason: getStringParam(args, 'reason'),
     };
   },
 
@@ -152,12 +164,12 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       id: generateId(),
       entityType: 'project',
       action: 'delete',
-      entityId: args.id as string | undefined,
+      entityId: getStringParam(args, 'id'),
     }];
     return {
       output: '',
       draftActions,
-      draftReason: typeof args.reason === 'string' ? args.reason : undefined,
+      draftReason: getStringParam(args, 'reason'),
     };
   },
 
@@ -184,7 +196,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     return {
       output: '',
       draftActions,
-      draftReason: typeof args.reason === 'string' ? args.reason : undefined,
+      draftReason: getStringParam(args, 'reason'),
     };
   },
 
@@ -193,7 +205,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       id: generateId(),
       entityType: 'task',
       action: 'update',
-      entityId: args.id as string | undefined,
+      entityId: getStringParam(args, 'id'),
       after: {
         title: args.title,
         description: args.description,
@@ -211,7 +223,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     return {
       output: '',
       draftActions,
-      draftReason: typeof args.reason === 'string' ? args.reason : undefined,
+      draftReason: getStringParam(args, 'reason'),
     };
   },
 
@@ -220,12 +232,12 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       id: generateId(),
       entityType: 'task',
       action: 'delete',
-      entityId: args.id as string | undefined,
+      entityId: getStringParam(args, 'id'),
     }];
     return {
       output: '',
       draftActions,
-      draftReason: typeof args.reason === 'string' ? args.reason : undefined,
+      draftReason: getStringParam(args, 'reason'),
     };
   },
 
@@ -267,18 +279,19 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     return {
       output: '',
       draftActions,
-      draftReason: typeof args.reason === 'string' ? args.reason : undefined,
+      draftReason: getStringParam(args, 'reason'),
     };
   },
 
   // Action tools
   applyChanges: async (args, { api, pushProcessingStep, t }) => {
-    if (typeof args.draftId !== 'string') {
+    const draftId = getStringParam(args, 'draftId');
+    if (!draftId) {
       return { output: t('tool.error.invalid_draft_id') };
     }
     pushProcessingStep?.(t('processing.applying_draft'));
-    await api.applyDraft(args.draftId, 'user');
-    return { output: t('tool.apply.success', { id: args.draftId }) };
+    await api.applyDraft(draftId, 'user');
+    return { output: t('tool.apply.success', { id: draftId }) };
   },
 
   suggestActions: (args, { t }) => {

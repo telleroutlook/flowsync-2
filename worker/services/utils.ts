@@ -1,5 +1,7 @@
 export const now = () => Date.now();
 
+// Re-export generateId from utils for consistency
+// Note: In worker context, use Web crypto API
 export const generateId = () => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();

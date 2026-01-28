@@ -1,12 +1,12 @@
+import { storageGet } from '../src/utils/storage';
+
 export class AIService {
   private buildHeaders() {
     const headers = new Headers({ 'Content-Type': 'application/json' });
-    if (typeof window !== 'undefined') {
-      const token = window.localStorage.getItem('flowsync:authToken');
-      if (token) headers.set('Authorization', `Bearer ${token}`);
-      const workspaceId = window.localStorage.getItem('flowsync:activeWorkspaceId');
-      if (workspaceId) headers.set('X-Workspace-Id', workspaceId);
-    }
+    const token = storageGet('authToken');
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const workspaceId = storageGet('activeWorkspaceId');
+    if (workspaceId) headers.set('X-Workspace-Id', workspaceId);
     return headers;
   }
 

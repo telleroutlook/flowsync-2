@@ -17,6 +17,24 @@ export function formatExportDate(value?: number): string {
   return new Date(value).toISOString().slice(0, 10);
 }
 
+export function formatDateInput(value?: number): string {
+  if (!value) return '';
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function parseDateInput(value: string): number | undefined {
+  if (!value) return undefined;
+  const parts = value.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return undefined;
+  const [year, month, day] = parts;
+  if (!year || !month || !day) return undefined;
+  return new Date(year, month - 1, day).getTime();
+}
+
 export function parseDateFlexible(value?: string): number | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();

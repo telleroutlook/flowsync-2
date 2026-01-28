@@ -1,27 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiService } from '../../services/apiService';
+import { storageGet, storageSet } from '../utils/storage';
 import type { User, WorkspaceJoinRequest, WorkspaceMember, WorkspaceWithMembership } from '../../types';
 import { PUBLIC_WORKSPACE_ID } from '../../types';
 
-const STORAGE_KEY = 'flowsync:activeWorkspaceId';
-
-const readStoredWorkspace = () => {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
-};
-
-const storeWorkspace = (id: string) => {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, id);
-  } catch {
-    // ignore
-  }
-};
+const STORAGE_KEY = 'activeWorkspaceId';
 
 export const useWorkspaces = (user: User | null) => {
   const [workspaces, setWorkspaces] = useState<WorkspaceWithMembership[]>([]);
@@ -43,12 +26,12 @@ export const useWorkspaces = (user: User | null) => {
       const list = await apiService.listWorkspaces();
       setWorkspaces(list);
 
-      const stored = readStoredWorkspace();
+      const stored = storageGet(STORAGE_KEY);
       const accessible = list.filter((workspace) => workspace.isPublic || workspace.membership?.status === 'active');
       const fallback = accessible[0]?.id || PUBLIC_WORKSPACE_ID;
       const next = stored && accessible.some((workspace) => workspace.id === stored) ? stored : fallback;
       setActiveWorkspaceId(next);
-      storeWorkspace(next);
+      storageSet(STORAGE_KEY, next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load workspaces');
     } finally {
@@ -58,7 +41,7 @@ export const useWorkspaces = (user: User | null) => {
 
   useEffect(() => {
     refreshWorkspaces();
-  }, [user?.id]); // refreshWorkspaces is stable, user?.id changes when user logs in/out
+  }, [user?.id]);
 
   useEffect(() => {
     const current = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
@@ -80,7 +63,7 @@ export const useWorkspaces = (user: User | null) => {
 
   const selectWorkspace = useCallback((id: string) => {
     setActiveWorkspaceId(id);
-    storeWorkspace(id);
+    storageSet(STORAGE_KEY, id);
   }, []);
 
   const createWorkspace = useCallback(async (name: string, description?: string) => {

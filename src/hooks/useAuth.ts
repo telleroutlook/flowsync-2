@@ -1,35 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiService } from '../../services/apiService';
+import { storageGet, storageRemove, storageSet } from '../utils/storage';
 import type { User } from '../../types';
 
-const TOKEN_KEY = 'flowsync:authToken';
-
-const readToken = () => {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-};
-
-const storeToken = (token: string) => {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(TOKEN_KEY, token);
-  } catch {
-    // ignore storage errors
-  }
-};
-
-const clearToken = () => {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    // ignore storage errors
-  }
-};
+const TOKEN_KEY = 'authToken';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -39,7 +13,7 @@ export const useAuth = () => {
   const refresh = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    const token = readToken();
+    const token = storageGet(TOKEN_KEY);
     if (!token) {
       setUser(null);
       setIsLoading(false);
@@ -49,7 +23,7 @@ export const useAuth = () => {
       const result = await apiService.me();
       setUser(result.user);
     } catch (err) {
-      clearToken();
+      storageRemove(TOKEN_KEY);
       setUser(null);
       setError(err instanceof Error ? err.message : 'Auth failed');
     } finally {
@@ -66,7 +40,7 @@ export const useAuth = () => {
     setError(null);
     try {
       const result = await apiService.login({ username, password });
-      storeToken(result.token);
+      storageSet(TOKEN_KEY, result.token);
       setUser(result.user);
       return result.user;
     } catch (err) {
@@ -83,7 +57,7 @@ export const useAuth = () => {
     setError(null);
     try {
       const result = await apiService.register({ username, password });
-      storeToken(result.token);
+      storageSet(TOKEN_KEY, result.token);
       setUser(result.user);
       return result.user;
     } catch (err) {
@@ -101,9 +75,9 @@ export const useAuth = () => {
     try {
       await apiService.logout();
     } catch {
-      // ignore
+      // Ignore logout API errors
     } finally {
-      clearToken();
+      storageRemove(TOKEN_KEY);
       setUser(null);
       setIsLoading(false);
     }

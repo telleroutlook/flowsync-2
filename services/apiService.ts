@@ -1,5 +1,6 @@
 import type { ApiResponse, AuditLog, Draft, DraftAction, Project, Task, User, Workspace, WorkspaceJoinRequest, WorkspaceMember, WorkspaceMemberActionResult, WorkspaceMembership, WorkspaceWithMembership } from '../types';
 import { sleep, getRetryDelay } from '../src/utils/retry';
+import { storageGet } from '../src/utils/storage';
 
 const MAX_FETCH_RETRIES = 2;
 
@@ -52,20 +53,11 @@ const buildQueryString = (params: Record<string, string | number | boolean | und
   return suffix ? `?${suffix}` : '';
 };
 
-const getStoredValue = (key: string) => {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-};
-
 const buildHeaders = (headers?: HeadersInit) => {
   const merged = new Headers(headers || {});
-  const token = getStoredValue('flowsync:authToken');
+  const token = storageGet('authToken');
   if (token) merged.set('Authorization', `Bearer ${token}`);
-  const workspaceId = getStoredValue('flowsync:activeWorkspaceId');
+  const workspaceId = storageGet('activeWorkspaceId');
   if (workspaceId) merged.set('X-Workspace-Id', workspaceId);
   return merged;
 };

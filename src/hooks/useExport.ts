@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Project, Task, DraftAction, TaskStatus, Priority, Draft } from '../../types';
 import { apiService } from '../../services/apiService';
-import { generateId, getTaskStart, getTaskEnd, formatExportDate, parseDateFlexible } from '../utils';
+import { generateId, getTaskStart, getTaskEnd, formatExportDate, parseDateFlexible, storageGet, storageSet } from '../utils';
 import { useI18n } from '../i18n';
 
 export type ExportFormat = 'csv' | 'tsv' | 'json' | 'markdown' | 'pdf';
@@ -148,8 +148,8 @@ export const useExport = ({
   const [downloadFallback, setDownloadFallback] = useState<{ url: string; filename: string } | null>(null);
 
   useEffect(() => {
-    const storedFormat = window.localStorage.getItem('flowsync:exportFormat');
-    const storedImportStrategy = window.localStorage.getItem('flowsync:importStrategy');
+    const storedFormat = storageGet('exportFormat');
+    const storedImportStrategy = storageGet('importStrategy');
     if (storedFormat === 'csv' || storedFormat === 'tsv' || storedFormat === 'json' || storedFormat === 'markdown' || storedFormat === 'pdf') {
       setLastExportFormat(storedFormat);
     }
@@ -168,12 +168,12 @@ export const useExport = ({
 
   const recordExportPreference = useCallback((format: ExportFormat) => {
     setLastExportFormat(format);
-    window.localStorage.setItem('flowsync:exportFormat', format);
+    storageSet('exportFormat', format);
   }, []);
 
   const recordImportPreference = useCallback((strategy: ImportStrategy) => {
     setImportStrategy(strategy);
-    window.localStorage.setItem('flowsync:importStrategy', strategy);
+    storageSet('importStrategy', strategy);
   }, []);
 
   const clearDownloadFallback = useCallback(() => {

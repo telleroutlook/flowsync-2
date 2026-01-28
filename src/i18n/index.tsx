@@ -1,8 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { translations } from './translations';
+import { storageGet, storageSet } from '../utils/storage';
 import type { I18nContextValue, InterpolationValues, Locale } from './types';
 
-const STORAGE_KEY = 'flowsync:locale';
+const STORAGE_KEY = 'locale';
 const DEFAULT_LOCALE: Locale = 'en';
 
 const normalizeLocale = (value: string | null | undefined): Locale => {
@@ -12,7 +13,7 @@ const normalizeLocale = (value: string | null | undefined): Locale => {
 
 const getInitialLocale = (): Locale => {
   if (typeof window === 'undefined') return DEFAULT_LOCALE;
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = storageGet(STORAGE_KEY);
   if (stored === 'en' || stored === 'zh') return stored;
   return normalizeLocale(window.navigator.language);
 };
@@ -35,9 +36,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (typeof document !== 'undefined') {
       document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en';
     }
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(STORAGE_KEY, locale);
-    }
+    storageSet(STORAGE_KEY, locale);
   }, [locale]);
 
   const t = useCallback((key: string, values?: InterpolationValues) => {

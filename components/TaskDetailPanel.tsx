@@ -1,6 +1,6 @@
 import React, { useMemo, memo, useCallback, ChangeEvent } from 'react';
 import { Task, TaskStatus, Priority } from '../types';
-import { getTaskStart, getTaskEnd } from '../src/utils';
+import { getTaskStart, getTaskEnd, formatDateInput, parseDateInput } from '../src/utils';
 import { useI18n } from '../src/i18n';
 import { getPriorityLabel, getStatusLabel } from '../src/i18n/labels';
 import { Button } from './ui/Button';
@@ -16,22 +16,6 @@ interface TaskDetailPanelProps {
   onClose: () => void;
   onUpdate: (id: string, updates: Partial<Task>) => void;
   tasks: Task[];
-}
-
-const formatDateInput = (value?: number) => {
-  if (!value) return '';
-  const date = new Date(value);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const dayNum = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${dayNum}`;
-};
-
-const parseDateInput = (value: string) => {
-  if (!value) return undefined;
-  const [year, month, dayNum] = value.split('-').map(Number);
-  if (!year || !month || !dayNum) return undefined;
-  return new Date(year, month - 1, dayNum).getTime();
 };
 
 export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
