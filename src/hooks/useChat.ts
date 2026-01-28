@@ -219,6 +219,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
 
       let finalText = response.text;
       let suggestions: string[] = [];
+      let hasToolOutputs = false;
 
       // Process tool calls if any
       if (response.toolCalls && response.toolCalls.length > 0) {
@@ -278,26 +279,41 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
 
         // Display tool results
         if (result.outputs.length > 0) {
-      recordStep(t('processing.aggregating_tool_results'));
-      
-      // const summaryRequest: RequestInput = {
-      //   history: [...messages, ...newMessages],
-      //   message: 'The tool has been executed. Please verify the results and provide feedback or next steps based on the tool\'s output.',
-      // };
-      
-      recordStep(t('processing.generating'));
-          appendSystemMessage(result.outputs.join(' | '));
-          if (!finalText) finalText = t('chat.draft_created_review');
+          recordStep(t('processing.aggregating_tool_results'));
+          recordStep(t('processing.generating'));
+          
+          const validOutputs = result.outputs.filter(o => o.trim().length > 0);
+          if (validOutputs.length > 0) {
+            hasToolOutputs = true;
+            appendSystemMessage(validOutputs.join(' | '));
+          }
+          
+          // Only force default text if we made a draft and have no other text
+          if (!finalText && result.draftActions.length > 0) {
+             finalText = t('chat.draft_created_review');
+          }
         }
       } else {
         recordStep(t('processing.generating'));
       }
 
       // Add final AI message to chat
+      // If we have outputs (e.g. read-only tools) but no text from model, avoid "Processed" if possible.
+      // But if model was silent, we must show something.
+      let effectiveText = finalText;
+      if (!effectiveText) {
+         if (hasToolOutputs) {
+           // If we showed system messages (tool outputs), the model message can be lighter.
+           effectiveText = t('chat.action_completed');
+         } else {
+           effectiveText = t('chat.processed');
+         }
+      }
+
       setMessages(prev => [...prev, {
         id: generateId(),
         role: 'model',
-        text: finalText || t('chat.processed'),
+        text: effectiveText,
         timestamp: Date.now(),
         suggestions: suggestions.length > 0 ? suggestions : undefined,
         thinking: {
