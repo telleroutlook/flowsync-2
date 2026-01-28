@@ -167,16 +167,79 @@ export const useExport = ({
     window.localStorage.setItem('flowsync:importStrategy', strategy);
   }, []);
 
-  const triggerDownload = useCallback((blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 200);
+  const triggerDownload = useCallback(async (blob: Blob, filename: string) => {
+    const extension = filename.split('.').pop()?.toLowerCase() || '';
+    const typeByExtension: Record<string, string> = {
+      csv: 'text/csv',
+      tsv: 'text/tab-separated-values',
+      json: 'application/json',
+      md: 'text/markdown',
+      pdf: 'application/pdf',
+    };
+    const mime = typeByExtension[extension] || blob.type || 'application/octet-stream';
+
+    const trySavePicker = async () => {
+      const picker = (window as unknown as { showSaveFilePicker?: Function }).showSaveFilePicker;
+      if (!picker) return false;
+      const handle = await picker({
+        suggestedName: filename,
+        types: [
+          {
+            description: extension.toUpperCase(),
+            accept: { [mime]: [`.${extension}`] },
+          },
+        ],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return true;
+    };
+
+    const tryAnchorDownload = (href: string) => {
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = filename;
+      link.rel = 'noopener';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    };
+
+    const tryDataUrlDownload = async () => {
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onerror = () => reject(new Error('Failed to read data url'));
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.readAsDataURL(blob);
+      });
+      tryAnchorDownload(dataUrl);
+    };
+
+    try {
+      if (await trySavePicker()) return true;
+    } catch (error) {
+      console.warn('Save picker failed, falling back to browser download.', error);
+    }
+
+    try {
+      const url = URL.createObjectURL(blob);
+      tryAnchorDownload(url);
+      setTimeout(() => URL.revokeObjectURL(url), 500);
+      return true;
+    } catch (error) {
+      console.warn('Object URL download failed, falling back to data URL.', error);
+    }
+
+    try {
+      await tryDataUrlDownload();
+      return true;
+    } catch (error) {
+      console.warn('Data URL download failed.', error);
+    }
+
+    return false;
   }, []);
 
   const exportHeaders = [
@@ -322,7 +385,8 @@ export const useExport = ({
           tasks: sourceTasks,
         };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        triggerDownload(blob, `${baseName}.json`);
+        const ok = await triggerDownload(blob, `${baseName}.json`);
+        if (!ok) throw new Error('Download failed');
         recordExportPreference(format);
         return;
       }
@@ -418,7 +482,8 @@ export const useExport = ({
         ].join('\n');
 
         const blob = new Blob([markdown], { type: 'text/markdown' });
-        triggerDownload(blob, `${baseName}.md`);
+        const ok = await triggerDownload(blob, `${baseName}.md`);
+        if (!ok) throw new Error('Download failed');
         recordExportPreference(format);
         return;
       }
@@ -434,7 +499,8 @@ export const useExport = ({
 
       const mime = format === 'tsv' ? 'text/tab-separated-values' : 'text/csv';
       const blob = new Blob([lines.join('\n')], { type: `${mime};charset=utf-8;` });
-      triggerDownload(blob, `${baseName}.${format}`);
+      const ok = await triggerDownload(blob, `${baseName}.${format}`);
+      if (!ok) throw new Error('Download failed');
       recordExportPreference(format);
     } catch (error) {
       console.error('Failed to export tasks:', error);
