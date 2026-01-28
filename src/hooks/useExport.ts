@@ -48,7 +48,6 @@ export const useExport = ({
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [lastExportFormat, setLastExportFormat] = useState<ExportFormat>('csv');
   const [importStrategy, setImportStrategy] = useState<ImportStrategy>('append');
-  const [downloadFallback, setDownloadFallback] = useState<{ url: string; filename: string } | null>(null);
 
   useEffect(() => {
     const storedFormat = storageGet('exportFormat');
@@ -61,14 +60,6 @@ export const useExport = ({
     }
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (downloadFallback?.url) {
-        URL.revokeObjectURL(downloadFallback.url);
-      }
-    };
-  }, [downloadFallback]);
-
   const recordExportPreference = useCallback((format: ExportFormat) => {
     setLastExportFormat(format);
     storageSet('exportFormat', format);
@@ -79,20 +70,8 @@ export const useExport = ({
     storageSet('importStrategy', strategy);
   }, []);
 
-  const clearDownloadFallback = useCallback(() => {
-    if (downloadFallback?.url) {
-      URL.revokeObjectURL(downloadFallback.url);
-    }
-    setDownloadFallback(null);
-  }, [downloadFallback]);
-
   const triggerDownload = useCallback((blob: Blob, filename: string) => {
-    if (downloadFallback?.url) {
-      URL.revokeObjectURL(downloadFallback.url);
-    }
-
     const url = URL.createObjectURL(blob);
-    setDownloadFallback({ url, filename });
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;
@@ -101,7 +80,8 @@ export const useExport = ({
     document.body.appendChild(link);
     link.click();
     link.remove();
-  }, [downloadFallback]);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  }, []);
 
   const buildDisplayRowsCallback = useCallback((sourceTasks: Task[], exportProjects: Project[]) => {
     return buildDisplayRows(sourceTasks, exportProjects, activeProject);
@@ -636,8 +616,6 @@ export const useExport = ({
     importStrategy,
     recordImportPreference,
     handleExportTasks,
-    handleImportFile,
-    downloadFallback,
-    clearDownloadFallback
+    handleImportFile
   };
 };
