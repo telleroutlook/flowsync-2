@@ -367,6 +367,17 @@ function App() {
     return () => window.removeEventListener('click', handleWindowClick);
   }, [isExportOpen]);
 
+  const handleExportMenuPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    const button = target?.closest<HTMLButtonElement>('[data-export-format]');
+    if (!button) return;
+    const format = button.dataset.exportFormat as 'csv' | 'pdf' | 'json' | 'markdown' | undefined;
+    if (!format) return;
+    event.preventDefault();
+    void handleExportTasks(format);
+    setIsExportOpen(false);
+  }, [handleExportTasks]);
+
   // Manual Project Actions
   const manualCreateProject = useCallback(() => {
     setIsCreateProjectOpen(true);
@@ -780,6 +791,7 @@ function App() {
                {isExportOpen && (
                  <div
                    onClick={(event) => event.stopPropagation()}
+                   onPointerDown={handleExportMenuPointerDown}
                    ref={exportMenuRef}
                    className="absolute right-0 mt-2 w-64 rounded-xl border border-border-subtle bg-surface shadow-xl z-50 p-2 animate-fade-in"
                    role="menu"
@@ -795,11 +807,7 @@ function App() {
                        <button
                          key={item.id}
                          type="button"
-                         onPointerDown={(event) => {
-                           event.preventDefault();
-                           void handleExportTasks(item.id);
-                           setIsExportOpen(false);
-                         }}
+                         data-export-format={item.id}
                          className={cn(
                            "group flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors",
                            lastExportFormat === item.id ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-background' 
