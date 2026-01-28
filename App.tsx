@@ -333,7 +333,8 @@ function App() {
   const {
     isExportOpen, setIsExportOpen,
     lastExportFormat, importStrategy, recordImportPreference,
-    handleExportTasks, handleImportFile
+    handleExportTasks, handleImportFile,
+    downloadFallback, clearDownloadFallback
   } = useExport({
     projects,
     activeProject,
@@ -845,6 +846,29 @@ function App() {
             >
               {t('common.retry')}
             </Button>
+          </div>
+        )}
+        {downloadFallback && (
+          <div className="px-6 py-3 text-sm font-medium bg-primary/5 text-primary border-b border-primary/20 flex items-center justify-between gap-3" role="alert">
+            <span>{t('export.download_fallback')}</span>
+            <div className="flex items-center gap-2">
+              <a
+                href={downloadFallback.url}
+                download={downloadFallback.filename}
+                className="text-primary underline underline-offset-2 hover:text-primary/80"
+              >
+                {t('export.download_fallback_action')}
+              </a>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={clearDownloadFallback}
+                className="h-7 px-2 text-xs"
+              >
+                {t('common.close')}
+              </Button>
+            </div>
           </div>
         )}
 

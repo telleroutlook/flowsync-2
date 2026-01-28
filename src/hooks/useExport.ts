@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Project, Task, DraftAction, TaskStatus, Priority, Draft } from '../../types';
 import { apiService } from '../../services/apiService';
 import { generateId, getTaskStart, getTaskEnd, formatExportDate, parseDateFlexible } from '../utils';
@@ -145,6 +145,8 @@ export const useExport = ({
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [lastExportFormat, setLastExportFormat] = useState<ExportFormat>('csv');
   const [importStrategy, setImportStrategy] = useState<ImportStrategy>('append');
+  const [downloadFallback, setDownloadFallback] = useState<{ url: string; filename: string } | null>(null);
+  const fallbackTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const storedFormat = window.localStorage.getItem('flowsync:exportFormat');
@@ -157,6 +159,17 @@ export const useExport = ({
     }
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (fallbackTimerRef.current) {
+        window.clearTimeout(fallbackTimerRef.current);
+      }
+      if (downloadFallback?.url) {
+        URL.revokeObjectURL(downloadFallback.url);
+      }
+    };
+  }, [downloadFallback]);
+
   const recordExportPreference = useCallback((format: ExportFormat) => {
     setLastExportFormat(format);
     window.localStorage.setItem('flowsync:exportFormat', format);
@@ -167,80 +180,40 @@ export const useExport = ({
     window.localStorage.setItem('flowsync:importStrategy', strategy);
   }, []);
 
-  const triggerDownload = useCallback(async (blob: Blob, filename: string) => {
-    const extension = filename.split('.').pop()?.toLowerCase() || '';
-    const typeByExtension: Record<string, string> = {
-      csv: 'text/csv',
-      tsv: 'text/tab-separated-values',
-      json: 'application/json',
-      md: 'text/markdown',
-      pdf: 'application/pdf',
-    };
-    const mime = typeByExtension[extension] || blob.type || 'application/octet-stream';
+  const clearDownloadFallback = useCallback(() => {
+    if (fallbackTimerRef.current) {
+      window.clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+    if (downloadFallback?.url) {
+      URL.revokeObjectURL(downloadFallback.url);
+    }
+    setDownloadFallback(null);
+  }, [downloadFallback]);
 
-    const trySavePicker = async () => {
-      const picker = (window as unknown as { showSaveFilePicker?: Function }).showSaveFilePicker;
-      if (!picker) return false;
-      const handle = await picker({
-        suggestedName: filename,
-        types: [
-          {
-            description: extension.toUpperCase(),
-            accept: { [mime]: [`.${extension}`] },
-          },
-        ],
-      });
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      return true;
-    };
-
-    const tryAnchorDownload = (href: string) => {
-      const link = document.createElement('a');
-      link.href = href;
-      link.download = filename;
-      link.rel = 'noopener';
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    };
-
-    const tryDataUrlDownload = async () => {
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        reader.onerror = () => reject(new Error('Failed to read data url'));
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.readAsDataURL(blob);
-      });
-      tryAnchorDownload(dataUrl);
-    };
-
-    try {
-      if (await trySavePicker()) return true;
-    } catch (error) {
-      console.warn('Save picker failed, falling back to browser download.', error);
+  const triggerDownload = useCallback((blob: Blob, filename: string) => {
+    if (fallbackTimerRef.current) {
+      window.clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+    if (downloadFallback?.url) {
+      URL.revokeObjectURL(downloadFallback.url);
     }
 
-    try {
-      const url = URL.createObjectURL(blob);
-      tryAnchorDownload(url);
-      setTimeout(() => URL.revokeObjectURL(url), 500);
-      return true;
-    } catch (error) {
-      console.warn('Object URL download failed, falling back to data URL.', error);
-    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.rel = 'noopener';
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
 
-    try {
-      await tryDataUrlDownload();
-      return true;
-    } catch (error) {
-      console.warn('Data URL download failed.', error);
-    }
-
-    return false;
-  }, []);
+    fallbackTimerRef.current = window.setTimeout(() => {
+      setDownloadFallback({ url, filename });
+    }, 800);
+  }, [downloadFallback]);
 
   const exportHeaders = [
     'rowType',
@@ -385,8 +358,7 @@ export const useExport = ({
           tasks: sourceTasks,
         };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const ok = await triggerDownload(blob, `${baseName}.json`);
-        if (!ok) throw new Error('Download failed');
+        triggerDownload(blob, `${baseName}.json`);
         recordExportPreference(format);
         return;
       }
@@ -441,7 +413,8 @@ export const useExport = ({
           },
           margin: { left: 40, right: 40 },
         });
-        doc.save(`${baseName}.pdf`);
+        const pdfBlob = doc.output('blob');
+        triggerDownload(pdfBlob, `${baseName}.pdf`);
         recordExportPreference(format);
         return;
       }
@@ -482,8 +455,7 @@ export const useExport = ({
         ].join('\n');
 
         const blob = new Blob([markdown], { type: 'text/markdown' });
-        const ok = await triggerDownload(blob, `${baseName}.md`);
-        if (!ok) throw new Error('Download failed');
+        triggerDownload(blob, `${baseName}.md`);
         recordExportPreference(format);
         return;
       }
@@ -499,8 +471,7 @@ export const useExport = ({
 
       const mime = format === 'tsv' ? 'text/tab-separated-values' : 'text/csv';
       const blob = new Blob([lines.join('\n')], { type: `${mime};charset=utf-8;` });
-      const ok = await triggerDownload(blob, `${baseName}.${format}`);
-      if (!ok) throw new Error('Download failed');
+      triggerDownload(blob, `${baseName}.${format}`);
       recordExportPreference(format);
     } catch (error) {
       console.error('Failed to export tasks:', error);
@@ -877,6 +848,8 @@ export const useExport = ({
     importStrategy,
     recordImportPreference,
     handleExportTasks,
-    handleImportFile
+    handleImportFile,
+    downloadFallback,
+    clearDownloadFallback
   };
 };
