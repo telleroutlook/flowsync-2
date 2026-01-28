@@ -109,6 +109,12 @@ export const apiService = {
       body: JSON.stringify(data),
     }),
   me: () => fetchJson<{ user: User }>('/api/auth/me'),
+  updateProfile: (data: { allowThinking?: boolean }) =>
+    fetchJson<{ user: User }>('/api/auth/me', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
   logout: () =>
     fetchJson<{ success: true }>('/api/auth/logout', {
       method: 'POST',

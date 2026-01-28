@@ -14,7 +14,8 @@ export class AIService {
     history: { role: string; parts: { text: string }[] }[],
     newMessage: string,
     systemContext: string | undefined,
-    onEvent?: (event: string, data: Record<string, unknown>) => void
+    onEvent?: (event: string, data: Record<string, unknown>) => void,
+    allowThinking?: boolean
   ): Promise<{ text: string; toolCalls?: { name: string; args: unknown }[] }> {
     const STREAM_IDLE_TIMEOUT_MS = 120000;
     const controller = new AbortController();
@@ -29,7 +30,7 @@ export class AIService {
       const response = await fetch('/api/ai/stream', {
         method: 'POST',
         headers: this.buildHeaders(),
-        body: JSON.stringify({ history, message: newMessage, systemContext }),
+        body: JSON.stringify({ history, message: newMessage, systemContext, allowThinking }),
         signal: controller.signal,
       });
 
@@ -114,7 +115,8 @@ export class AIService {
   async sendMessage(
     history: { role: string; parts: { text: string }[] }[],
     newMessage: string,
-    systemContext?: string
+    systemContext?: string,
+    allowThinking?: boolean
   ): Promise<{ text: string; toolCalls?: { name: string; args: unknown }[] }> {
     try {
       const REQUEST_TIMEOUT_MS = 180000;
@@ -123,7 +125,7 @@ export class AIService {
       const response = await fetch('/api/ai', {
         method: 'POST',
         headers: this.buildHeaders(),
-        body: JSON.stringify({ history, message: newMessage, systemContext }),
+        body: JSON.stringify({ history, message: newMessage, systemContext, allowThinking }),
         signal: controller.signal,
       }).finally(() => {
         clearTimeout(timeoutId);

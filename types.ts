@@ -111,6 +111,7 @@ export interface User {
   id: string;
   username: string;
   createdAt: number;
+  allowThinking?: boolean;
 }
 
 export interface Workspace {

@@ -109,6 +109,17 @@ export const useAuth = () => {
     }
   }, []);
 
+  const updateProfile = useCallback(async (updates: { allowThinking?: boolean }) => {
+    try {
+      const result = await apiService.updateProfile(updates);
+      setUser(result.user);
+      return result.user;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Update failed';
+      throw new Error(message);
+    }
+  }, []);
+
   return {
     user,
     isLoading,
@@ -117,5 +128,6 @@ export const useAuth = () => {
     login,
     register,
     logout,
+    updateProfile,
   };
 };

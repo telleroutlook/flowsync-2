@@ -4,6 +4,7 @@ export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
   username: text('username').notNull(),
   passwordHash: text('password_hash').notNull(),
+  allowThinking: integer('allow_thinking', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at', { mode: 'number' }).notNull(),
 }, (table) => ({
   usernameIdx: uniqueIndex('users_username_unique').on(table.username),

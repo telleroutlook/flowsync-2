@@ -88,12 +88,14 @@ export const createUser = async (
     id: generateId(),
     username: input.username,
     createdAt: now(),
+    allowThinking: false,
   };
   await db.insert(users).values({
     id: record.id,
     username: record.username,
     passwordHash,
     createdAt: record.createdAt,
+    allowThinking: false,
   });
   return record;
 };
@@ -106,7 +108,7 @@ export const getUserByUsername = async (
   const row = rows[0];
   if (!row) return null;
   return {
-    user: { id: row.id, username: row.username, createdAt: row.createdAt },
+    user: { id: row.id, username: row.username, createdAt: row.createdAt, allowThinking: row.allowThinking ?? false },
     passwordHash: row.passwordHash,
   };
 };
@@ -140,6 +142,7 @@ export const getUserFromToken = async (
       id: users.id,
       username: users.username,
       createdAt: users.createdAt,
+      allowThinking: users.allowThinking,
       expiresAt: sessions.expiresAt,
     })
     .from(sessions)
@@ -148,7 +151,31 @@ export const getUserFromToken = async (
     .limit(1);
   const row = rows[0];
   if (!row) return null;
-  return { id: row.id, username: row.username, createdAt: row.createdAt };
+  return { id: row.id, username: row.username, createdAt: row.createdAt, allowThinking: row.allowThinking ?? false };
+};
+
+export const updateUser = async (
+  db: ReturnType<typeof import('../db').getDb>,
+  userId: string,
+  updates: Partial<Pick<UserRecord, 'allowThinking'>>
+): Promise<UserRecord | null> => {
+  if (Object.keys(updates).length === 0) return null;
+  
+  await db.update(users)
+    .set({
+      allowThinking: updates.allowThinking
+    })
+    .where(eq(users.id, userId));
+
+  const [updated] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!updated) return null;
+
+  return {
+    id: updated.id,
+    username: updated.username,
+    createdAt: updated.createdAt,
+    allowThinking: updated.allowThinking ?? false
+  };
 };
 
 export const revokeSession = async (

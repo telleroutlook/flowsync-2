@@ -19,6 +19,7 @@ interface UseChatProps {
   appendSystemMessage: (text: string) => void;
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  allowThinking?: boolean;
 }
 
 type AiHistoryItem = {
@@ -55,7 +56,8 @@ export const useChat = ({
   handleApplyDraft,
   appendSystemMessage,
   messages,
-  setMessages
+  setMessages,
+  allowThinking = false,
 }: UseChatProps) => {
   const { t } = useI18n();
   const [inputText, setInputText] = useState('');
@@ -178,10 +180,14 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
       const trimmed = text.trim();
       if (!trimmed) return;
       currentThinkingPreview = trimmed;
-      const maxLen = 160;
-      const start = Math.max(0, trimmed.length - maxLen);
-      const tail = trimmed.slice(start);
-      setThinkingPreview(start > 0 ? `...${tail}` : tail);
+      if (allowThinking) {
+        const maxLen = 160;
+        const start = Math.max(0, trimmed.length - maxLen);
+        const tail = trimmed.slice(start);
+        setThinkingPreview(start > 0 ? `...${tail}` : tail);
+      } else {
+        setThinkingPreview(t('processing.generating'));
+      }
     };
 
     try {
@@ -214,7 +220,8 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
           if (event === 'retry') {
             recordStep(t('chat.retrying'), elapsedMs);
           }
-        }
+        },
+        allowThinking
       );
 
       let finalText = response.text;
@@ -320,10 +327,10 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
         text: effectiveText,
         timestamp: Date.now(),
         suggestions: suggestions.length > 0 ? suggestions : undefined,
-        thinking: {
+        thinking: allowThinking ? {
           steps: fullProcessingSteps,
           preview: currentThinkingPreview || undefined
-        }
+        } : undefined
       }]);
 
     } catch (error) {
@@ -333,10 +340,10 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
         role: 'model',
         text: t('chat.error_prefix', { error: errorMessage }),
         timestamp: Date.now(),
-        thinking: {
+        thinking: allowThinking ? {
           steps: fullProcessingSteps,
           preview: currentThinkingPreview || undefined
-        }
+        } : undefined
       }]);
     }
   }, [activeProjectId, submitDraft, appendSystemMessage, pushProcessingStep, setMessages, setThinkingPreview, t, stageLabels]);

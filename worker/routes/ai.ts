@@ -236,6 +236,7 @@ const requestSchema = z.object({
   history: historySchema,
   message: z.string().min(1).max(MAX_MESSAGE_CHARS),
   systemContext: z.string().max(MAX_SYSTEM_CONTEXT_CHARS).optional(),
+  allowThinking: z.boolean().optional(),
 });
 
 type ProgressEmitter = (event: string, data: Record<string, unknown>) => void;
@@ -325,7 +326,8 @@ const runAIRequest = async (
       throw new StreamAbortError();
     }
   };
-  const { history, message, systemContext } = input;
+  const { history, message, systemContext, allowThinking } = input;
+  const allowThinkingEnabled = allowThinking === true;
 
   // Create tool registry and get OpenAI-compatible tools
   const toolRegistry = createToolRegistry(c);
@@ -358,6 +360,7 @@ const runAIRequest = async (
     baseUrl,
     endpoint,
     model,
+    allowThinking: allowThinkingEnabled
   });
 
   const boundedHistory = history.slice(-MAX_HISTORY_MESSAGES);
@@ -399,19 +402,26 @@ const runAIRequest = async (
     let attempts = 0;
     let elapsedMs = 0;
     let retryHistory: RetryAttemptInfo[] = [];
+
+    const requestBody: Record<string, unknown> = {
+      model,
+      messages,
+      tools,
+      tool_choice: 'auto',
+      temperature: 0.5,
+    };
+
+    if (!allowThinkingEnabled) {
+      requestBody['thinking'] = { type: 'disabled' };
+    }
+
     try {
       const result = await fetchWithRetry(
         endpoint,
         {
           method: 'POST',
           headers,
-          body: JSON.stringify({
-            model,
-            messages,
-            tools,
-            tool_choice: 'auto',
-            temperature: 0.5,
-          }),
+          body: JSON.stringify(requestBody),
         },
         REQUEST_TIMEOUT_MS,
         MAX_RETRIES,
@@ -799,4 +809,5 @@ type RequestInput = {
   history: z.infer<typeof historySchema>;
   message: string;
   systemContext?: string;
+  allowThinking?: boolean;
 };

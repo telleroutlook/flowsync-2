@@ -187,7 +187,35 @@ function App() {
   // --- HOOKS ---
 
   // 1. Auth & Workspaces
-  const { user, error: authError, login, register, logout } = useAuth();
+  const { user, error: authError, login, register, logout, updateProfile } = useAuth();
+  
+  // Guest Thinking State
+  const [guestThinking, setGuestThinking] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem('flowsync:guestThinking') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const effectiveAllowThinking = user ? (user.allowThinking ?? false) : guestThinking;
+
+  const handleToggleThinking = useCallback(async (enabled: boolean) => {
+    try {
+      if (user) {
+        await updateProfile({ allowThinking: enabled });
+      } else {
+        setGuestThinking(enabled);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('flowsync:guestThinking', String(enabled));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to toggle thinking:', err);
+    }
+  }, [user, updateProfile]);
+
   const {
     workspaces,
     accessibleWorkspaces,
@@ -390,7 +418,8 @@ function App() {
     handleApplyDraft,
     appendSystemMessage,
     messages,
-    setMessages
+    setMessages,
+    allowThinking: effectiveAllowThinking
   });
 
   // 6. Export/Import
@@ -993,6 +1022,8 @@ function App() {
           isOpen={isProfileOpen}
           onClose={() => setIsProfileOpen(false)}
           user={user}
+          allowThinking={effectiveAllowThinking}
+          onToggleThinking={handleToggleThinking}
         />
 
         {/* View Area */}

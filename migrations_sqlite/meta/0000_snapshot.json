@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "81edfbab-da9a-4ac1-b6f1-dd1399f4ff2a",
-  "prevId": null,
+  "id": "03236484-fa3a-4e75-b84c-b28e71a1956d",
+  "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "audit_logs": {
       "name": "audit_logs",
@@ -460,6 +460,14 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "allow_thinking": {
+          "name": "allow_thinking",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "created_at": {
           "name": "created_at",

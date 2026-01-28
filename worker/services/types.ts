@@ -5,6 +5,7 @@ export type UserRecord = {
   id: string;
   username: string;
   createdAt: number;
+  allowThinking?: boolean;
 };
 
 export type WorkspaceRecord = {

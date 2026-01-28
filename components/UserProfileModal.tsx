@@ -9,10 +9,13 @@ interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: User | null;
+  allowThinking: boolean;
+  onToggleThinking: (enabled: boolean) => void | Promise<void>;
 }
 
-export const UserProfileModal = memo<UserProfileModalProps>(({ isOpen, onClose, user }) => {
+export const UserProfileModal = memo<UserProfileModalProps>(({ isOpen, onClose, user, allowThinking, onToggleThinking }) => {
   const { t, locale, setLocale } = useI18n();
+  const [isUpdating, setIsUpdating] = React.useState(false);
 
   const userInitial = useMemo(() => user ? user.username.charAt(0).toUpperCase() : '?', [user]);
 
@@ -20,6 +23,16 @@ export const UserProfileModal = memo<UserProfileModalProps>(({ isOpen, onClose, 
     const value = event.target.value;
     if (value === 'en' || value === 'zh') setLocale(value);
   }, [setLocale]);
+
+  const handleThinkingChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isUpdating) return;
+    setIsUpdating(true);
+    try {
+      await onToggleThinking(event.target.checked);
+    } finally {
+      setIsUpdating(false);
+    }
+  }, [onToggleThinking, isUpdating]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={t('profile.title')}>
@@ -49,24 +62,46 @@ export const UserProfileModal = memo<UserProfileModalProps>(({ isOpen, onClose, 
            </div>
         </div>
 
-        <div className="space-y-3">
-          <label className="block text-xs font-bold text-text-secondary uppercase tracking-wide" htmlFor="profile-language">
-            {t('language.label')}
-          </label>
-          <div className="relative">
-            <select
-              id="profile-language"
-              value={locale}
-              onChange={handleLocaleChange}
-              aria-label={t('language.switch')}
-              className="w-full appearance-none rounded-lg border border-border-subtle bg-surface px-4 py-3 text-sm font-medium text-text-primary focus:outline-none focus:ring-2 focus:ring-primary shadow-sm transition-all hover:border-primary/50 cursor-pointer"
-            >
-              <option value="en">🇺🇸 {t('language.english')}</option>
-              <option value="zh">🇨🇳 {t('language.chinese')}</option>
-            </select>
-            <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-text-secondary">
-              <ChevronDown className="w-4 h-4" />
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <label className="block text-xs font-bold text-text-secondary uppercase tracking-wide" htmlFor="profile-language">
+              {t('language.label')}
+            </label>
+            <div className="relative">
+              <select
+                id="profile-language"
+                value={locale}
+                onChange={handleLocaleChange}
+                aria-label={t('language.switch')}
+                className="w-full appearance-none rounded-lg border border-border-subtle bg-surface px-4 py-3 text-sm font-medium text-text-primary focus:outline-none focus:ring-2 focus:ring-primary shadow-sm transition-all hover:border-primary/50 cursor-pointer"
+              >
+                <option value="en">🇺🇸 {t('language.english')}</option>
+                <option value="zh">🇨🇳 {t('language.chinese')}</option>
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-text-secondary">
+                <ChevronDown className="w-4 h-4" />
+              </div>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-surface">
+            <div className="space-y-0.5">
+              <label htmlFor="allow-thinking" className="block text-sm font-medium text-text-primary">
+                Enable Thinking
+              </label>
+              <p className="text-xs text-text-secondary">Allow AI to show thinking process</p>
+            </div>
+            <label className={cn("relative inline-flex items-center", isUpdating ? "cursor-not-allowed opacity-70" : "cursor-pointer")} htmlFor="allow-thinking">
+              <input
+                type="checkbox"
+                id="allow-thinking"
+                className="sr-only peer"
+                checked={allowThinking}
+                onChange={handleThinkingChange}
+                disabled={isUpdating}
+              />
+              <span className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></span>
+            </label>
           </div>
         </div>
       </div>

@@ -37,6 +37,23 @@ authRoute.get('/me', async (c) => {
   return jsonOk(c, { user });
 });
 
+const updateProfileSchema = z.object({
+  allowThinking: z.boolean().optional(),
+});
+
+authRoute.put('/me', zValidator('json', updateProfileSchema), async (c) => {
+  const user = c.get('user');
+  if (!user) return jsonError(c, 'UNAUTHORIZED', 'Not logged in.', 401);
+
+  const data = c.req.valid('json');
+  const { updateUser } = await import('../services/authService');
+  const updatedUser = await updateUser(c.get('db'), user.id, data);
+
+  if (!updatedUser) return jsonError(c, 'UPDATE_FAILED', 'Failed to update user profile.', 500);
+  
+  return jsonOk(c, { user: updatedUser });
+});
+
 authRoute.post('/logout', async (c) => {
   const token = parseAuthHeader(c.req.header('Authorization'));
   if (!token) return jsonError(c, 'INVALID_TOKEN', 'Missing auth token.', 400);
