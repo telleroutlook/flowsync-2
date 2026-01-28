@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiService } from '../../services/apiService';
 import { AuditLog } from '../../types';
 import { useI18n } from '../i18n';
@@ -92,20 +92,12 @@ export const useAuditLogs = ({ activeProjectId, refreshData, appendSystemMessage
   }, [auditFilters, auditPageSize]);
 
   // Debounced refresh for search input to reduce API calls
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-    debounceRef.current = setTimeout(() => {
+    const timer = setTimeout(() => {
       void refreshAuditLogs(activeProjectId);
     }, 300);
 
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-    };
+    return () => clearTimeout(timer);
   }, [refreshAuditLogs, activeProjectId]);
 
   return {

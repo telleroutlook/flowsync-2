@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiService } from '../../services/apiService';
 import { storageGet, storageSet } from '../utils/storage';
 import type { User, WorkspaceJoinRequest, WorkspaceMember, WorkspaceWithMembership } from '../../types';
@@ -43,11 +43,15 @@ export const useWorkspaces = (user: User | null) => {
     refreshWorkspaces();
   }, [user?.id]);
 
+  // Memoize current workspace membership to avoid unnecessary re-renders
+  const currentMembership = useMemo(
+    () => workspaces.find(w => w.id === activeWorkspaceId)?.membership,
+    [workspaces, activeWorkspaceId]
+  );
+
   useEffect(() => {
-    const current = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
     const userId = user?.id;
-    const membership = current?.membership;
-    if (!userId || !current || membership?.role !== 'admin' || membership?.status !== 'active') {
+    if (!userId || !currentMembership || currentMembership.role !== 'admin' || currentMembership.status !== 'active') {
       setPendingRequests([]);
       setMembers([]);
       return;
@@ -59,7 +63,7 @@ export const useWorkspaces = (user: User | null) => {
       setPendingRequests(requests);
       setMembers(memberList);
     });
-  }, [activeWorkspaceId, user?.id, workspaces]);
+  }, [activeWorkspaceId, user?.id, currentMembership]);
 
   const selectWorkspace = useCallback((id: string) => {
     setActiveWorkspaceId(id);

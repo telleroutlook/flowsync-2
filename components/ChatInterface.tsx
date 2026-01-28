@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo } from 'react';
+import React, { memo, useCallback, useMemo, useRef } from 'react';
 import { ChatBubble } from './ChatBubble';
 import { ChatMessage, ChatAttachment, Draft } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -54,8 +54,9 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   onResetChat,
 }) => {
   const { t } = useI18n();
-  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
-  const isAutoScrolling = React.useRef(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isAutoScrolling = useRef(false);
   const [draftProcessingState, setDraftProcessingState] = React.useState<'applying' | 'discarding' | null>(null);
 
   const handleApplyDraft = React.useCallback(async (draftId: string) => {
@@ -77,18 +78,30 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   }, [onDiscardDraft]);
 
   // Smart scrolling logic
-  const scrollToBottom = React.useCallback((behavior: ScrollBehavior = 'smooth') => {
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
     if (messagesEndRef.current) {
       isAutoScrolling.current = true;
       messagesEndRef.current.scrollIntoView({ behavior });
       // Reset auto-scrolling flag after animation
-      setTimeout(() => {
+      if (autoScrollTimerRef.current) {
+        clearTimeout(autoScrollTimerRef.current);
+      }
+      autoScrollTimerRef.current = setTimeout(() => {
         isAutoScrolling.current = false;
       }, 500);
     }
   }, [messagesEndRef]);
 
   // Scroll to bottom on new messages or processing updates
+  React.useEffect(() => {
+    // Cleanup timer on unmount
+    return () => {
+      if (autoScrollTimerRef.current) {
+        clearTimeout(autoScrollTimerRef.current);
+      }
+    };
+  }, []);
+
   React.useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;

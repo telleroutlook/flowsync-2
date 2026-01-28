@@ -103,13 +103,13 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     try {
       const result = await apiService.discardDraft(draftId);
       setDrafts(prev => prev.map(draft => (draft.id === result.id ? result : draft)));
-      if (pendingDraftId === draftId) setPendingDraftId(null);
+      setPendingDraftId(prev => (prev === draftId ? null : prev));
       await refreshDrafts();
       appendSystemMessage(t('draft.discarded', { id: draftId }));
     } catch (error) {
        appendSystemMessage(error instanceof Error ? t('draft.discard_failed', { error: error.message }) : t('draft.discard_failed', { error: t('common.na') }));
     }
-  }, [pendingDraftId, refreshDrafts, appendSystemMessage, t]);
+  }, [refreshDrafts, appendSystemMessage, t]);
 
   return {
     drafts,

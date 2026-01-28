@@ -422,27 +422,16 @@ function App() {
     taskUpdateTimers.current.set(id, timer);
   }, [setTasks, submitDraft]);
 
-  // Derived State - memoized to prevent recreation on every render
-  const viewLabels: Record<ViewMode, string> = useMemo(() => ({
-    BOARD: t('app.view.board'),
-    LIST: t('app.view.list'),
-    GANTT: t('app.view.gantt'),
-  }), [t]);
-
+  // Derived State
   const currentZoom = viewZoom[viewMode];
   const zoomIndex = useMemo(() => {
-    const exactIndex = zoomLevels.findIndex((level) => level === currentZoom);
+    const exactIndex = zoomLevels.indexOf(currentZoom);
     if (exactIndex !== -1) return exactIndex;
-    let closest = 0;
-    let minDiff = Math.abs(zoomLevels[0] - currentZoom);
-    zoomLevels.forEach((level, index) => {
-      const diff = Math.abs(level - currentZoom);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closest = index;
-      }
-    });
-    return closest;
+    return zoomLevels.reduce((closestIdx, level, idx) => {
+      const currentDiff = Math.abs(level - currentZoom);
+      const closestDiff = Math.abs(zoomLevels[closestIdx] - currentZoom);
+      return currentDiff < closestDiff ? idx : closestIdx;
+    }, 0);
   }, [currentZoom, zoomLevels]);
 
   const updateZoom = useCallback((mode: ViewMode, value: number, markUserOverride: boolean = true) => {

@@ -68,13 +68,6 @@ export const useChat = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastUserMessageRef = useRef<ChatMessage | null>(null);
-  const stageLabels = useMemo<Record<string, string>>(() => ({
-    received: t('processing.received'),
-    prepare_request: t('processing.preparing'),
-    upstream_request: t('processing.calling_ai'),
-    upstream_response: t('processing.parsing'),
-    done: t('processing.done'),
-  }), [t]);
 
   const pushProcessingStep = useCallback((step: string, elapsedMs?: number) => {
     setProcessingSteps(prev => {
@@ -104,30 +97,13 @@ export const useChat = ({
     });
   }, []);
 
-  // Build system context for the AI - memoized with stable dependencies
-  const projectId = activeProject.id;
-  const projectName = activeProject.name;
-  const activeTaskCount = activeTasks.length;
-  const taskIdsAndTitles = useMemo(
-    () => activeTasks.slice(0, 30).map(task => ({ id: task.id, title: task.title })),
-    [activeTasks]
-  );
-  const selectedTaskId = selectedTask?.id;
-  const selectedTaskTitle = selectedTask?.title;
-  const selectedTaskStatus = selectedTask?.status;
-  const selectedTaskStart = selectedTask?.startDate;
-  const selectedTaskDue = selectedTask?.dueDate;
-  const projectList = useMemo(
-    () => projects.map(p => `${p.name} (${p.id})`).join(', '),
-    [projects]
-  );
-
+  // Build system context for the AI
   const systemContext = useMemo(() => {
-    const taskIdMap = taskIdsAndTitles;
+    const taskIdsAndTitles = activeTasks.slice(0, 30).map(task => ({ id: task.id, title: task.title }));
     const mappingJson = JSON.stringify({
       limit: 30,
-      total: activeTaskCount,
-      taskIdMap
+      total: activeTasks.length,
+      taskIdMap: taskIdsAndTitles
     });
 
     const formatDate = (ts: number | null | undefined) => {
@@ -135,16 +111,19 @@ export const useChat = ({
       return new Date(ts).toISOString().split('T')[0];
     };
 
-    const selectedTaskInfo = selectedTaskId
-      ? `User is currently inspecting task: ${selectedTaskTitle} (ID: ${selectedTaskId}, Status: ${selectedTaskStatus}, Start: ${formatDate(selectedTaskStart)}, Due: ${formatDate(selectedTaskDue)}).`
-      : '';
+    let selectedTaskInfo = '';
+    if (selectedTask) {
+      selectedTaskInfo = `User is currently inspecting task: ${selectedTask.title} (ID: ${selectedTask.id}, Status: ${selectedTask.status}, Start: ${formatDate(selectedTask.startDate)}, Due: ${formatDate(selectedTask.dueDate)}).`;
+    }
 
-    return `Active Project: ${projectName || 'None'}.
-Active Project ID: ${projectId || 'N/A'}.
+    const projectList = projects.map(p => `${p.name} (${p.id})`).join(', ');
+
+    return `Active Project: ${activeProject.name || 'None'}.
+Active Project ID: ${activeProject.id || 'N/A'}.
 ${selectedTaskInfo}
 Available Projects: ${projectList}.
 Task IDs in Active Project (JSON): ${mappingJson}.`;
-  }, [projectId, projectName, activeTaskCount, taskIdsAndTitles, selectedTaskId, selectedTaskTitle, selectedTaskStatus, selectedTaskStart, selectedTaskDue, projectList]);
+  }, [activeProject, activeTasks, selectedTask, projects]);
 
   const isRetryableOpenAIError = useCallback((text: string) => text.includes('OpenAI request failed.'), []);
 
@@ -213,6 +192,13 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
             return;
           }
           if (event === 'stage' && typeof data.name === 'string') {
+            const stageLabels: Record<string, string> = {
+              received: t('processing.received'),
+              prepare_request: t('processing.preparing'),
+              upstream_request: t('processing.calling_ai'),
+              upstream_response: t('processing.parsing'),
+              done: t('processing.done'),
+            };
             const label = stageLabels[data.name];
             if (label) recordStep(label, elapsedMs);
             return;
@@ -346,7 +332,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
         } : undefined
       }]);
     }
-  }, [activeProjectId, submitDraft, appendSystemMessage, pushProcessingStep, setMessages, setThinkingPreview, t, stageLabels]);
+  }, [activeProjectId, submitDraft, appendSystemMessage, pushProcessingStep, setMessages, setThinkingPreview, t]);
 
   const handleSendMessage = useCallback(async (e?: React.FormEvent, overrideText?: string) => {
     e?.preventDefault();
