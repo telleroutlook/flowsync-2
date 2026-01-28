@@ -146,7 +146,6 @@ export const useExport = ({
   const [lastExportFormat, setLastExportFormat] = useState<ExportFormat>('csv');
   const [importStrategy, setImportStrategy] = useState<ImportStrategy>('append');
   const [downloadFallback, setDownloadFallback] = useState<{ url: string; filename: string } | null>(null);
-  const fallbackTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const storedFormat = window.localStorage.getItem('flowsync:exportFormat');
@@ -161,9 +160,6 @@ export const useExport = ({
 
   useEffect(() => {
     return () => {
-      if (fallbackTimerRef.current) {
-        window.clearTimeout(fallbackTimerRef.current);
-      }
       if (downloadFallback?.url) {
         URL.revokeObjectURL(downloadFallback.url);
       }
@@ -181,10 +177,6 @@ export const useExport = ({
   }, []);
 
   const clearDownloadFallback = useCallback(() => {
-    if (fallbackTimerRef.current) {
-      window.clearTimeout(fallbackTimerRef.current);
-      fallbackTimerRef.current = null;
-    }
     if (downloadFallback?.url) {
       URL.revokeObjectURL(downloadFallback.url);
     }
@@ -192,15 +184,12 @@ export const useExport = ({
   }, [downloadFallback]);
 
   const triggerDownload = useCallback((blob: Blob, filename: string) => {
-    if (fallbackTimerRef.current) {
-      window.clearTimeout(fallbackTimerRef.current);
-      fallbackTimerRef.current = null;
-    }
     if (downloadFallback?.url) {
       URL.revokeObjectURL(downloadFallback.url);
     }
 
     const url = URL.createObjectURL(blob);
+    setDownloadFallback({ url, filename });
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;
@@ -209,10 +198,6 @@ export const useExport = ({
     document.body.appendChild(link);
     link.click();
     link.remove();
-
-    fallbackTimerRef.current = window.setTimeout(() => {
-      setDownloadFallback({ url, filename });
-    }, 800);
   }, [downloadFallback]);
 
   const exportHeaders = [

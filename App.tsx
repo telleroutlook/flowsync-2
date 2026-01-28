@@ -795,7 +795,8 @@ function App() {
                        <button
                          key={item.id}
                          type="button"
-                         onClick={() => {
+                         onPointerDown={(event) => {
+                           event.preventDefault();
                            void handleExportTasks(item.id);
                            setIsExportOpen(false);
                          }}
