@@ -20,8 +20,6 @@ const createTimeoutPromise = (ms: number, url: string): Promise<never> => {
     const timeoutId = setTimeout(() => {
       reject(new TimeoutError(`Request timeout after ${ms}ms`, ms, { url }));
     }, ms);
-    // Allow the timeout to be cleared if the fetch completes first
-    (timeoutId as unknown as { _cleared: boolean })._cleared = false;
   });
 };
 
