@@ -143,27 +143,58 @@ function App() {
   );
 
   // 2. Chat State (Lifted)
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const saved = storageGet('chat_history');
-    if (saved) {
-      try {
-        return JSON.parse(saved) as ChatMessage[];
-      } catch {
-        // Invalid JSON, fall through to default
-      }
-    }
-    return [{
-      id: 'welcome',
-      role: 'model',
-      text: t('chat.welcome'),
-      timestamp: Date.now(),
-    }];
-  });
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const loadedProjectIdRef = useRef<string | null>(null);
 
   // Persist chat messages
+  // defined BEFORE the load effect to ensure the ref check works correctly during transitions
   useEffect(() => {
-    storageSet('chat_history', JSON.stringify(messages));
-  }, [messages]);
+    if (!activeProjectId) return;
+    
+    // Only save if the messages in state belong to the active project
+    // This prevents overwriting the new project's history with the old project's messages
+    // during the transition render cycle.
+    if (loadedProjectIdRef.current !== activeProjectId) return;
+
+    const key = `chat_history_${activeProjectId}`;
+    storageSet(key, JSON.stringify(messages));
+  }, [messages, activeProjectId]);
+
+  // Load chat messages when active project changes
+  useEffect(() => {
+    if (!activeProjectId) return;
+    
+    // If we've already loaded for this project, don't reload
+    // (This helps if activeProjectId is stable across renders)
+    if (loadedProjectIdRef.current === activeProjectId) return;
+    
+    const key = `chat_history_${activeProjectId}`;
+    const saved = storageGet(key);
+    let loadedMessages: ChatMessage[];
+
+    if (saved) {
+      try {
+        loadedMessages = JSON.parse(saved) as ChatMessage[];
+      } catch {
+        loadedMessages = [{
+          id: 'welcome',
+          role: 'model',
+          text: t('chat.welcome'),
+          timestamp: Date.now(),
+        }];
+      }
+    } else {
+        loadedMessages = [{
+          id: 'welcome',
+          role: 'model',
+          text: t('chat.welcome'),
+          timestamp: Date.now(),
+        }];
+    }
+    
+    setMessages(loadedMessages);
+    loadedProjectIdRef.current = activeProjectId;
+  }, [activeProjectId, t]);
 
   const appendSystemMessage = useCallback((text: string) => {
     setMessages(prev => [...prev, {
@@ -182,7 +213,6 @@ function App() {
       timestamp: Date.now(),
     };
     setMessages([initialMsg]);
-    storageSet('chat_history', '');
   }, [t]);
 
   // 3. Audit Logs
