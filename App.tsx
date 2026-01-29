@@ -46,7 +46,7 @@ function App() {
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
 
   // UI State
-  const [viewMode, setViewMode] = useState<ViewMode>('GANTT');
+  const [viewMode, setViewMode] = useState<ViewMode>('LIST');
   const [viewZoom, setViewZoom] = useState<ZoomState>(() =>
     storageGetJSON('viewZoom', DEFAULT_ZOOM_STATE)
   );
@@ -282,6 +282,13 @@ function App() {
     void handleExportTasks(format);
     setIsExportOpen(false);
   }, [handleExportTasks]);
+
+  const handleSelectTask = useCallback((id: string | null) => {
+    setSelectedTaskId(id);
+    if (id) {
+      setIsSidebarOpen(false);
+    }
+  }, []);
 
   // Manual Project Actions
   const manualCreateProject = useCallback(() => {
@@ -787,7 +794,7 @@ function App() {
                       <KanbanBoard
                         tasks={activeTasks}
                         selectedTaskId={selectedTaskId}
-                        onSelectTask={(id) => setSelectedTaskId(id)}
+                        onSelectTask={handleSelectTask}
                       />
                     </div>
                   )}
@@ -804,7 +811,7 @@ function App() {
                       <ListView
                         tasks={activeTasks}
                         selectedTaskId={selectedTaskId}
-                        onSelectTask={(id) => setSelectedTaskId(id)}
+                        onSelectTask={handleSelectTask}
                       />
                     </div>
                   )}
@@ -816,7 +823,7 @@ function App() {
                         zoom={viewZoom.GANTT}
                         onViewModeChange={setGanttViewMode}
                         selectedTaskId={selectedTaskId}
-                        onSelectTask={(id) => setSelectedTaskId(id)}
+                        onSelectTask={handleSelectTask}
                         onUpdateTaskDates={(id, startDate, dueDate) => {
                           queueTaskUpdate(id, { startDate, dueDate });
                         }}
