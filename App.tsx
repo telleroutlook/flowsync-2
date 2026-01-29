@@ -499,8 +499,8 @@ function App() {
       {/* 2. Workspace (Middle) */}
       <div className="flex-1 flex flex-col h-full bg-background relative overflow-hidden min-w-0">
         {/* Header */}
-        <div className="h-14 border-b border-border-subtle flex items-center justify-between px-4 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0">
-          <div className="flex items-center gap-4">
+        <div className="min-h-[3.5rem] py-2 border-b border-border-subtle flex items-center justify-between flex-wrap gap-x-4 gap-y-2 px-4 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0">
+          <div className="flex items-center flex-wrap gap-4">
             <Button
               variant="ghost"
               size="icon"
@@ -517,10 +517,10 @@ function App() {
               )}
             </div>
             
-            <div className="h-5 w-px bg-border-subtle mx-2"></div>
+            <div className="h-5 w-px bg-border-subtle mx-2 hidden sm:block"></div>
 
             {/* View Switcher */}
-            <div className="flex p-1 bg-background/50 rounded-lg border border-border-subtle gap-1">
+            <div className="flex flex-wrap p-1 bg-background/50 rounded-lg border border-border-subtle gap-1">
                <Button
                  variant={viewMode === 'BOARD' ? 'secondary' : 'ghost'}
                  size="sm"
@@ -551,9 +551,9 @@ function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center flex-wrap gap-2">
              {/* Zoom Panel */}
-             <div className="flex items-center gap-1 bg-background/50 rounded-lg border border-border-subtle px-2 py-1">
+             <div className="flex items-center flex-wrap gap-1 bg-background/50 rounded-lg border border-border-subtle px-2 py-1">
                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary/70">{t('app.zoom')}</span>
                <Button
                  variant="ghost"

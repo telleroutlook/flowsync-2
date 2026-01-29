@@ -398,14 +398,14 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
   return (
     <div className="flex flex-col h-full bg-surface border border-border-subtle rounded-xl overflow-hidden relative shadow-sm">
       {/* Controls */}
-      <div className="flex items-center justify-between px-4 py-2 bg-background border-b border-border-subtle shrink-0 z-20">
+      <div className="flex items-center justify-between flex-wrap gap-2 px-4 py-2 bg-background border-b border-border-subtle shrink-0 z-20">
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer font-medium select-none">
             <input type="checkbox" checked={showList} onChange={() => setShowList(!showList)} className="rounded border-border-subtle text-primary focus:ring-primary" />
             {t('gantt.show_list')}
           </label>
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {(['Day', 'Week', 'Month', 'Year'] as ViewMode[]).map(m => (
              <button
                key={m}
