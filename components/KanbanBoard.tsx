@@ -55,7 +55,7 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect }) 
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       className={cn(
-        "transition-all duration-200 cursor-pointer group animate-fade-in relative overflow-hidden",
+        "transition-all duration-200 cursor-pointer group animate-fade-in relative overflow-hidden shrink-0",
         isSelected
           ? 'border-primary/50 ring-2 ring-primary/20 shadow-md'
           : task.isMilestone
