@@ -288,9 +288,25 @@ RESPONSE GUIDELINES:
 - Always provide actionable next steps via suggestActions tool`;
 };
 
+type ToolCall = {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+};
+
+type ChatMessage = {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content?: string;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+};
+
 const runAIRequest = async (
   c: Context<{ Bindings: Bindings; Variables: Variables }>,
-  input: RequestInput,
+  input: z.infer<typeof requestSchema>,
   requestId: string,
   emit?: ProgressEmitter,
   abortSignal?: AbortSignal
@@ -338,10 +354,10 @@ const runAIRequest = async (
   });
 
   const boundedHistory = history.slice(-MAX_HISTORY_MESSAGES);
-  let messages: Array<{ role: string; content?: string; tool_calls?: any[]; tool_call_id?: string }> = [
+  let messages: ChatMessage[] = [
     { role: 'system', content: systemInstruction },
-    ...boundedHistory.map((item) => ({
-      role: item.role === 'model' ? 'assistant' : item.role,
+    ...boundedHistory.map((item): ChatMessage => ({
+      role: item.role === 'model' ? 'assistant' : (item.role === 'user' ? 'user' : 'system'),
       content: item.parts.map((part) => part.text).join(''),
     })),
     { role: 'user', content: message },
@@ -645,7 +661,7 @@ const runAIRequest = async (
 
 aiRoute.post('/api/ai', zValidator('json', requestSchema), async (c) => {
   const requestId = generateRequestId();
-  const input = c.req.valid('json') as unknown as RequestInput;
+  const input = c.req.valid('json');
 
   try {
     const result = await runAIRequest(c, input, requestId);
@@ -669,7 +685,7 @@ aiRoute.post('/api/ai', zValidator('json', requestSchema), async (c) => {
 
 aiRoute.post('/api/ai/stream', zValidator('json', requestSchema), async (c) => {
   const requestId = generateRequestId();
-  const input = c.req.valid('json') as unknown as RequestInput;
+  const input = c.req.valid('json');
   const encoder = new TextEncoder();
   const startTime = Date.now();
   const runAbortController = new AbortController();
@@ -779,9 +795,3 @@ aiRoute.post('/api/ai/stream', zValidator('json', requestSchema), async (c) => {
     },
   });
 });
-type RequestInput = {
-  history: z.infer<typeof historySchema>;
-  message: string;
-  systemContext?: string;
-  allowThinking?: boolean;
-};

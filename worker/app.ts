@@ -34,8 +34,8 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
       exposedHeaders: ['Content-Length', 'Content-Type'],
     });
 
-    // @ts-ignore - tinyhttp cors middleware compatibility
-    return corsMiddleware(c, next);
+    // Cast to Hono MiddlewareHandler - tinyhttp/cors is compatible at runtime
+    return corsMiddleware(c, next) as Promise<Response>;
   });
 
   // Security Headers Middleware - Adds security headers to all responses
@@ -57,11 +57,13 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
     }
 
     // Content Security Policy - Restricts resources the browser can load
+    // For React SPA built with Vite, we don't need unsafe-inline in production
+    // Static assets are hashed by Vite and have stable content addresses
     c.header(
       'Content-Security-Policy',
       "default-src 'self'; " +
-      "script-src 'self' 'unsafe-inline'; " +
-      "style-src 'self' 'unsafe-inline'; " +
+      "script-src 'self'; " +
+      "style-src 'self' 'unsafe-inline'; " + // Keep unsafe-inline for dynamic styles in development
       "img-src 'self' data: https:; " +
       "font-src 'self'; " +
       "connect-src 'self'; " +
@@ -77,20 +79,23 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
 
   // CSRF Protection - Token-based double-submit cookie pattern
   // Generates and validates CSRF tokens for state-changing operations
+  //
+  // Pattern: Server sets cookie with token → Client reads cookie → Client sends token in header → Server validates
+  // Note: Cookie is NOT HttpOnly to allow JavaScript to read it for the double-submit pattern
   app.use('*', async (c, next) => {
     const isReadOperation = c.req.method === 'GET' || c.req.method === 'HEAD' || c.req.method === 'OPTIONS';
 
     if (isReadOperation) {
       // For GET requests, generate and set CSRF token in cookie
+      // NOT HttpOnly - JavaScript must read this cookie and send it in X-CSRF-Token header
       const token = crypto.randomUUID();
-      c.header('set-cookie', `csrf_token=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600`);
-      // c.set('csrfToken', token);
+      c.header('set-cookie', `csrf_token=${token}; Secure; SameSite=Strict; Path=/; Max-Age=3600`);
     } else {
       // For state-changing operations (POST/PATCH/DELETE), validate CSRF token
       const cookieToken = c.req.header('cookie')?.match(/csrf_token=([^;]+)/)?.[1];
       const headerToken = c.req.header('x-csrf-token');
 
-      // Skip CSRF for API routes that don't use cookies (e.g., bearer token auth)
+      // Validate CSRF token for API routes
       const isApiRoute = c.req.path.startsWith('/api/');
 
       if (isApiRoute && (!cookieToken || !headerToken || cookieToken !== headerToken)) {
@@ -99,6 +104,7 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
           method: c.req.method,
           hasCookieToken: !!cookieToken,
           hasHeaderToken: !!headerToken,
+          tokensMatch: cookieToken === headerToken,
         });
         return c.json(
           {

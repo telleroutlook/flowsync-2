@@ -53,8 +53,11 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
         }
         return prevId;
       });
-    } catch {
-      // Silently fail on draft refresh - non-critical operation
+    } catch (error) {
+      // Non-critical operation, but log for debugging
+      console.error('Draft refresh failed (non-critical)', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }, []);
 

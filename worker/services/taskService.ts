@@ -320,10 +320,15 @@ export const clearTaskCache = (workspaceId?: string) => {
   if (workspaceId) {
     // Use LRU cache's clear() to efficiently remove all entries
     // Since LRU cache doesn't support prefix-based deletion, we iterate
+    // Collect keys first to avoid modifying cache during iteration
+    const keysToDelete: string[] = [];
     for (const key of taskCache.keys()) {
       if (key.startsWith(`${workspaceId}|`)) {
-        taskCache.delete(key);
+        keysToDelete.push(key);
       }
+    }
+    for (const key of keysToDelete) {
+      taskCache.delete(key);
     }
   } else {
     taskCache.clear();
@@ -331,13 +336,17 @@ export const clearTaskCache = (workspaceId?: string) => {
 };
 
 const invalidateTaskCache = (workspaceId: string, projectId?: string) => {
-  // Iterate through cache keys and invalidate matching entries
+  // Collect keys to delete first to avoid modifying cache during iteration
   // LRU cache handles automatic eviction when size limit is reached
+  const keysToDelete: string[] = [];
   for (const key of taskCache.keys()) {
     if (!key.startsWith(`${workspaceId}|`)) continue;
     if (!projectId || key.includes(`p:${projectId}`)) {
-      taskCache.delete(key);
+      keysToDelete.push(key);
     }
+  }
+  for (const key of keysToDelete) {
+    taskCache.delete(key);
   }
 };
 

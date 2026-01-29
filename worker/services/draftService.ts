@@ -137,6 +137,29 @@ interface ActionResult {
 }
 
 /**
+ * Compensating transaction log entry
+ * Tracks completed operations for rollback capability
+ */
+interface CompensatingLogEntry {
+  /** Sequence number for ordering */
+  sequence: number;
+  /** Action type that was executed */
+  actionType: 'project.create' | 'project.update' | 'project.delete' | 'task.create' | 'task.update' | 'task.delete';
+  /** Entity ID affected */
+  entityId: string;
+  /** Snapshot of state before the operation (for rollback) */
+  before: {
+    project?: ProjectRecord;
+    task?: TaskRecord;
+    tasks?: TaskRecord[]; // For project delete - tasks that were cascade deleted
+  };
+  /** Whether audit log was recorded (needs cleanup on rollback) */
+  auditRecorded: boolean;
+  /** Timestamp of operation */
+  timestamp: number;
+}
+
+/**
  * Type for action handler functions
  */
 type ActionHandler = (
@@ -677,6 +700,135 @@ export const discardDraft = async (
   return { ...draft, status: 'discarded' };
 };
 
+/**
+ * Executes a compensating rollback operation for a single log entry
+ * Reverses a completed operation using its before snapshot
+ */
+const rollbackOperation = async (
+  db: ReturnType<typeof import('../db').getDb>,
+  entry: CompensatingLogEntry,
+  workspaceId: string
+): Promise<void> => {
+  try {
+    switch (entry.actionType) {
+      case 'project.create':
+        // Rollback: Delete the created project
+        if (entry.before.project) {
+          await deleteProject(db, entry.entityId, workspaceId);
+        }
+        break;
+
+      case 'project.update':
+        // Rollback: Restore project to before state
+        if (entry.before.project) {
+          await updateProject(db, entry.entityId, {
+            name: entry.before.project.name,
+            description: entry.before.project.description ?? undefined,
+            icon: entry.before.project.icon ?? undefined,
+          }, workspaceId);
+        }
+        break;
+
+      case 'project.delete':
+        // Rollback: Recreate the deleted project and its tasks
+        if (entry.before.project) {
+          await createProject(db, {
+            id: entry.before.project.id,
+            name: entry.before.project.name,
+            description: entry.before.project.description ?? undefined,
+            icon: entry.before.project.icon ?? undefined,
+            createdAt: entry.before.project.createdAt,
+            updatedAt: entry.before.project.updatedAt,
+            workspaceId,
+          });
+          // Restore cascade-deleted tasks
+          if (entry.before.tasks) {
+            for (const task of entry.before.tasks) {
+              await createTask(db, {
+                id: task.id,
+                projectId: task.projectId,
+                title: task.title,
+                description: task.description ?? undefined,
+                status: task.status,
+                priority: task.priority,
+                wbs: task.wbs ?? undefined,
+                startDate: task.startDate ?? undefined,
+                dueDate: task.dueDate ?? undefined,
+                completion: task.completion ?? undefined,
+                assignee: task.assignee ?? undefined,
+                isMilestone: task.isMilestone,
+                predecessors: task.predecessors,
+                createdAt: task.createdAt,
+                updatedAt: task.updatedAt,
+              }, workspaceId);
+            }
+          }
+        }
+        break;
+
+      case 'task.create':
+        // Rollback: Delete the created task
+        if (entry.before.task) {
+          await deleteTask(db, entry.entityId, workspaceId);
+        }
+        break;
+
+      case 'task.update':
+        // Rollback: Restore task to before state
+        if (entry.before.task) {
+          await updateTask(db, entry.entityId, {
+            title: entry.before.task.title,
+            description: entry.before.task.description ?? undefined,
+            status: entry.before.task.status,
+            priority: entry.before.task.priority,
+            wbs: entry.before.task.wbs ?? undefined,
+            startDate: entry.before.task.startDate ?? undefined,
+            dueDate: entry.before.task.dueDate ?? undefined,
+            completion: entry.before.task.completion ?? undefined,
+            assignee: entry.before.task.assignee ?? undefined,
+            isMilestone: entry.before.task.isMilestone,
+            predecessors: entry.before.task.predecessors,
+          }, workspaceId);
+        }
+        break;
+
+      case 'task.delete':
+        // Rollback: Recreate the deleted task
+        if (entry.before.task) {
+          await createTask(db, {
+            id: entry.before.task.id,
+            projectId: entry.before.task.projectId,
+            title: entry.before.task.title,
+            description: entry.before.task.description ?? undefined,
+            status: entry.before.task.status,
+            priority: entry.before.task.priority,
+            wbs: entry.before.task.wbs ?? undefined,
+            startDate: entry.before.task.startDate ?? undefined,
+            dueDate: entry.before.task.dueDate ?? undefined,
+            completion: entry.before.task.completion ?? undefined,
+            assignee: entry.before.task.assignee ?? undefined,
+            isMilestone: entry.before.task.isMilestone,
+            predecessors: entry.before.task.predecessors,
+            createdAt: entry.before.task.createdAt,
+            updatedAt: entry.before.task.updatedAt,
+          }, workspaceId);
+        }
+        break;
+    }
+  } catch (error) {
+    // Log rollback failure but continue with other operations
+    console.error('Compensating rollback operation failed', {
+      entry,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error; // Re-throw to indicate rollback failure
+  }
+};
+
+/**
+ * Applies a draft with compensating transaction support
+ * If any operation fails, previously completed operations are rolled back
+ */
 export const applyDraft = async (
   db: ReturnType<typeof import('../db').getDb>,
   id: string,
@@ -694,209 +846,346 @@ export const applyDraft = async (
   const results: DraftAction[] = [];
   const draftProjectId = draft.projectId ?? null;
 
-  for (const action of draft.actions) {
+  // Compensating transaction log: tracks operations for potential rollback
+  const transactionLog: CompensatingLogEntry[] = [];
+  let sequence = 0;
+
+  try {
+    for (const action of draft.actions) {
       if (action.entityType === 'project') {
-      if (action.action === 'create' && action.after) {
-        const created = await createProject(db, {
-          id: (action.after.id as string) ?? undefined,
-          name: (action.after.name as string) ?? 'Untitled Project',
-          description: (action.after.description as string) ?? undefined,
-          icon: (action.after.icon as string) ?? undefined,
-          createdAt: (action.after.createdAt as number) ?? undefined,
-          updatedAt: (action.after.updatedAt as number) ?? undefined,
-          workspaceId,
-        });
-        results.push({ ...action, entityId: created.id, after: created });
-        await recordAudit(db, {
-          workspaceId,
-          entityType: 'project',
-          entityId: created.id,
-          action: 'create',
-          before: null,
-          after: created,
-          actor,
-          reason: draft.reason ?? null,
-          projectId: created.id,
-          taskId: null,
-          draftId: draft.id,
-        });
-      } else if (action.action === 'update' && action.entityId) {
-        const before = await getProjectById(db, action.entityId, workspaceId);
-        const updated = await updateProject(db, action.entityId, {
-          name: (action.after?.name as string) ?? undefined,
-          description: (action.after?.description as string) ?? undefined,
-          icon: (action.after?.icon as string) ?? undefined,
-        }, workspaceId);
-        if (updated) {
-          results.push({ ...action, before: before ?? undefined, after: updated });
+        if (action.action === 'create' && action.after) {
+          const beforeSnapshot = await getProjectById(db, (action.after.id as string) ?? '', workspaceId);
+          const created = await createProject(db, {
+            id: (action.after.id as string) ?? undefined,
+            name: (action.after.name as string) ?? 'Untitled Project',
+            description: (action.after.description as string) ?? undefined,
+            icon: (action.after.icon as string) ?? undefined,
+            createdAt: (action.after.createdAt as number) ?? undefined,
+            updatedAt: (action.after.updatedAt as number) ?? undefined,
+            workspaceId,
+          });
+          results.push({ ...action, entityId: created.id, after: created });
+
+          // Log operation for potential rollback
+          const logIndex = transactionLog.push({
+            sequence: sequence++,
+            actionType: 'project.create',
+            entityId: created.id,
+            before: { project: beforeSnapshot ?? undefined },
+            auditRecorded: false,
+            timestamp: now(),
+          }) - 1;
+
           await recordAudit(db, {
             workspaceId,
             entityType: 'project',
-            entityId: updated.id,
-            action: 'update',
-            before: before ?? null,
-            after: updated,
+            entityId: created.id,
+            action: 'create',
+            before: null,
+            after: created,
             actor,
             reason: draft.reason ?? null,
-            projectId: updated.id,
+            projectId: created.id,
             taskId: null,
             draftId: draft.id,
           });
+          transactionLog[logIndex]!.auditRecorded = true;
+
+        } else if (action.action === 'update' && action.entityId) {
+          const before = await getProjectById(db, action.entityId, workspaceId);
+          const updated = await updateProject(db, action.entityId, {
+            name: (action.after?.name as string) ?? undefined,
+            description: (action.after?.description as string) ?? undefined,
+            icon: (action.after?.icon as string) ?? undefined,
+          }, workspaceId);
+
+          if (updated) {
+            results.push({ ...action, before: before ?? undefined, after: updated });
+
+            // Log operation for potential rollback
+            const logIndex = transactionLog.push({
+              sequence: sequence++,
+              actionType: 'project.update',
+              entityId: updated.id,
+              before: { project: before ?? undefined },
+              auditRecorded: false,
+              timestamp: now(),
+            }) - 1;
+
+            await recordAudit(db, {
+              workspaceId,
+              entityType: 'project',
+              entityId: updated.id,
+              action: 'update',
+              before: before ?? null,
+              after: updated,
+              actor,
+              reason: draft.reason ?? null,
+              projectId: updated.id,
+              taskId: null,
+              draftId: draft.id,
+            });
+            transactionLog[logIndex]!.auditRecorded = true;
+          }
+
+        } else if (action.action === 'delete' && action.entityId) {
+          const before = await getProjectById(db, action.entityId, workspaceId);
+          const taskRows = await db.select().from(tasks).where(eq(tasks.projectId, action.entityId));
+          const tasksBefore = taskRows.map(toTaskRecord);
+          const deleted = await deleteProject(db, action.entityId, workspaceId);
+          results.push({ ...action, before: before ?? undefined, after: null });
+
+          if (deleted.project) {
+            // Log operation for potential rollback (with cascade tasks)
+            const logIndex = transactionLog.push({
+              sequence: sequence++,
+              actionType: 'project.delete',
+              entityId: deleted.project.id,
+              before: {
+                project: before ?? deleted.project,
+                tasks: tasksBefore,
+              },
+              auditRecorded: false,
+              timestamp: now(),
+            }) - 1;
+
+            await recordAudit(db, {
+              workspaceId,
+              entityType: 'project',
+              entityId: deleted.project.id,
+              action: 'delete',
+              before: { project: before ?? deleted.project, tasks: tasksBefore },
+              after: null,
+              actor,
+              reason: draft.reason ?? null,
+              projectId: deleted.project.id,
+              taskId: null,
+              draftId: draft.id,
+            });
+            transactionLog[logIndex]!.auditRecorded = true;
+          }
         }
-      } else if (action.action === 'delete' && action.entityId) {
-        const before = await getProjectById(db, action.entityId, workspaceId);
-        const taskRows = await db.select().from(tasks).where(eq(tasks.projectId, action.entityId));
-        const tasksBefore = taskRows.map(toTaskRecord);
-        const deleted = await deleteProject(db, action.entityId, workspaceId);
-        results.push({ ...action, before: before ?? undefined, after: null });
-        if (deleted.project) {
+        continue;
+      }
+
+      if (action.entityType === 'task') {
+        if (action.action === 'create' && action.after) {
+          const warnings: string[] = [];
+          const actionProjectId = (action.after.projectId as string | undefined) ?? undefined;
+          let resolvedProjectId = actionProjectId ?? draftProjectId ?? '';
+          if (draftProjectId && actionProjectId && actionProjectId !== draftProjectId) {
+            warnings.push('Task create projectId did not match the draft project. Using the draft project instead.');
+            resolvedProjectId = draftProjectId;
+          }
+          if (!resolvedProjectId) {
+            throw new Error('Missing projectId for task creation.');
+          }
+
+          const beforeSnapshot = await getTaskById(db, (action.after.id as string) ?? '', workspaceId);
+          const created = await createTask(db, {
+            id: (action.after.id as string) ?? undefined,
+            projectId: resolvedProjectId,
+            title: (action.after.title as string) ?? 'Untitled Task',
+            description: (action.after.description as string) ?? undefined,
+            status: toTaskStatus(action.after.status, 'TODO'),
+            priority: toPriority(action.after.priority, 'MEDIUM'),
+            wbs: (action.after.wbs as string) ?? undefined,
+            startDate: (action.after.startDate as number) ?? undefined,
+            dueDate: (action.after.dueDate as number) ?? undefined,
+            completion: (action.after.completion as number) ?? undefined,
+            assignee: (action.after.assignee as string) ?? undefined,
+            isMilestone: (action.after.isMilestone as boolean) ?? undefined,
+            predecessors: (action.after.predecessors as string[]) ?? undefined,
+            createdAt: (action.after.createdAt as number) ?? undefined,
+            updatedAt: (action.after.updatedAt as number) ?? undefined,
+          }, workspaceId);
+
+          if (!created) {
+            throw new Error(`Invalid project for task creation: ${resolvedProjectId}.`);
+          }
+          results.push({ ...action, entityId: created.id, after: created, warnings: warnings.length ? warnings : undefined });
+
+          // Log operation for potential rollback
+          const logIndex = transactionLog.push({
+            sequence: sequence++,
+            actionType: 'task.create',
+            entityId: created.id,
+            before: { task: beforeSnapshot ?? undefined },
+            auditRecorded: false,
+            timestamp: now(),
+          }) - 1;
+
           await recordAudit(db, {
             workspaceId,
-            entityType: 'project',
-            entityId: deleted.project.id,
-            action: 'delete',
-            before: { project: before ?? deleted.project, tasks: tasksBefore },
-            after: null,
+            entityType: 'task',
+            entityId: created.id,
+            action: 'create',
+            before: null,
+            after: created,
             actor,
             reason: draft.reason ?? null,
-            projectId: deleted.project.id,
-            taskId: null,
+            projectId: created.projectId,
+            taskId: created.id,
             draftId: draft.id,
           });
+          transactionLog[logIndex]!.auditRecorded = true;
+
+        } else if (action.action === 'update' && action.entityId) {
+          const before = await getTaskById(db, action.entityId, workspaceId);
+
+          if (!before) {
+            throw new Error(`Task not found: ${action.entityId}. The task may have been deleted or the draft is outdated.`);
+          }
+          if (draftProjectId && before.projectId !== draftProjectId) {
+            results.push({
+              ...action,
+              before,
+              after: null,
+              warnings: ['Task update skipped because it targets a different project than the active draft project.'],
+            });
+            continue;
+          }
+
+          if (!action.after) {
+            throw new Error(`Invalid draft: No update data provided for task ${action.entityId}. This draft may be corrupted.`);
+          }
+
+          const updated = await updateTask(db, action.entityId, {
+            title: (action.after?.title as string) ?? undefined,
+            description: (action.after?.description as string) ?? undefined,
+            status: toOptionalTaskStatus(action.after?.status),
+            priority: toOptionalPriority(action.after?.priority),
+            wbs: (action.after?.wbs as string) ?? undefined,
+            startDate: (action.after?.startDate as number) ?? undefined,
+            dueDate: (action.after?.dueDate as number) ?? undefined,
+            completion: (action.after?.completion as number) ?? undefined,
+            assignee: (action.after?.assignee as string) ?? undefined,
+            isMilestone: (action.after?.isMilestone as boolean) ?? undefined,
+            predecessors: (action.after?.predecessors as string[]) ?? undefined,
+          }, workspaceId);
+
+          if (updated) {
+            results.push({ ...action, before: before ?? undefined, after: updated });
+
+            // Log operation for potential rollback
+            const logIndex = transactionLog.push({
+              sequence: sequence++,
+              actionType: 'task.update',
+              entityId: updated.id,
+              before: { task: before ?? undefined },
+              auditRecorded: false,
+              timestamp: now(),
+            }) - 1;
+
+            await recordAudit(db, {
+              workspaceId,
+              entityType: 'task',
+              entityId: updated.id,
+              action: 'update',
+              before: before ?? null,
+              after: updated,
+              actor,
+              reason: draft.reason ?? null,
+              projectId: updated.projectId,
+              taskId: updated.id,
+              draftId: draft.id,
+            });
+            transactionLog[logIndex]!.auditRecorded = true;
+          }
+
+        } else if (action.action === 'delete' && action.entityId) {
+          const before = await getTaskById(db, action.entityId, workspaceId);
+          if (before && draftProjectId && before.projectId !== draftProjectId) {
+            results.push({
+              ...action,
+              before,
+              after: null,
+              warnings: ['Task delete skipped because it targets a different project than the active draft project.'],
+            });
+            continue;
+          }
+
+          const deleted = await deleteTask(db, action.entityId, workspaceId);
+          results.push({ ...action, before: before ?? undefined, after: null });
+
+          if (deleted) {
+            // Log operation for potential rollback
+            const logIndex = transactionLog.push({
+              sequence: sequence++,
+              actionType: 'task.delete',
+              entityId: deleted.id,
+              before: { task: before ?? undefined },
+              auditRecorded: false,
+              timestamp: now(),
+            }) - 1;
+
+            await recordAudit(db, {
+              workspaceId,
+              entityType: 'task',
+              entityId: deleted.id,
+              action: 'delete',
+              before: before ?? null,
+              after: null,
+              actor,
+              reason: draft.reason ?? null,
+              projectId: deleted.projectId,
+              taskId: deleted.id,
+              draftId: draft.id,
+            });
+            transactionLog[logIndex]!.auditRecorded = true;
+          }
         }
       }
-      continue;
     }
 
-    if (action.entityType === 'task') {
-      if (action.action === 'create' && action.after) {
-        const warnings: string[] = [];
-        const actionProjectId = (action.after.projectId as string | undefined) ?? undefined;
-        let resolvedProjectId = actionProjectId ?? draftProjectId ?? '';
-        if (draftProjectId && actionProjectId && actionProjectId !== draftProjectId) {
-          warnings.push('Task create projectId did not match the draft project. Using the draft project instead.');
-          resolvedProjectId = draftProjectId;
-        }
-        if (!resolvedProjectId) {
-          throw new Error('Missing projectId for task creation.');
-        }
-        const created = await createTask(db, {
-          id: (action.after.id as string) ?? undefined,
-          projectId: resolvedProjectId,
-          title: (action.after.title as string) ?? 'Untitled Task',
-          description: (action.after.description as string) ?? undefined,
-          status: toTaskStatus(action.after.status, 'TODO'),
-          priority: toPriority(action.after.priority, 'MEDIUM'),
-          wbs: (action.after.wbs as string) ?? undefined,
-          startDate: (action.after.startDate as number) ?? undefined,
-          dueDate: (action.after.dueDate as number) ?? undefined,
-          completion: (action.after.completion as number) ?? undefined,
-          assignee: (action.after.assignee as string) ?? undefined,
-          isMilestone: (action.after.isMilestone as boolean) ?? undefined,
-          predecessors: (action.after.predecessors as string[]) ?? undefined,
-          createdAt: (action.after.createdAt as number) ?? undefined,
-          updatedAt: (action.after.updatedAt as number) ?? undefined,
-        }, workspaceId);
-        if (!created) {
-          throw new Error(`Invalid project for task creation: ${resolvedProjectId}.`);
-        }
-        results.push({ ...action, entityId: created.id, after: created, warnings: warnings.length ? warnings : undefined });
-        await recordAudit(db, {
-          workspaceId,
-          entityType: 'task',
-          entityId: created.id,
-          action: 'create',
-          before: null,
-          after: created,
-          actor,
-          reason: draft.reason ?? null,
-          projectId: created.projectId,
-          taskId: created.id,
-          draftId: draft.id,
+    await db.update(drafts).set({ status: 'applied' }).where(eq(drafts.id, draft.id));
+    return { draft: { ...draft, status: 'applied' }, results };
+
+  } catch (error) {
+    // Compensating transaction: rollback all completed operations in reverse order
+    console.error('Draft application failed, initiating compensating rollback', {
+      draftId: draft.id,
+      operationsCompleted: transactionLog.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    // Rollback in reverse order (LIFO)
+    const rollbackErrors: Array<{ entry: CompensatingLogEntry; error: string }> = [];
+    for (let i = transactionLog.length - 1; i >= 0; i--) {
+      const entry = transactionLog[i]!;
+      try {
+        await rollbackOperation(db, entry, workspaceId);
+      } catch (rollbackError) {
+        rollbackErrors.push({
+          entry,
+          error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
         });
-      } else if (action.action === 'update' && action.entityId) {
-        const before = await getTaskById(db, action.entityId, workspaceId);
-
-        if (!before) {
-          throw new Error(`Task not found: ${action.entityId}. The task may have been deleted or the draft is outdated.`);
-        }
-        if (draftProjectId && before.projectId !== draftProjectId) {
-          results.push({
-            ...action,
-            before,
-            after: null,
-            warnings: ['Task update skipped because it targets a different project than the active draft project.'],
-          });
-          continue;
-        }
-
-        if (!action.after) {
-          throw new Error(`Invalid draft: No update data provided for task ${action.entityId}. This draft may be corrupted.`);
-        }
-
-        const updated = await updateTask(db, action.entityId, {
-          title: (action.after?.title as string) ?? undefined,
-          description: (action.after?.description as string) ?? undefined,
-          status: toOptionalTaskStatus(action.after?.status),
-          priority: toOptionalPriority(action.after?.priority),
-          wbs: (action.after?.wbs as string) ?? undefined,
-          startDate: (action.after?.startDate as number) ?? undefined,
-          dueDate: (action.after?.dueDate as number) ?? undefined,
-          completion: (action.after?.completion as number) ?? undefined,
-          assignee: (action.after?.assignee as string) ?? undefined,
-          isMilestone: (action.after?.isMilestone as boolean) ?? undefined,
-          predecessors: (action.after?.predecessors as string[]) ?? undefined,
-        }, workspaceId);
-        if (updated) {
-          results.push({ ...action, before: before ?? undefined, after: updated });
-          await recordAudit(db, {
-            workspaceId,
-            entityType: 'task',
-            entityId: updated.id,
-            action: 'update',
-            before: before ?? null,
-            after: updated,
-            actor,
-            reason: draft.reason ?? null,
-            projectId: updated.projectId,
-            taskId: updated.id,
-            draftId: draft.id,
-          });
-        }
-      } else if (action.action === 'delete' && action.entityId) {
-        const before = await getTaskById(db, action.entityId, workspaceId);
-        if (before && draftProjectId && before.projectId !== draftProjectId) {
-          results.push({
-            ...action,
-            before,
-            after: null,
-            warnings: ['Task delete skipped because it targets a different project than the active draft project.'],
-          });
-          continue;
-        }
-        const deleted = await deleteTask(db, action.entityId, workspaceId);
-        results.push({ ...action, before: before ?? undefined, after: null });
-        if (deleted) {
-          await recordAudit(db, {
-            workspaceId,
-            entityType: 'task',
-            entityId: deleted.id,
-            action: 'delete',
-            before: before ?? null,
-            after: null,
-            actor,
-            reason: draft.reason ?? null,
-            projectId: deleted.projectId,
-            taskId: deleted.id,
-            draftId: draft.id,
-          });
-        }
       }
     }
+
+    // Mark draft as failed with details
+    await db.update(drafts).set({
+      status: 'pending', // Keep pending so user can retry
+    }).where(eq(drafts.id, draft.id));
+
+    // Construct comprehensive error message
+    const errorMessage = [
+      `Draft application failed after ${transactionLog.length} operations.`,
+      rollbackErrors.length > 0
+        ? `Rollback completed with ${rollbackErrors.length} errors.`
+        : 'Rollback completed successfully.',
+      rollbackErrors.length > 0 ? 'Rollback errors: ' + rollbackErrors.map(e => `[${e.entry.actionType} on ${e.entry.entityId}: ${e.error}]`).join(', ') : '',
+    ].filter(Boolean).join(' ');
+
+    console.error('Compensating rollback completed', {
+      draftId: draft.id,
+      operationsAttempted: transactionLog.length,
+      rollbackFailures: rollbackErrors.length,
+      rollbackErrors,
+    });
+
+    throw new Error(errorMessage);
   }
-
-  await db.update(drafts).set({ status: 'applied' }).where(eq(drafts.id, draft.id));
-  return { draft: { ...draft, status: 'applied' }, results };
 };
 
 export const refreshDraftActions = async (

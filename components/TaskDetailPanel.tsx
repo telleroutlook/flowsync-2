@@ -11,8 +11,16 @@ import { X, AlertTriangle, Check, Trash2, Calendar } from 'lucide-react';
 const DAY_MS = 86400000;
 const clampCompletion = (value: number) => Math.min(100, Math.max(0, value));
 
+function isValidTimestamp(timestamp: number): boolean {
+  return (
+    Number.isFinite(timestamp) &&
+    timestamp > 0 &&
+    timestamp < 4000000000000 // Year 2096+ sanity check
+  );
+}
+
 interface TaskDetailPanelProps {
-  selectedTask: Task;
+  selectedTask: Task | null;
   onClose: () => void;
   onUpdate: (id: string, updates: Partial<Task>) => void;
   tasks: Task[];
@@ -39,9 +47,18 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
     });
   }, [selectedTask, tasks]);
 
+  const isOverdue = useMemo(() => {
+    if (!selectedTask) return false;
+    if (!selectedTask.dueDate) return false;
+    if (!isValidTimestamp(selectedTask.dueDate)) return false;
+    if (selectedTask.status === TaskStatus.DONE) return false;
+    return selectedTask.dueDate < Date.now();
+  }, [selectedTask]);
+
   const hasPredecessorConflicts = predecessorDetails.some(item => item.conflict);
 
   const availableTasks = useMemo(() => {
+    if (!selectedTask) return [];
     return tasks.filter(task =>
       task.id !== selectedTask.id &&
       !selectedTask.predecessors?.includes(task.id) &&
@@ -50,20 +67,24 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
   }, [tasks, selectedTask]);
 
   const handleUpdate = useCallback((field: keyof Task, value: unknown) => {
+    if (!selectedTask) return;
     onUpdate(selectedTask.id, { [field]: value });
-  }, [onUpdate, selectedTask.id]);
+  }, [onUpdate, selectedTask?.id]);
 
   const handleRemovePredecessor = useCallback((ref: string) => {
+    if (!selectedTask) return;
     const predecessors = (selectedTask.predecessors || []).filter(p => p !== ref);
     onUpdate(selectedTask.id, { predecessors });
   }, [onUpdate, selectedTask]);
 
   const handleAddPredecessor = useCallback((taskId: string) => {
+    if (!selectedTask) return;
     const predecessors = [...(selectedTask.predecessors || []), taskId];
     onUpdate(selectedTask.id, { predecessors });
   }, [onUpdate, selectedTask]);
 
   const handleFixSchedule = useCallback(() => {
+    if (!selectedTask) return;
     const maxEnd = predecessorDetails.reduce((acc, item) => {
       if (!item.task) return acc;
       return Math.max(acc, getTaskEnd(item.task));
@@ -75,6 +96,10 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
     const nextEnd = Math.max(nextStart + DAY_MS, nextStart + duration);
     onUpdate(selectedTask.id, { startDate: nextStart, dueDate: nextEnd });
   }, [onUpdate, selectedTask, predecessorDetails]);
+
+  if (!selectedTask) {
+    return null;
+  }
 
   return (
     <div className="w-[350px] bg-surface border-l border-border-subtle shadow-xl flex flex-col h-full animate-slide-in-right z-30">
@@ -157,7 +182,7 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
               <Input
                 id="task-due"
                 type="date"
-                className={cn("bg-surface h-7 text-xs px-2", selectedTask.dueDate && selectedTask.dueDate < Date.now() && selectedTask.status !== TaskStatus.DONE && "border-negative text-negative")}
+                className={cn("bg-surface h-7 text-xs px-2", isOverdue && "border-negative text-negative")}
                 value={formatDateInput(selectedTask.dueDate)}
                 onChange={(event) => {
                   const dueDate = parseDateInput(event.target.value);
