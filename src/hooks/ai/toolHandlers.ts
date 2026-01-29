@@ -54,30 +54,34 @@ const getNumberParam = (args: Record<string, unknown>, key: string): number | un
 
 const toolHandlers: Record<string, ToolHandlerFunction> = {
   // Read-only tools
-  listProjects: async (_args, { api, pushProcessingStep, t }) => {
+  listProjects: async (_args, { api, activeProjectId, pushProcessingStep, t }) => {
     pushProcessingStep?.(t('processing.reading_project_list'));
     const list = await api.listProjects();
+    const filtered = activeProjectId ? list.filter((project) => project.id === activeProjectId) : list;
     const output = t('tool.projects_list', {
-      count: list.length,
-      items: list.map(p => `${p.name} (${p.id})`).join(', ')
+      count: filtered.length,
+      items: filtered.map(p => `${p.name} (${p.id})`).join(', ')
     });
     return { output };
   },
 
-  getProject: async (args, { api, pushProcessingStep, t }) => {
+  getProject: async (args, { api, activeProjectId, pushProcessingStep, t }) => {
     const id = getStringParam(args, 'id');
     if (!id) {
       return { output: t('tool.error.invalid_project_id') };
+    }
+    if (activeProjectId && id !== activeProjectId) {
+      return { output: t('tool.error.project_not_active') };
     }
     pushProcessingStep?.(t('processing.reading_project_details'));
     const project = await api.getProject(id);
     return { output: t('tool.project_details', { name: project.name, id: project.id }) };
   },
 
-  listTasks: async (args, { api, pushProcessingStep, t }) => {
+  listTasks: async (args, { api, activeProjectId, pushProcessingStep, t }) => {
     pushProcessingStep?.(t('processing.reading_task_list'));
     const result = await api.listTasks({
-      projectId: getStringParam(args, 'projectId'),
+      projectId: activeProjectId,
       status: getStringParam(args, 'status'),
       priority: getStringParam(args, 'priority'),
       assignee: getStringParam(args, 'assignee'),
@@ -104,13 +108,16 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     return toolHandlers.listTasks(args, context);
   },
 
-  getTask: async (args, { api, pushProcessingStep, t }) => {
+  getTask: async (args, { api, activeProjectId, pushProcessingStep, t }) => {
     const id = getStringParam(args, 'id');
     if (!id) {
       return { output: t('tool.error.invalid_task_id') };
     }
     pushProcessingStep?.(t('processing.reading_task_details'));
     const task = await api.getTask(id);
+    if (activeProjectId && task.projectId !== activeProjectId) {
+      return { output: t('tool.error.task_not_in_active_project') };
+    }
     const output = t('tool.task_details', {
       title: task.title,
       id: task.id,
@@ -122,7 +129,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
   },
 
   // Write tools - return draft actions instead of executing directly
-  createProject: (args, { activeProjectId, generateId }) => {
+  createProject: (args, { generateId }) => {
     const draftActions: DraftAction[] = [{
       id: generateId(),
       entityType: 'project',
@@ -140,12 +147,19 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     };
   },
 
-  updateProject: (args, { generateId }) => {
+  updateProject: (args, { activeProjectId, generateId, t }) => {
+    const projectId = getStringParam(args, 'id');
+    if (!projectId) {
+      return { output: t('tool.error.invalid_project_id') };
+    }
+    if (activeProjectId && projectId !== activeProjectId) {
+      return { output: t('tool.error.project_not_active') };
+    }
     const draftActions: DraftAction[] = [{
       id: generateId(),
       entityType: 'project',
       action: 'update',
-      entityId: getStringParam(args, 'id'),
+      entityId: projectId,
       after: {
         name: args.name,
         description: args.description,
@@ -159,12 +173,19 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     };
   },
 
-  deleteProject: (args, { generateId }) => {
+  deleteProject: (args, { activeProjectId, generateId, t }) => {
+    const projectId = getStringParam(args, 'id');
+    if (!projectId) {
+      return { output: t('tool.error.invalid_project_id') };
+    }
+    if (activeProjectId && projectId !== activeProjectId) {
+      return { output: t('tool.error.project_not_active') };
+    }
     const draftActions: DraftAction[] = [{
       id: generateId(),
       entityType: 'project',
       action: 'delete',
-      entityId: getStringParam(args, 'id'),
+      entityId: projectId,
     }];
     return {
       output: '',
@@ -173,13 +194,51 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     };
   },
 
-  createTask: (args, { activeProjectId, generateId }) => {
+  createTask: (args, { activeProjectId, generateId, t }) => {
+    const requestedProjectId = getStringParam(args, 'projectId');
+    const corrected = !!activeProjectId && !!requestedProjectId && requestedProjectId !== activeProjectId;
     const draftActions: DraftAction[] = [{
       id: generateId(),
       entityType: 'task',
       action: 'create',
       after: {
-        projectId: (args.projectId as string) || activeProjectId,
+        projectId: activeProjectId,
+        title: args.title,
+        description: args.description,
+        status: args.status,
+        priority: args.priority,
+        wbs: args.wbs,
+        startDate: args.startDate,
+        dueDate: args.dueDate,
+        completion: args.completion,
+        assignee: args.assignee,
+        isMilestone: args.isMilestone,
+        predecessors: args.predecessors,
+      },
+    }];
+    return {
+      output: corrected ? t('tool.warning.project_id_corrected') : '',
+      draftActions,
+      draftReason: getStringParam(args, 'reason'),
+    };
+  },
+
+  updateTask: async (args, { api, activeProjectId, generateId, pushProcessingStep, t }) => {
+    const taskId = getStringParam(args, 'id');
+    if (!taskId) {
+      return { output: t('tool.error.invalid_task_id') };
+    }
+    pushProcessingStep?.(t('processing.reading_task_details'));
+    const task = await api.getTask(taskId);
+    if (activeProjectId && task.projectId !== activeProjectId) {
+      return { output: t('tool.error.task_not_in_active_project') };
+    }
+    const draftActions: DraftAction[] = [{
+      id: generateId(),
+      entityType: 'task',
+      action: 'update',
+      entityId: taskId,
+      after: {
         title: args.title,
         description: args.description,
         status: args.status,
@@ -200,39 +259,21 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     };
   },
 
-  updateTask: (args, { generateId }) => {
-    const draftActions: DraftAction[] = [{
-      id: generateId(),
-      entityType: 'task',
-      action: 'update',
-      entityId: getStringParam(args, 'id'),
-      after: {
-        title: args.title,
-        description: args.description,
-        status: args.status,
-        priority: args.priority,
-        wbs: args.wbs,
-        startDate: args.startDate,
-        dueDate: args.dueDate,
-        completion: args.completion,
-        assignee: args.assignee,
-        isMilestone: args.isMilestone,
-        predecessors: args.predecessors,
-      },
-    }];
-    return {
-      output: '',
-      draftActions,
-      draftReason: getStringParam(args, 'reason'),
-    };
-  },
-
-  deleteTask: (args, { generateId }) => {
+  deleteTask: async (args, { api, activeProjectId, generateId, pushProcessingStep, t }) => {
+    const taskId = getStringParam(args, 'id');
+    if (!taskId) {
+      return { output: t('tool.error.invalid_task_id') };
+    }
+    pushProcessingStep?.(t('processing.reading_task_details'));
+    const task = await api.getTask(taskId);
+    if (activeProjectId && task.projectId !== activeProjectId) {
+      return { output: t('tool.error.task_not_in_active_project') };
+    }
     const draftActions: DraftAction[] = [{
       id: generateId(),
       entityType: 'task',
       action: 'delete',
-      entityId: getStringParam(args, 'id'),
+      entityId: taskId,
     }];
     return {
       output: '',
@@ -255,6 +296,22 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       after?: Record<string, unknown>;
     };
 
+    const newProjectIds = new Set<string>();
+    for (const action of args.actions) {
+      if (action && typeof action === 'object') {
+        const rawAction = action as RawAction;
+        if (rawAction.entityType === 'project' && rawAction.action === 'create') {
+          const createdId = (rawAction.after?.id as string | undefined) ?? undefined;
+          if (createdId) newProjectIds.add(createdId);
+        }
+      }
+    }
+
+    const allowedProjectIds = new Set<string>();
+    if (activeProjectId) allowedProjectIds.add(activeProjectId);
+    for (const projectId of newProjectIds) allowedProjectIds.add(projectId);
+
+    let correctedProjectCount = 0;
     const draftActions: DraftAction[] = args.actions
       .map((action: unknown) => {
         if (!action || typeof action !== 'object') {
@@ -265,6 +322,13 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         const processedAfter = { ...(rawAction.after || {}) };
         if (rawAction.entityType === 'task' && rawAction.action === 'create' && !processedAfter.projectId) {
           processedAfter.projectId = activeProjectId;
+        }
+        if (rawAction.entityType === 'task' && rawAction.action === 'create' && processedAfter.projectId) {
+          const projectId = processedAfter.projectId as string;
+          if (allowedProjectIds.size > 0 && !allowedProjectIds.has(projectId)) {
+            processedAfter.projectId = activeProjectId;
+            correctedProjectCount += 1;
+          }
         }
 
         return {
@@ -285,8 +349,12 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       };
     }
 
+    const output = correctedProjectCount > 0
+      ? t('tool.warning.project_id_corrected_count', { count: correctedProjectCount })
+      : '';
+
     return {
-      output: '',
+      output,
       draftActions,
       draftReason: getStringParam(args, 'reason'),
     };

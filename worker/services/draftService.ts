@@ -469,6 +469,7 @@ export const applyDraft = async (
   }
 
   const results: DraftAction[] = [];
+  const draftProjectId = draft.projectId ?? null;
 
   for (const action of draft.actions) {
       if (action.entityType === 'project') {
@@ -546,9 +547,19 @@ export const applyDraft = async (
 
     if (action.entityType === 'task') {
       if (action.action === 'create' && action.after) {
+        const warnings: string[] = [];
+        const actionProjectId = (action.after.projectId as string | undefined) ?? undefined;
+        let resolvedProjectId = actionProjectId ?? draftProjectId ?? '';
+        if (draftProjectId && actionProjectId && actionProjectId !== draftProjectId) {
+          warnings.push('Task create projectId did not match the draft project. Using the draft project instead.');
+          resolvedProjectId = draftProjectId;
+        }
+        if (!resolvedProjectId) {
+          throw new Error('Missing projectId for task creation.');
+        }
         const created = await createTask(db, {
           id: (action.after.id as string) ?? undefined,
-          projectId: (action.after.projectId as string) ?? '',
+          projectId: resolvedProjectId,
           title: (action.after.title as string) ?? 'Untitled Task',
           description: (action.after.description as string) ?? undefined,
           status: toTaskStatus(action.after.status, 'TODO'),
@@ -564,9 +575,9 @@ export const applyDraft = async (
           updatedAt: (action.after.updatedAt as number) ?? undefined,
         }, workspaceId);
         if (!created) {
-          throw new Error('Invalid project for task creation.');
+          throw new Error(`Invalid project for task creation: ${resolvedProjectId}.`);
         }
-        results.push({ ...action, entityId: created.id, after: created });
+        results.push({ ...action, entityId: created.id, after: created, warnings: warnings.length ? warnings : undefined });
         await recordAudit(db, {
           workspaceId,
           entityType: 'task',
@@ -585,6 +596,15 @@ export const applyDraft = async (
 
         if (!before) {
           throw new Error(`Task not found: ${action.entityId}. The task may have been deleted or the draft is outdated.`);
+        }
+        if (draftProjectId && before.projectId !== draftProjectId) {
+          results.push({
+            ...action,
+            before,
+            after: null,
+            warnings: ['Task update skipped because it targets a different project than the active draft project.'],
+          });
+          continue;
         }
 
         if (!action.after) {
@@ -622,6 +642,15 @@ export const applyDraft = async (
         }
       } else if (action.action === 'delete' && action.entityId) {
         const before = await getTaskById(db, action.entityId, workspaceId);
+        if (before && draftProjectId && before.projectId !== draftProjectId) {
+          results.push({
+            ...action,
+            before,
+            after: null,
+            warnings: ['Task delete skipped because it targets a different project than the active draft project.'],
+          });
+          continue;
+        }
         const deleted = await deleteTask(db, action.entityId, workspaceId);
         results.push({ ...action, before: before ?? undefined, after: null });
         if (deleted) {
