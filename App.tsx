@@ -507,24 +507,25 @@ function App() {
       <div className="flex-1 flex flex-col h-full bg-background relative overflow-hidden min-w-0">
         {/* Header */}
         <div className="min-h-[3.5rem] py-2 border-b border-border-subtle flex items-center justify-between flex-wrap gap-x-4 gap-y-2 px-4 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0">
-          <div className="flex items-center flex-wrap gap-4">
+          <div className="flex items-center flex-wrap gap-3">
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setIsSidebarOpen(prev => !prev)}
               title={isSidebarOpen ? t('app.sidebar.close') : t('app.sidebar.open')}
+              className="h-8 w-8"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-4 h-4" />
             </Button>
 
-            <div className="flex flex-col">
+            <div className="flex flex-col justify-center">
               <h2 className="text-sm font-bold text-text-primary leading-tight truncate max-w-[200px]">{activeProject.name}</h2>
               {activeProject.description && (
                  <p className="text-[10px] font-medium text-text-secondary truncate max-w-[200px]">{activeProject.description}</p>
               )}
             </div>
             
-            <div className="h-5 w-px bg-border-subtle mx-2 hidden sm:block"></div>
+            <div className="h-5 w-px bg-border-subtle mx-1 hidden sm:block"></div>
 
             {/* View Switcher */}
             <div className="flex flex-wrap p-1 bg-background/50 rounded-lg border border-border-subtle gap-1">
@@ -532,27 +533,27 @@ function App() {
                  variant={viewMode === 'BOARD' ? 'secondary' : 'ghost'}
                  size="sm"
                  onClick={() => setViewMode('BOARD')}
-                 className="h-7 px-2 text-xs"
+                 className="h-8 px-3 text-xs"
                >
-                 <Grid className="w-3.5 h-3.5 mr-1.5" />
+                 <Grid className="w-4 h-4 mr-2" />
                  {t('app.view.board')}
                </Button>
                <Button
                  variant={viewMode === 'LIST' ? 'secondary' : 'ghost'}
                  size="sm"
                  onClick={() => setViewMode('LIST')}
-                 className="h-7 px-2 text-xs"
+                 className="h-8 px-3 text-xs"
                >
-                 <ListIcon className="w-3.5 h-3.5 mr-1.5" />
+                 <ListIcon className="w-4 h-4 mr-2" />
                  {t('app.view.list')}
                </Button>
                <Button
                  variant={viewMode === 'GANTT' ? 'secondary' : 'ghost'}
                  size="sm"
                  onClick={() => setViewMode('GANTT')}
-                 className="h-7 px-2 text-xs"
+                 className="h-8 px-3 text-xs"
                >
-                 <Calendar className="w-3.5 h-3.5 mr-1.5" />
+                 <Calendar className="w-4 h-4 mr-2" />
                  {t('app.view.gantt')}
                </Button>
             </div>
@@ -561,34 +562,34 @@ function App() {
           <div className="flex items-center flex-wrap gap-2">
              {/* Zoom Panel */}
              <div className="flex items-center flex-wrap gap-1 bg-background/50 rounded-lg border border-border-subtle px-2 py-1">
-               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary/70">{t('app.zoom')}</span>
+               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary/70 mr-1">{t('app.zoom')}</span>
                <Button
                  variant="ghost"
                  size="sm"
                  onClick={() => handleZoomStep(-1)}
                  disabled={zoomIndex === 0}
-                 className="h-7 w-7 p-0"
+                 className="h-8 w-8 p-0"
                  title={t('app.zoom.out')}
                >
-                 <Minus className="w-3.5 h-3.5" />
+                 <Minus className="w-4 h-4" />
                </Button>
-               <span className="text-xs font-mono text-text-secondary min-w-[44px] text-center">{Math.round(currentZoom * 100)}%</span>
+               <span className="text-xs font-mono text-text-secondary min-w-[40px] text-center">{Math.round(currentZoom * 100)}%</span>
                <Button
                  variant="ghost"
                  size="sm"
                  onClick={() => handleZoomStep(1)}
                  disabled={zoomIndex === zoomLevels.length - 1}
-                 className="h-7 w-7 p-0"
+                 className="h-8 w-8 p-0"
                  title={t('app.zoom.in')}
                >
-                 <Plus className="w-3.5 h-3.5" />
+                 <Plus className="w-4 h-4" />
                </Button>
                <Button
                  variant="ghost"
                  size="sm"
                  onClick={() => updateZoom(viewMode, 1)}
                  disabled={currentZoom === 1}
-                 className="h-7 px-2 text-[10px] uppercase tracking-wider"
+                 className="h-8 px-2 text-[10px] uppercase tracking-wider ml-1"
                  title={t('app.zoom.reset')}
                >
                  <RotateCcw className="w-3 h-3 mr-1" />
@@ -613,9 +614,9 @@ function App() {
                 variant="ghost"
                 size="sm"
                 onClick={() => importInputRef.current?.click()}
-                className="h-7 px-2 text-xs"
+                className="h-8 px-3 text-xs"
               >
-                <Upload className="w-3.5 h-3.5 mr-1.5" />
+                <Upload className="w-4 h-4 mr-2" />
                 {t('app.header.import')}
               </Button>
              </div>
@@ -626,7 +627,7 @@ function App() {
                 variant={isAuditOpen ? 'secondary' : 'outline'}
                 size="sm"
                 onClick={() => setIsAuditOpen(prev => !prev)}
-                className="h-9 px-3 gap-2"
+                className="h-8 px-3 text-xs gap-2"
                 aria-label={`${t('app.header.audit')} (${auditLogs.length})`}
               >
                 <History className="w-4 h-4" />
@@ -647,7 +648,7 @@ function App() {
                   setIsExportOpen(prev => !prev);
                  }}
                  ref={exportButtonRef}
-                 className="h-9 px-3 gap-2"
+                 className="h-8 px-3 text-xs gap-2"
                >
                  <span>{t('app.header.export')}</span>
                  <Download className="w-4 h-4" />
@@ -698,8 +699,9 @@ function App() {
                 size="icon"
                 onClick={() => setIsChatOpen(prev => !prev)}
                 title={t('app.header.toggle_chat')}
+                className="h-8 w-8"
              >
-                <MessageSquare className="w-5 h-5" />
+                <MessageSquare className="w-4 h-4" />
              </Button>
           </div>
         </div>
