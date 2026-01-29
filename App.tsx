@@ -574,7 +574,7 @@ function App() {
 
       {/* 2. Workspace (Middle) */}
       <div className={cn(
-        "flex-1 flex flex-col h-full bg-background relative overflow-hidden min-w-0",
+        "flex-1 flex flex-col bg-background relative overflow-hidden min-w-0",
         (isMobile && mobileTab !== 'workspace') ? "hidden" : "flex"
       )}>
         {/* Header */}
@@ -921,7 +921,7 @@ function App() {
 
       {/* 3. Chat Interface (Right) */}
       <div className={cn(
-          (isMobile && mobileTab !== 'chat') ? "hidden" : "block h-full md:h-auto"
+          (isMobile && mobileTab !== 'chat') ? "hidden" : "flex-1 min-h-0 md:flex-none md:block md:h-auto"
       )}>
         <ChatInterface
           isChatOpen={isChatOpen}
