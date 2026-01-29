@@ -5,28 +5,29 @@ import {
   generateId,
   storageGet,
   storageSet,
-  clampCompletion,
-  formatExportTimestamp,
-  makeSafeFileName,
-  formatCsvValue,
-  normalizeStatus,
-  normalizePriority,
-  parseBoolean,
-  parseNumeric,
-  parseCompletion,
   parseDelimitedContent,
   buildDisplayRows,
   buildExportRows,
   triggerDownload,
+  makeSafeFileName,
+  formatCsvValue,
   EXPORT_HEADERS,
   DISPLAY_HEADERS,
+  // Import utilities
+  parseProjectRecord,
+  parseTaskRecord,
+  resolveProject,
+  registerProject,
+  processImportActions,
+  parseLowercaseRecord,
+  type ImportResult,
+  type ProcessedImport,
+  type ImportTask,
 } from '../utils';
 import { useI18n } from '../i18n';
 
 export type ExportFormat = 'csv' | 'tsv' | 'json' | 'markdown' | 'pdf';
 export type ImportStrategy = 'append' | 'merge';
-
-type ImportTask = Task & { projectName?: string };
 
 interface UseExportProps {
   projects: Project[];
@@ -235,367 +236,134 @@ export const useExport = ({
     };
   }, [handleExportTasks, lastExportFormat]);
 
-  const handleImportFile = useCallback((file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const content = String(reader.result || '');
-      const lowerName = file.name.toLowerCase();
+  // Parse import file and extract projects/tasks
+  const parseImportFile = useCallback(
+    (content: string, fileName: string): ImportResult | null => {
+      const lowerName = fileName.toLowerCase();
       let importedProjects: Project[] = [];
       let importedTasks: ImportTask[] = [];
       const projectById = new Map<string, Project>();
       const projectByName = new Map<string, Project>();
 
-      const registerProject = (project: Project) => {
-        const nameKey = project.name.trim().toLowerCase();
-        const existingById = projectById.get(project.id);
-        const existingByName = nameKey ? projectByName.get(nameKey) : undefined;
-        const target = existingById || existingByName;
-        if (target) {
-          if (project.name && project.name !== target.name) target.name = project.name;
-          if (project.description !== undefined) target.description = project.description;
-          if (project.icon !== undefined) target.icon = project.icon;
-          if (project.createdAt !== undefined) target.createdAt = project.createdAt;
-          if (project.updatedAt !== undefined) target.updatedAt = project.updatedAt;
-          if (!target.id && project.id) {
-            target.id = project.id;
-            projectById.set(project.id, target);
-          }
-          return target;
-        }
-        importedProjects.push(project);
-        projectById.set(project.id, project);
-        if (nameKey) projectByName.set(nameKey, project);
-        return project;
-      };
+      const resolveProjectFn = (projectId?: string, projectName?: string, meta?: Partial<Project>) =>
+        resolveProject(projectId, projectName, meta, activeProject, projects, projectById, projectByName, importedProjects);
 
-      const resolveProject = (projectId?: string, projectName?: string, meta?: Partial<Project>) => {
-        const name = projectName?.trim();
-        if (!projectId && !name) return activeProject;
-        if (!projectId && name) {
-          const existingWorkspace = projects.find(item => item.name === name);
-          if (existingWorkspace) {
-            projectById.set(existingWorkspace.id, existingWorkspace);
-            projectByName.set(name.toLowerCase(), existingWorkspace);
-            return existingWorkspace;
-          }
-        }
-        if (projectId) {
-          const existing = projectById.get(projectId);
-          if (existing) {
-            if (meta?.description !== undefined) existing.description = meta.description;
-            if (meta?.icon !== undefined) existing.icon = meta.icon;
-            if (meta?.createdAt !== undefined) existing.createdAt = meta.createdAt;
-            if (meta?.updatedAt !== undefined) existing.updatedAt = meta.updatedAt;
-            if (name) existing.name = name;
-            return existing;
-          }
-        }
-        if (name) {
-          const existingByName = projectByName.get(name.toLowerCase());
-          if (existingByName) {
-            if (meta?.description !== undefined) existingByName.description = meta.description;
-            if (meta?.icon !== undefined) existingByName.icon = meta.icon;
-            if (meta?.createdAt !== undefined) existingByName.createdAt = meta.createdAt;
-            if (meta?.updatedAt !== undefined) existingByName.updatedAt = meta.updatedAt;
-            return existingByName;
-          }
-        }
-        return registerProject({
-          id: projectId || generateId(),
-          name: name || activeProject.name,
-          description: meta?.description,
-          icon: meta?.icon,
-          createdAt: meta?.createdAt,
-          updatedAt: meta?.updatedAt,
-        });
-      };
-
-      const parseProjectRecord = (record: Record<string, unknown>) => {
-        const name = typeof record.name === 'string' ? record.name : '';
-        if (!name) return null;
-        return {
-          id: typeof record.id === 'string' ? record.id : generateId(),
-          name,
-          description: typeof record.description === 'string' ? record.description : undefined,
-          icon: typeof record.icon === 'string' ? record.icon : undefined,
-          createdAt: parseNumeric(record.createdAt),
-          updatedAt: parseNumeric(record.updatedAt),
-        } satisfies Project;
-      };
-
-      const parseTaskRecord = (record: Record<string, unknown>) => {
-        const projectName = typeof record.project === 'string' ? record.project : undefined;
-        const projectId = typeof record.projectId === 'string' ? record.projectId : undefined;
-        const project = resolveProject(projectId, projectName, {
-          description: typeof record.projectDescription === 'string' ? record.projectDescription : undefined,
-          icon: typeof record.projectIcon === 'string' ? record.projectIcon : undefined,
-          createdAt: parseNumeric(record.projectCreatedAt),
-          updatedAt: parseNumeric(record.projectUpdatedAt),
-        });
-        const predecessors = Array.isArray(record.predecessors)
-          ? record.predecessors.filter((item): item is string => typeof item === 'string')
-          : typeof record.predecessors === 'string'
-            ? record.predecessors.split(',').map(item => item.trim()).filter(Boolean)
-            : undefined;
-        const milestone = typeof record.isMilestone === 'boolean'
-          ? record.isMilestone
-          : parseBoolean(typeof record.isMilestone === 'string' ? record.isMilestone : undefined);
-        return {
-          id: typeof record.id === 'string' ? record.id : generateId(),
-          projectId: project.id,
-          projectName: project.name,
-          title: typeof record.title === 'string' ? record.title : 'Untitled Task',
-          description: typeof record.description === 'string' ? record.description : undefined,
-          status: normalizeStatus(typeof record.status === 'string' ? record.status : undefined),
-          priority: normalizePriority(typeof record.priority === 'string' ? record.priority : undefined),
-          wbs: typeof record.wbs === 'string' ? record.wbs : undefined,
-          createdAt: parseNumeric(record.createdAt) ?? Date.now(),
-          updatedAt: parseNumeric(record.updatedAt),
-          startDate: parseNumeric(record.startDate),
-          dueDate: parseNumeric(record.dueDate),
-          completion: parseCompletion(record.completion),
-          assignee: typeof record.assignee === 'string' ? record.assignee : undefined,
-          isMilestone: milestone,
-          predecessors,
-        };
-      };
-
+      // Parse JSON format
       if (lowerName.endsWith('.json')) {
         try {
           const payload = JSON.parse(content) as Record<string, unknown>;
           if (payload.version !== 2) {
             alert(t('import.failed_invalid_version'));
-            return;
+            return null;
           }
           if (!Array.isArray(payload.projects) || !Array.isArray(payload.tasks)) {
             alert(t('import.failed_invalid_format'));
-            return;
+            return null;
           }
-          const payloadProjects = payload.projects as Record<string, unknown>[];
-          payloadProjects.forEach((raw) => {
-            if (!raw || typeof raw !== 'object') return;
-            const project = parseProjectRecord(raw as Record<string, unknown>);
-            if (project) registerProject(project);
-          });
-          const payloadTasks = payload.tasks as Record<string, unknown>[];
-          importedTasks = payloadTasks
-            .filter((raw): raw is Record<string, unknown> => !!raw && typeof raw === 'object')
-            .map(raw => parseTaskRecord(raw));
+          for (const raw of payload.projects as Record<string, unknown>[]) {
+            if (!raw || typeof raw !== 'object') continue;
+            const project = parseProjectRecord(raw);
+            if (project) registerProject(project, projectById, projectByName, importedProjects);
+          }
+          for (const raw of payload.tasks as Record<string, unknown>[]) {
+            if (!raw || typeof raw !== 'object') continue;
+            const task = parseTaskRecord(raw, resolveProjectFn);
+            importedTasks.push(task);
+          }
         } catch {
           alert(t('import.failed_invalid_json'));
-          return;
+          return null;
         }
-      } else if (lowerName.endsWith('.csv') || lowerName.endsWith('.tsv')) {
+      }
+      // Parse CSV/TSV format
+      else if (lowerName.endsWith('.csv') || lowerName.endsWith('.tsv')) {
         const { headers, records } = parseDelimitedContent(content);
-        const requiredHeaders = EXPORT_HEADERS.map(header => header.toLowerCase());
+        const requiredHeaders = EXPORT_HEADERS.map((header) => header.toLowerCase());
         const headerSet = new Set(headers);
-        const hasRequiredHeaders = requiredHeaders.every(header => headerSet.has(header));
+        const hasRequiredHeaders = requiredHeaders.every((header) => headerSet.has(header));
         if (!hasRequiredHeaders) {
-          const missing = requiredHeaders.filter(header => !headerSet.has(header));
+          const missing = requiredHeaders.filter((header) => !headerSet.has(header));
           alert(t('import.failed_missing_headers', { headers: missing.join(', ') }));
-          return;
+          return null;
         }
+
         for (const record of records) {
-          const rowType = (record.rowtype || '').toLowerCase();
+          const normalizedRecord = parseLowercaseRecord(record);
+          const rowType = (normalizedRecord.rowType as string | undefined)?.toLowerCase();
           if (rowType !== 'project' && rowType !== 'task') {
             alert(t('import.failed_invalid_rowtype'));
-            return;
+            return null;
           }
-          const projectMeta = {
-            description: record.projectdescription || undefined,
-            icon: record.projecticon || undefined,
-            createdAt: parseNumeric(record.projectcreatedat),
-            updatedAt: parseNumeric(record.projectupdatedat),
-          };
+
           if (rowType === 'project') {
-            const name = record.project || undefined;
-            if (!name && !record.projectid) return;
-            resolveProject(record.projectid || undefined, name, projectMeta);
+            const project = parseProjectRecord(normalizedRecord);
+            if (project) registerProject(project, projectById, projectByName, importedProjects);
             continue;
           }
-          const project = resolveProject(record.projectid || undefined, record.project || undefined, projectMeta);
-          importedTasks.push({
-            id: record.id || generateId(),
-            projectId: project.id,
-            projectName: project.name,
-            title: record.title || 'Untitled Task',
-            description: record.description || undefined,
-            status: normalizeStatus(record.status),
-            priority: normalizePriority(record.priority),
-            wbs: record.wbs || undefined,
-            createdAt: parseNumeric(record.createdat) ?? Date.now(),
-            updatedAt: parseNumeric(record.updatedat),
-            startDate: parseNumeric(record.startdate),
-            dueDate: parseNumeric(record.duedate),
-            completion: parseCompletion(record.completion),
-            assignee: record.assignee || undefined,
-            isMilestone: parseBoolean(record.ismilestone),
-            predecessors: record.predecessors ? record.predecessors.split(',').map(item => item.trim()).filter(Boolean) : undefined,
-          });
+
+          importedTasks.push(parseTaskRecord(normalizedRecord, resolveProjectFn));
         }
       } else {
         alert(t('import.failed_invalid_format'));
-        return;
+        return null;
       }
 
       if (importedTasks.length === 0 && importedProjects.length === 0) {
         alert(t('import.no_tasks'));
-        return;
+        return null;
       }
 
-      const runImport = async () => {
-        const projectList = await apiService.listProjects();
-        const projectById = new Map(projectList.map(project => [project.id, project]));
-        const projectByName = new Map(projectList.map(project => [project.name, project]));
-        const projectIdMap = new Map<string, string>();
-        const projectCreateActions: DraftAction[] = [];
-        const projectUpdateActions: DraftAction[] = [];
+      return { projects: importedProjects, tasks: importedTasks };
+    },
+    [activeProject, projects, t]
+  );
 
-        importedProjects.forEach(project => {
-          const existingById = project.id ? projectById.get(project.id) : undefined;
-          const existingByName = projectByName.get(project.name);
-          if (existingById) {
-            projectIdMap.set(project.id, existingById.id);
-            if (importStrategy === 'merge') {
-              const existingDescription = existingById.description ?? undefined;
-              const existingIcon = existingById.icon ?? undefined;
-              const shouldUpdateName = project.name && project.name !== existingById.name;
-              const shouldUpdateDescription = project.description !== undefined && project.description !== existingDescription;
-              const shouldUpdateIcon = project.icon !== undefined && project.icon !== existingIcon;
-              if (shouldUpdateName || shouldUpdateDescription || shouldUpdateIcon) {
-                const after: Record<string, unknown> = { name: project.name };
-                if (project.description !== undefined) after.description = project.description;
-                if (project.icon !== undefined) after.icon = project.icon;
-                projectUpdateActions.push({
-                  id: generateId(),
-                  entityType: 'project',
-                  action: 'update',
-                  entityId: existingById.id,
-                  after,
-                });
-              }
-            }
-            return;
-          }
+  // Process import and submit drafts
+  const runImport = useCallback(
+    async (importResult: ImportResult) => {
+      const { projectActions, taskActions, projectCount, taskCount } = await processImportActions(
+        importResult.projects,
+        importResult.tasks,
+        importStrategy,
+        activeProject,
+        { listProjects: () => apiService.listProjects() },
+        fetchAllTasks
+      );
 
-          if (existingByName) {
-            projectIdMap.set(project.id, existingByName.id);
-            return;
-          }
+      if (projectActions.length > 0) {
+        await submitDraft(projectActions, { createdBy: 'user', autoApply: true, reason: 'Import projects', silent: true });
+      }
 
-          projectIdMap.set(project.id, project.id);
-          projectById.set(project.id, project);
-          if (!projectByName.has(project.name)) {
-            projectByName.set(project.name, project);
-          }
-          projectCreateActions.push({
-            id: generateId(),
-            entityType: 'project',
-            action: 'create',
-            after: {
-              id: project.id,
-              name: project.name,
-              description: project.description,
-              icon: project.icon,
-              createdAt: project.createdAt,
-              updatedAt: project.updatedAt,
-            },
-          });
-        });
+      if (taskActions.length > 0) {
+        await submitDraft(taskActions, { createdBy: 'user', autoApply: true, reason: 'Import tasks', silent: true });
+      }
 
-        const projectActions = [...projectCreateActions, ...projectUpdateActions];
-        if (projectActions.length > 0) {
-          await submitDraft(projectActions, { createdBy: 'user', autoApply: true, reason: 'Import projects', silent: true });
-        }
+      if (projectActions.length > 0 || taskActions.length > 0) {
+        await refreshData();
+        alert(
+          importStrategy === 'merge'
+            ? t('import.success_summary_merged', { projectCount, taskCount })
+            : t('import.success_summary_imported', { projectCount, taskCount })
+        );
+      }
+    },
+    [importStrategy, activeProject, fetchAllTasks, submitDraft, refreshData, t]
+  );
 
-        let taskActions: DraftAction[] = [];
-        let taskCount = 0;
-        if (importedTasks.length > 0) {
-          const existingTasks = await fetchAllTasks();
-          const existingTaskIds = new Set(existingTasks.map(item => item.id));
-
-          const usedIds = new Set(existingTaskIds);
-          const taskIdMap = new Map<string, string>();
-          const normalizedTasks = importedTasks.map(task => {
-            const originalId = task.id;
-            let finalId = originalId;
-            if (importStrategy === 'append' && usedIds.has(finalId)) {
-              do {
-                finalId = generateId();
-              } while (usedIds.has(finalId));
-            }
-            taskIdMap.set(originalId, finalId);
-            usedIds.add(finalId);
-            return { ...task, id: finalId };
-          });
-
-          const remappedTasks = normalizedTasks.map(task => ({
-            ...task,
-            predecessors: task.predecessors?.map(pred => taskIdMap.get(pred) ?? pred),
-          }));
-
-          const resolvedTasks = remappedTasks.map(task => {
-            const mappedProjectId = projectIdMap.get(task.projectId);
-            let projectId = mappedProjectId || (task.projectId && projectById.has(task.projectId) ? task.projectId : undefined);
-            if (!projectId && task.projectName) {
-              const byName = projectByName.get(task.projectName);
-              if (byName) projectId = byName.id;
-            }
-            if (!projectId) projectId = activeProject.id;
-            return { ...task, projectId };
-          });
-
-          taskActions = resolvedTasks.map(task => {
-            const shouldUpdate = importStrategy === 'merge' && existingTaskIds.has(task.id);
-            const afterPayload: Record<string, unknown> = {
-              projectId: task.projectId,
-              title: task.title,
-              description: task.description,
-              status: task.status,
-              priority: task.priority,
-              wbs: task.wbs,
-              startDate: task.startDate,
-              dueDate: task.dueDate,
-              completion: task.completion,
-              assignee: task.assignee,
-              isMilestone: task.isMilestone,
-              predecessors: task.predecessors,
-            };
-            if (!shouldUpdate) {
-              afterPayload.id = task.id;
-              afterPayload.createdAt = task.createdAt;
-              afterPayload.updatedAt = task.updatedAt;
-            }
-            return {
-              id: generateId(),
-              entityType: 'task',
-              action: shouldUpdate ? 'update' : 'create',
-              entityId: shouldUpdate ? task.id : undefined,
-              after: afterPayload,
-            };
-          });
-          taskCount = resolvedTasks.length;
-
-          if (taskActions.length > 0) {
-            await submitDraft(taskActions, { createdBy: 'user', autoApply: true, reason: 'Import tasks', silent: true });
-          }
-        }
-
-        if (projectActions.length > 0 || taskActions.length > 0) {
-          await refreshData();
-          const projectCount = projectCreateActions.length + projectUpdateActions.length;
-          alert(
-            importStrategy === 'merge'
-              ? t('import.success_summary_merged', { projectCount, taskCount })
-              : t('import.success_summary_imported', { projectCount, taskCount })
-          );
+  const handleImportFile = useCallback(
+    (file: File) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const content = String(reader.result || '');
+        const importResult = parseImportFile(content, file.name);
+        if (importResult) {
+          void runImport(importResult);
         }
       };
-
-      void runImport();
-    };
-    reader.readAsText(file);
-  }, [importStrategy, projects, activeProject, fetchAllTasks, submitDraft, refreshData, t]);
+      reader.readAsText(file);
+    },
+    [parseImportFile, runImport]
+  );
 
   return {
     isExportOpen,

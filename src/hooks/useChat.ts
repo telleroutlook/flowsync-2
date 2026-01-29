@@ -7,6 +7,10 @@ import { processToolCalls, type ApiClient, type ProcessingStep } from './ai';
 import { useI18n } from '../i18n';
 import { MAX_HISTORY_PART_CHARS } from '../../shared/aiLimits';
 
+// Local constants
+const MAX_RETRIES = 3;
+const MAX_HISTORY_MESSAGES = 10;
+
 interface UseChatProps {
   activeProjectId: string;
   activeProject: Project;
@@ -27,23 +31,44 @@ type AiHistoryItem = {
   parts: { text: string }[];
 };
 
-const buildAiHistory = (items: ChatMessage[]) => {
+// Helper: Convert chat role to AI role
+const toAiRole = (role: ChatMessage['role']): AiHistoryItem['role'] => {
+  if (role === 'user') return 'user';
+  if (role === 'system') return 'system';
+  return 'model';
+};
+
+// Helper: Build AI history from chat messages with truncation tracking
+function buildAiHistory(items: ChatMessage[]): { history: AiHistoryItem[]; truncatedCount: number } {
   let truncatedCount = 0;
-  const history: AiHistoryItem[] = items.slice(-10).map(m => {
+  const history: AiHistoryItem[] = items.slice(-MAX_HISTORY_MESSAGES).map((m) => {
     const text = m.text ?? '';
     if (text.length > MAX_HISTORY_PART_CHARS) truncatedCount += 1;
-    
-    let role: 'user' | 'model' | 'system' = 'model';
-    if (m.role === 'user') role = 'user';
-    else if (m.role === 'system') role = 'system';
-
-    return {
-      role,
-      parts: [{ text: text.slice(0, MAX_HISTORY_PART_CHARS) }]
-    };
+    return { role: toAiRole(m.role), parts: [{ text: text.slice(0, MAX_HISTORY_PART_CHARS) }] };
   });
   return { history, truncatedCount };
+}
+
+// Helper: Format timestamp for AI context
+const formatAiDate = (ts: number | null | undefined): string => {
+  if (!ts) return 'N/A';
+  return new Date(ts).toISOString().split('T')[0];
 };
+
+// Helper: Check if error is retryable
+const isRetryableOpenAIError = (text: string): boolean => text.includes('OpenAI request failed.');
+
+// Helper: Create API client for tool handlers
+function createApiClient(t: ReturnType<typeof useI18n>['t']): ApiClient {
+  return {
+    listProjects: () => apiService.listProjects(),
+    getProject: (id: string) => apiService.getProject(id),
+    listTasks: (params) => apiService.listTasks(params),
+    getTask: (id: string) => apiService.getTask(id),
+    createDraft: (data) => apiService.createDraft(data),
+    applyDraft: (id, actor) => apiService.applyDraft(id, actor),
+  };
+}
 
 export const useChat = ({
   activeProjectId,
@@ -99,24 +124,18 @@ export const useChat = ({
 
   // Build system context for the AI
   const systemContext = useMemo(() => {
-    const taskIdsAndTitles = activeTasks.slice(0, 30).map(task => ({ id: task.id, title: task.title }));
+    const taskIdsAndTitles = activeTasks.slice(0, 30).map((task) => ({ id: task.id, title: task.title }));
     const mappingJson = JSON.stringify({
       limit: 30,
       total: activeTasks.length,
-      taskIdMap: taskIdsAndTitles
+      taskIdMap: taskIdsAndTitles,
     });
 
-    const formatDate = (ts: number | null | undefined) => {
-      if (!ts) return 'N/A';
-      return new Date(ts).toISOString().split('T')[0];
-    };
+    const selectedTaskInfo = selectedTask
+      ? `User is currently inspecting task: ${selectedTask.title} (ID: ${selectedTask.id}, Status: ${selectedTask.status}, Start: ${formatAiDate(selectedTask.startDate)}, Due: ${formatAiDate(selectedTask.dueDate)}).`
+      : '';
 
-    let selectedTaskInfo = '';
-    if (selectedTask) {
-      selectedTaskInfo = `User is currently inspecting task: ${selectedTask.title} (ID: ${selectedTask.id}, Status: ${selectedTask.status}, Start: ${formatDate(selectedTask.startDate)}, Due: ${formatDate(selectedTask.dueDate)}).`;
-    }
-
-    const projectList = projects.map(p => `${p.name} (${p.id})`).join(', ');
+    const projectList = projects.map((p) => `${p.name} (${p.id})`).join(', ');
 
     return `Active Project: ${activeProject.name || 'None'}.
 Active Project ID: ${activeProject.id || 'N/A'}.
@@ -125,17 +144,15 @@ Available Projects: ${projectList}.
 Task IDs in Active Project (JSON): ${mappingJson}.`;
   }, [activeProject, activeTasks, selectedTask, projects]);
 
-  const isRetryableOpenAIError = useCallback((text: string) => text.includes('OpenAI request failed.'), []);
-
   // Process a single conversation turn with the AI
-  const processConversationTurn = useCallback(async (
-    initialHistory: AiHistoryItem[],
-    userMessage: string,
-    systemContext: string,
-    attempt: number = 0,
-    accumulatedSteps: ProcessingStep[] = []
-  ) => {
-      const MAX_RETRIES = 3;
+  const processConversationTurn = useCallback(
+    async (
+      initialHistory: AiHistoryItem[],
+      userMessage: string,
+      systemContext: string,
+      attempt = 0,
+      accumulatedSteps: ProcessingStep[] = []
+    ) => {
       const fullProcessingSteps: ProcessingStep[] = [...accumulatedSteps];
       let currentThinkingPreview = '';
 
@@ -144,254 +161,281 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
         pushProcessingStep(label, elapsedMs);
       };
 
-      recordStep(t('processing.calling_ai'));
-      setThinkingPreview(t('chat.processing_request'));
-      
+      const updateThinkingPreview = (text: string) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        currentThinkingPreview = trimmed;
+        if (allowThinking) {
+          const maxLen = 160;
+          const start = Math.max(0, trimmed.length - maxLen);
+          const tail = trimmed.slice(start);
+          setThinkingPreview(start > 0 ? `...${tail}` : tail);
+        } else {
+          setThinkingPreview(t('processing.generating'));
+        }
+      };
+
+      // Validate retry limit
       if (attempt > MAX_RETRIES) {
         throw new Error(t('chat.max_retries'));
       }
+
+      recordStep(t('processing.calling_ai'));
+      setThinkingPreview(t('chat.processing_request'));
+
       if (attempt > 0) {
         recordStep(t('chat.auto_retry', { attempt, max: MAX_RETRIES }));
         setThinkingPreview(t('chat.attempt_fix', { attempt, max: MAX_RETRIES }));
       }
 
-    const updateThinkingPreview = (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      currentThinkingPreview = trimmed;
-      if (allowThinking) {
-        const maxLen = 160;
-        const start = Math.max(0, trimmed.length - maxLen);
-        const tail = trimmed.slice(start);
-        setThinkingPreview(start > 0 ? `...${tail}` : tail);
-      } else {
-        setThinkingPreview(t('processing.generating'));
-      }
-    };
+      // Stage labels for streaming events
+      const stageLabels: Record<string, string> = {
+        received: t('processing.received'),
+        prepare_request: t('processing.preparing'),
+        upstream_request: t('processing.calling_ai'),
+        upstream_response: t('processing.parsing'),
+        done: t('processing.done'),
+      };
 
-    try {
-      // Call AI Service with streaming for faster feedback
-      const response = await aiService.sendMessageStream(
-        initialHistory,
-        userMessage,
-        systemContext,
-        (event, data) => {
-          const elapsedMs = typeof data.elapsedMs === 'number' ? data.elapsedMs : undefined;
+      try {
+        // Call AI Service with streaming
+        const response = await aiService.sendMessageStream(
+          initialHistory,
+          userMessage,
+          systemContext,
+          (event, data) => {
+            const elapsedMs = typeof data.elapsedMs === 'number' ? data.elapsedMs : undefined;
 
-          if (event === 'assistant_text' && typeof data.text === 'string') {
-            updateThinkingPreview(data.text);
-            recordStep(t('processing.generating'), elapsedMs);
-            return;
-          }
-          if (event === 'result' && typeof data.text === 'string') {
-            updateThinkingPreview(data.text);
-            return;
-          }
-          if (event === 'tool_start' && typeof data.name === 'string') {
-            recordStep(t('processing.executing_tool', { name: data.name }), elapsedMs);
-            return;
-          }
-          if (event === 'stage' && typeof data.name === 'string') {
-            const stageLabels: Record<string, string> = {
-              received: t('processing.received'),
-              prepare_request: t('processing.preparing'),
-              upstream_request: t('processing.calling_ai'),
-              upstream_response: t('processing.parsing'),
-              done: t('processing.done'),
-            };
-            const label = stageLabels[data.name];
-            if (label) recordStep(label, elapsedMs);
-            return;
-          }
-          if (event === 'retry') {
-            recordStep(t('chat.retrying'), elapsedMs);
-          }
-        },
-        allowThinking
-      );
-
-      let finalText = response.text;
-      let suggestions: string[] = [];
-      let hasToolOutputs = false;
-
-      // Process tool calls if any
-      if (response.toolCalls && response.toolCalls.length > 0) {
-        recordStep(t('processing.executing_tool_call'));
-        // Create API client context for tool handlers
-        const apiClient: ApiClient = {
-          listProjects: () => apiService.listProjects(),
-          getProject: (id: string) => apiService.getProject(id),
-          listTasks: (params) => apiService.listTasks(params),
-          getTask: (id: string) => apiService.getTask(id),
-          createDraft: (data) => apiService.createDraft(data),
-          applyDraft: (id, actor) => apiService.applyDraft(id, actor),
-        };
-
-        // Execute all tool calls using the centralized handler
-        const result = await processToolCalls(
-          response.toolCalls.map(call => ({ name: call.name, args: (call.args || {}) as Record<string, unknown> })),
-          {
-            api: apiClient,
-            activeProjectId,
-            generateId,
-            pushProcessingStep: (step) => recordStep(step),
-            t,
-          }
+            switch (event) {
+              case 'assistant_text':
+                if (typeof data.text === 'string') {
+                  updateThinkingPreview(data.text);
+                  recordStep(t('processing.generating'), elapsedMs);
+                }
+                break;
+              case 'result':
+                if (typeof data.text === 'string') updateThinkingPreview(data.text);
+                break;
+              case 'tool_start':
+                if (typeof data.name === 'string') {
+                  recordStep(t('processing.executing_tool', { name: data.name }), elapsedMs);
+                }
+                break;
+              case 'stage':
+                if (typeof data.name === 'string') {
+                  const label = stageLabels[data.name];
+                  if (label) recordStep(label, elapsedMs);
+                }
+                break;
+              case 'retry':
+                recordStep(t('chat.retrying'), elapsedMs);
+                break;
+            }
+          },
+          allowThinking
         );
 
-        if (result.suggestions) {
-          suggestions = result.suggestions;
-        }
+        let finalText = response.text;
+        let suggestions: string[] = [];
+        let hasToolOutputs = false;
 
-        // Handle retry logic for invalid responses
-        if (result.shouldRetry && attempt < MAX_RETRIES) {
-          const nextHistory: AiHistoryItem[] = [
-            ...initialHistory,
-            { role: 'model', parts: [{ text: response.text || 'I will plan the changes.' }] }
-          ];
-          await processConversationTurn(nextHistory, `System Alert: ${result.retryReason}`, systemContext, attempt + 1, fullProcessingSteps);
-          return;
-        }
+        // Process tool calls
+        if (response.toolCalls && response.toolCalls.length > 0) {
+          recordStep(t('processing.executing_tool_call'));
 
-        // Submit draft if there are actions to apply
-        if (result.draftActions.length > 0) {
-          recordStep(t('processing.submitting_draft'));
-          // CRITICAL: If a draft is created, clear any suggestions. 
-          // The UI will show the "Review Pending Draft" panel, which is the only valid interaction path.
-          suggestions = []; 
-          
-          try {
-            const draft = await submitDraft(result.draftActions, {
-              createdBy: 'agent',
-              autoApply: false,
-              reason: result.draftReason,
-            });
-            result.outputs.push(t('draft.created_action_count', { id: draft.id, count: result.draftActions.length }));
-          } catch (draftError) {
-            const errorMessage = draftError instanceof Error ? draftError.message : String(draftError);
-            result.outputs.push(t('draft.create_failed', { error: errorMessage }));
-            finalText = errorMessage;
+          const result = await processToolCalls(
+            response.toolCalls.map((call) => ({ name: call.name, args: (call.args || {}) as Record<string, unknown> })),
+            {
+              api: createApiClient(t),
+              activeProjectId,
+              generateId,
+              pushProcessingStep: (step) => recordStep(step),
+              t,
+            }
+          );
+
+          suggestions = result.suggestions ?? [];
+
+          // Handle retry logic for invalid responses
+          if (result.shouldRetry && attempt < MAX_RETRIES) {
+            const nextHistory: AiHistoryItem[] = [
+              ...initialHistory,
+              { role: 'model', parts: [{ text: response.text || 'I will plan the changes.' }] },
+            ];
+            await processConversationTurn(
+              nextHistory,
+              `System Alert: ${result.retryReason}`,
+              systemContext,
+              attempt + 1,
+              fullProcessingSteps
+            );
+            return;
           }
-        }
 
-        // Display tool results
-        if (result.outputs.length > 0) {
-          recordStep(t('processing.aggregating_tool_results'));
+          // Submit draft if there are actions to apply
+          if (result.draftActions.length > 0) {
+            recordStep(t('processing.submitting_draft'));
+            // Clear suggestions when draft is created - UI shows draft panel
+            suggestions = [];
+
+            try {
+              const draft = await submitDraft(result.draftActions, {
+                createdBy: 'agent',
+                autoApply: false,
+                reason: result.draftReason,
+              });
+              result.outputs.push(t('draft.created_action_count', { id: draft.id, count: result.draftActions.length }));
+            } catch (draftError) {
+              const errorMessage = draftError instanceof Error ? draftError.message : String(draftError);
+              result.outputs.push(t('draft.create_failed', { error: errorMessage }));
+              finalText = errorMessage;
+            }
+          }
+
+          // Display tool results
+          if (result.outputs.length > 0) {
+            recordStep(t('processing.aggregating_tool_results'));
+            recordStep(t('processing.generating'));
+
+            const validOutputs = result.outputs.filter((o) => o.trim().length > 0);
+            if (validOutputs.length > 0) {
+              hasToolOutputs = true;
+              appendSystemMessage(validOutputs.join(' | '));
+            }
+
+            if (!finalText && result.draftActions.length > 0) {
+              finalText = t('chat.draft_created_review');
+            }
+          }
+        } else {
           recordStep(t('processing.generating'));
-          
-          const validOutputs = result.outputs.filter(o => o.trim().length > 0);
-          if (validOutputs.length > 0) {
-            hasToolOutputs = true;
-            appendSystemMessage(validOutputs.join(' | '));
-          }
-          
-          // Only force default text if we made a draft and have no other text
-          if (!finalText && result.draftActions.length > 0) {
-             finalText = t('chat.draft_created_review');
-          }
         }
-      } else {
-        recordStep(t('processing.generating'));
+
+        // Determine effective text
+        let effectiveText = finalText;
+        if (!effectiveText) {
+          effectiveText = hasToolOutputs ? t('chat.action_completed') : t('chat.processed');
+        }
+
+        // Add final AI message to chat
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: generateId(),
+            role: 'model',
+            text: effectiveText,
+            timestamp: Date.now(),
+            suggestions: suggestions.length > 0 ? suggestions : undefined,
+            thinking: allowThinking ? { steps: fullProcessingSteps, preview: currentThinkingPreview || undefined } : undefined,
+          },
+        ]);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : t('chat.error_generic');
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: generateId(),
+            role: 'model',
+            text: t('chat.error_prefix', { error: errorMessage }),
+            timestamp: Date.now(),
+            thinking: allowThinking ? { steps: fullProcessingSteps, preview: currentThinkingPreview || undefined } : undefined,
+          },
+        ]);
       }
+    },
+    [activeProjectId, submitDraft, appendSystemMessage, pushProcessingStep, setMessages, setThinkingPreview, allowThinking, t]
+  );
 
-      // Add final AI message to chat
-      // If we have outputs (e.g. read-only tools) but no text from model, avoid "Processed" if possible.
-      // But if model was silent, we must show something.
-      let effectiveText = finalText;
-      if (!effectiveText) {
-         if (hasToolOutputs) {
-           // If we showed system messages (tool outputs), the model message can be lighter.
-           effectiveText = t('chat.action_completed');
-         } else {
-           effectiveText = t('chat.processed');
-         }
-      }
-
-      setMessages(prev => [...prev, {
-        id: generateId(),
-        role: 'model',
-        text: effectiveText,
-        timestamp: Date.now(),
-        suggestions: suggestions.length > 0 ? suggestions : undefined,
-        thinking: allowThinking ? {
-          steps: fullProcessingSteps,
-          preview: currentThinkingPreview || undefined
-        } : undefined
-      }]);
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : t('chat.error_generic');
-      setMessages(prev => [...prev, {
-        id: generateId(),
-        role: 'model',
-        text: t('chat.error_prefix', { error: errorMessage }),
-        timestamp: Date.now(),
-        thinking: allowThinking ? {
-          steps: fullProcessingSteps,
-          preview: currentThinkingPreview || undefined
-        } : undefined
-      }]);
-    }
-  }, [activeProjectId, submitDraft, appendSystemMessage, pushProcessingStep, setMessages, setThinkingPreview, t]);
-
-  const handleSendMessage = useCallback(async (e?: React.FormEvent, overrideText?: string) => {
-    e?.preventDefault();
-    if (isProcessing) return;
-
-    const cleanedInput = (overrideText ?? inputText).trim();
-    const hasAttachments = pendingAttachments.length > 0;
-    if (!cleanedInput && !hasAttachments) return;
-
-    const outgoingText = cleanedInput || t('chat.sent_attachments');
-
-    const userMsg: ChatMessage = {
-      id: generateId(),
-      role: 'user',
-      text: outgoingText,
-      timestamp: Date.now(),
-      attachments: hasAttachments ? pendingAttachments : undefined,
-    };
-
-    lastUserMessageRef.current = userMsg;
-    setMessages(prev => [...prev, userMsg]);
-    setInputText('');
-    setPendingAttachments([]);
+  // Helper: Reset processing state
+  const startProcessing = useCallback(() => {
     setIsProcessing(true);
     setProcessingSteps([]);
     setThinkingPreview('');
+  }, []);
 
-    try {
+  // Helper: Clear processing state
+  const endProcessing = useCallback(() => {
+    setIsProcessing(false);
+    setProcessingSteps([]);
+    setThinkingPreview('');
+  }, []);
+
+  // Helper: Add generic error message
+  const addErrorMessage = useCallback(
+    () =>
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: generateId(),
+          role: 'model',
+          text: t('chat.error_generic'),
+          timestamp: Date.now(),
+        },
+      ]),
+    [t]
+  );
+
+  // Helper: Process messages and handle truncation warning
+  const processMessagesWithHistory = useCallback(
+    async (msgs: ChatMessage[], userText: string) => {
       pushProcessingStep(t('processing.preparing'));
-
-      const { history, truncatedCount } = buildAiHistory(messages);
+      const { history, truncatedCount } = buildAiHistory(msgs);
       if (truncatedCount > 0) {
         appendSystemMessage(t('chat.history_truncated', { count: truncatedCount, max: MAX_HISTORY_PART_CHARS }));
       }
+      await processConversationTurn(history, userText, systemContext, 0);
+    },
+    [pushProcessingStep, processConversationTurn, systemContext, appendSystemMessage, t]
+  );
 
-      await processConversationTurn(history, userMsg.text, systemContext, 0);
+  const handleSendMessage = useCallback(
+    async (e?: React.FormEvent, overrideText?: string) => {
+      e?.preventDefault();
+      if (isProcessing) return;
 
-    } catch {
-      setMessages(prev => [...prev, {
+      const cleanedInput = (overrideText ?? inputText).trim();
+      const hasAttachments = pendingAttachments.length > 0;
+      if (!cleanedInput && !hasAttachments) return;
+
+      const outgoingText = cleanedInput || t('chat.sent_attachments');
+
+      const userMsg: ChatMessage = {
         id: generateId(),
-        role: 'model',
-        text: t('chat.error_generic'),
-        timestamp: Date.now()
-      }]);
-    } finally {
-      setIsProcessing(false);
-      setProcessingSteps([]);
-      setThinkingPreview('');
-    }
-  }, [
-    isProcessing,
-    inputText,
-    pendingAttachments,
-    messages,
-    pushProcessingStep,
-    processConversationTurn,
-    systemContext,
-    t
-  ]);
+        role: 'user',
+        text: outgoingText,
+        timestamp: Date.now(),
+        attachments: hasAttachments ? pendingAttachments : undefined,
+      };
+
+      lastUserMessageRef.current = userMsg;
+      setMessages((prev) => [...prev, userMsg]);
+      setInputText('');
+      setPendingAttachments([]);
+      startProcessing();
+
+      try {
+        await processMessagesWithHistory(messages, userMsg.text);
+      } catch {
+        addErrorMessage();
+      } finally {
+        endProcessing();
+      }
+    },
+    [isProcessing, inputText, pendingAttachments, messages, startProcessing, endProcessing, processMessagesWithHistory, addErrorMessage, t]
+  );
+
+  // Helper: Filter messages for retry (removes system messages and retryable errors)
+  const filterMessagesForRetry = useCallback(
+    (msgs: ChatMessage[]) =>
+      msgs.filter((message, index) => {
+        if (message.role === 'system') return false;
+        if (index === msgs.length - 1 && message.role === 'model' && isRetryableOpenAIError(message.text)) {
+          return false;
+        }
+        return true;
+      }),
+    []
+  );
 
   const handleRetryLastMessage = useCallback(async () => {
     if (isProcessing) return;
@@ -404,53 +448,18 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
       timestamp: Date.now(),
     };
 
-    setMessages(prev => [...prev, retryMessage]);
-    setIsProcessing(true);
-    setProcessingSteps([]);
-    setThinkingPreview('');
+    setMessages((prev) => [...prev, retryMessage]);
+    startProcessing();
 
     try {
-      pushProcessingStep(t('processing.preparing'));
-
-      const filteredMessages = messages.filter((message, index) => {
-        if (message.role === 'system') return false;
-        if (
-          index === messages.length - 1 &&
-          message.role === 'model' &&
-          isRetryableOpenAIError(message.text)
-        ) {
-          return false;
-        }
-        return true;
-      });
-
-      const { history, truncatedCount } = buildAiHistory(filteredMessages);
-      if (truncatedCount > 0) {
-        appendSystemMessage(t('chat.history_truncated', { count: truncatedCount, max: MAX_HISTORY_PART_CHARS }));
-      }
-
-      await processConversationTurn(history, retryMessage.text, systemContext, 0);
+      const filteredMessages = filterMessagesForRetry(messages);
+      await processMessagesWithHistory(filteredMessages, retryMessage.text);
     } catch {
-      setMessages(prev => [...prev, {
-        id: generateId(),
-        role: 'model',
-        text: t('chat.error_generic'),
-        timestamp: Date.now()
-      }]);
+      addErrorMessage();
     } finally {
-      setIsProcessing(false);
-      setProcessingSteps([]);
-      setThinkingPreview('');
+      endProcessing();
     }
-  }, [
-    isProcessing,
-    messages,
-    processConversationTurn,
-    pushProcessingStep,
-    systemContext,
-    t,
-    isRetryableOpenAIError
-  ]);
+  }, [isProcessing, messages, startProcessing, endProcessing, filterMessagesForRetry, processMessagesWithHistory, addErrorMessage]);
 
   return {
     messages,

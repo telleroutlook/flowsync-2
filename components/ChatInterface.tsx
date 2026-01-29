@@ -1,12 +1,190 @@
-import React, { memo, useCallback, useMemo, useRef } from 'react';
+import React, { memo, useCallback, useRef, useState } from 'react';
 import { ChatBubble } from './ChatBubble';
-import { ChatMessage, ChatAttachment, Draft } from '../types';
+import { ChatMessage, ChatAttachment, Draft, DraftAction } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, RotateCcw, X, Paperclip, Send, File, XCircle, AlertTriangle } from 'lucide-react';
 import { useI18n } from '../src/i18n';
 import { getActionLabel, getEntityLabel } from '../src/i18n/labels';
-import { cn } from '../src/utils/cn';
 import { Button } from './ui/Button';
+
+// Extracted sub-components for better memoization
+
+interface ThinkingIndicatorProps {
+  isProcessing: boolean;
+  thinkingPreview: string;
+  processingSteps: Array<{ label: string; elapsedMs?: number }>;
+  t: ReturnType<typeof useI18n>['t'];
+}
+
+const ThinkingIndicator = memo<ThinkingIndicatorProps>(({ isProcessing, thinkingPreview, processingSteps, t }) => {
+  if (!isProcessing) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 10 }}
+      className="flex justify-start mb-4"
+    >
+      <div className="bg-surface px-4 py-3 rounded-2xl rounded-bl-none border border-joule-start/50 shadow-md shadow-joule-start/10 max-w-[85%]">
+        <div className="flex items-center gap-3 mb-2">
+          <span className="text-sm font-bold text-joule-start">{t('chat.thinking')}</span>
+          <div className="flex gap-1.5" aria-hidden="true">
+            <motion.span
+              animate={{ scale: [1, 1.5, 1], opacity: [0.4, 1, 0.4] }}
+              transition={{ repeat: Infinity, duration: 1, delay: 0 }}
+              className="w-2 h-2 bg-joule-start rounded-full"
+            />
+            <motion.span
+              animate={{ scale: [1, 1.5, 1], opacity: [0.4, 1, 0.4] }}
+              transition={{ repeat: Infinity, duration: 1, delay: 0.2 }}
+              className="w-2 h-2 bg-joule-start rounded-full"
+            />
+            <motion.span
+              animate={{ scale: [1, 1.5, 1], opacity: [0.4, 1, 0.4] }}
+              transition={{ repeat: Infinity, duration: 1, delay: 0.4 }}
+              className="w-2 h-2 bg-joule-start rounded-full"
+            />
+          </div>
+        </div>
+
+        {thinkingPreview && (
+          <div className="text-xs text-text-secondary italic border-l-2 border-joule-start/30 pl-3 mb-2 break-words">
+            {thinkingPreview}
+          </div>
+        )}
+
+        {processingSteps.length > 0 && (
+          <div className="space-y-1.5 mt-2">
+            {processingSteps.map((step, index) => (
+              <motion.div
+                initial={{ opacity: 0, x: -5 }}
+                animate={{ opacity: 1, x: 0 }}
+                key={`${step.label}-${index}`}
+                className="flex items-center gap-2 text-xs text-text-secondary"
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" aria-hidden="true" />
+                <span className="break-words">{step.label}</span>
+                {typeof step.elapsedMs === 'number' && (
+                  <span className="opacity-50 shrink-0">· {(step.elapsedMs / 1000).toFixed(1)}s</span>
+                )}
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+});
+ThinkingIndicator.displayName = 'ThinkingIndicator';
+
+interface DraftNotificationProps {
+  pendingDraft: Draft;
+  draftWarnings: string[];
+  draftProcessingState: 'applying' | 'discarding' | null;
+  onApplyDraft: (draftId: string) => void;
+  onDiscardDraft: (draftId: string) => void;
+  t: ReturnType<typeof useI18n>['t'];
+}
+
+const DraftNotification = memo<DraftNotificationProps>(({
+  pendingDraft,
+  draftWarnings,
+  draftProcessingState,
+  onApplyDraft,
+  onDiscardDraft,
+  t,
+}) => (
+  <motion.div
+    initial={{ height: 0, opacity: 0 }}
+    animate={{ height: 'auto', opacity: 1 }}
+    exit={{ height: 0, opacity: 0 }}
+    className="px-4 py-3 border-t border-border-subtle border-l-4 border-l-critical bg-surface shrink-0"
+  >
+    <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="w-3.5 h-3.5 text-critical" aria-hidden="true" />
+        <p className="text-xs font-bold text-text-primary">{t('chat.pending.title')}</p>
+      </div>
+      <span className="text-xs font-semibold text-critical bg-critical/10 px-2 py-0.5 rounded-full border border-critical/20">
+        {t('chat.pending.action_count', { count: pendingDraft.actions.length })}
+      </span>
+    </div>
+    <div className="space-y-1 pl-5 mb-3">
+      {pendingDraft.actions.slice(0, 3).map((action: DraftAction) => (
+        <div key={action.id} className="text-xs text-text-secondary truncate font-medium">
+          {getActionLabel(action.action, t)} <span className="opacity-75">{getEntityLabel(action.entityType, t)}</span>
+        </div>
+      ))}
+      {pendingDraft.actions.length > 3 && (
+        <div className="text-xs text-critical italic">{t('chat.pending.more', { count: pendingDraft.actions.length - 3 })}</div>
+      )}
+    </div>
+    {draftWarnings.length > 0 && (
+      <div className="space-y-1 pl-5 mb-3">
+        {draftWarnings.map((warning, index) => (
+          <div key={index} className="text-xs text-critical break-words">
+            {warning}
+          </div>
+        ))}
+      </div>
+    )}
+    <div className="flex gap-2 pl-5">
+      <Button
+        variant="default"
+        size="sm"
+        onClick={() => onApplyDraft(pendingDraft.id)}
+        isLoading={draftProcessingState === 'applying'}
+        disabled={draftProcessingState !== null}
+        className="flex-1 h-8 bg-success hover:bg-success/90 text-success-foreground"
+      >
+        {t('chat.accept')}
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onDiscardDraft(pendingDraft.id)}
+        isLoading={draftProcessingState === 'discarding'}
+        disabled={draftProcessingState !== null}
+        className="flex-1 h-8"
+      >
+        {t('chat.discard')}
+      </Button>
+    </div>
+  </motion.div>
+));
+DraftNotification.displayName = 'DraftNotification';
+
+interface AttachmentPreviewProps {
+  attachments: ChatAttachment[];
+  onRemove: (id: string) => void;
+}
+
+const AttachmentPreview = memo<AttachmentPreviewProps>(({ attachments, onRemove }) => (
+  <motion.div
+    initial={{ height: 0, opacity: 0 }}
+    animate={{ height: 'auto', opacity: 1 }}
+    className="mb-3 flex flex-wrap gap-2"
+  >
+    {attachments.map((file) => (
+      <div
+        key={file.id}
+        className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-3 py-1.5 text-sm text-primary"
+      >
+        <File className="w-3 h-3" aria-hidden="true" />
+        <span className="max-w-[120px] truncate font-medium">{file.name}</span>
+        <button
+          type="button"
+          onClick={() => onRemove(file.id)}
+          className="text-primary/60 hover:text-primary p-0.5 rounded-full hover:bg-primary/20 transition-colors"
+        >
+          <XCircle className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    ))}
+  </motion.div>
+));
+AttachmentPreview.displayName = 'AttachmentPreview';
 
 interface ChatInterfaceProps {
   isChatOpen: boolean;
@@ -57,51 +235,56 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const autoScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAutoScrolling = useRef(false);
-  const [draftProcessingState, setDraftProcessingState] = React.useState<'applying' | 'discarding' | null>(null);
+  const [draftProcessingState, setDraftProcessingState] = useState<'applying' | 'discarding' | null>(null);
 
-  const handleApplyDraft = React.useCallback(async (draftId: string) => {
-    setDraftProcessingState('applying');
-    try {
-      await onApplyDraft(draftId);
-    } finally {
-      setDraftProcessingState(null);
-    }
-  }, [onApplyDraft]);
+  // Wrap draft handlers with loading state
+  const handleApplyDraft = useCallback(
+    async (draftId: string) => {
+      setDraftProcessingState('applying');
+      try {
+        await onApplyDraft(draftId);
+      } finally {
+        setDraftProcessingState(null);
+      }
+    },
+    [onApplyDraft]
+  );
 
-  const handleDiscardDraft = React.useCallback(async (draftId: string) => {
-    setDraftProcessingState('discarding');
-    try {
-      await onDiscardDraft(draftId);
-    } finally {
-      setDraftProcessingState(null);
-    }
-  }, [onDiscardDraft]);
+  const handleDiscardDraft = useCallback(
+    async (draftId: string) => {
+      setDraftProcessingState('discarding');
+      try {
+        await onDiscardDraft(draftId);
+      } finally {
+        setDraftProcessingState(null);
+      }
+    },
+    [onDiscardDraft]
+  );
 
   // Smart scrolling logic
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    if (messagesEndRef.current) {
-      isAutoScrolling.current = true;
-      messagesEndRef.current.scrollIntoView({ behavior });
-      // Reset auto-scrolling flag after animation
-      if (autoScrollTimerRef.current) {
-        clearTimeout(autoScrollTimerRef.current);
+  const scrollToBottom = useCallback(
+    (behavior: ScrollBehavior = 'smooth') => {
+      if (messagesEndRef.current) {
+        isAutoScrolling.current = true;
+        messagesEndRef.current.scrollIntoView({ behavior });
+        if (autoScrollTimerRef.current) clearTimeout(autoScrollTimerRef.current);
+        autoScrollTimerRef.current = setTimeout(() => {
+          isAutoScrolling.current = false;
+        }, 500);
       }
-      autoScrollTimerRef.current = setTimeout(() => {
-        isAutoScrolling.current = false;
-      }, 500);
-    }
-  }, [messagesEndRef]);
+    },
+    [messagesEndRef]
+  );
 
-  // Scroll to bottom on new messages or processing updates
+  // Cleanup timer on unmount
   React.useEffect(() => {
-    // Cleanup timer on unmount
     return () => {
-      if (autoScrollTimerRef.current) {
-        clearTimeout(autoScrollTimerRef.current);
-      }
+      if (autoScrollTimerRef.current) clearTimeout(autoScrollTimerRef.current);
     };
   }, []);
 
+  // Auto-scroll on new messages
   React.useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -115,40 +298,53 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
     }
   }, [messages, isProcessing, scrollToBottom]);
 
-  const handleFileInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    onAttachFiles(event.target.files);
-    event.currentTarget.value = '';
-  }, [onAttachFiles]);
+  // Event handlers
+  const handleFileInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      onAttachFiles(event.target.files);
+      event.currentTarget.value = '';
+    },
+    [onAttachFiles]
+  );
 
-  const handleTextareaChange = useCallback((event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputText(event.target.value);
-    event.target.style.height = 'auto';
-    event.target.style.height = Math.min(event.target.scrollHeight, 120) + 'px';
-  }, [setInputText]);
+  const handleTextareaChange = useCallback(
+    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setInputText(event.target.value);
+      event.target.style.height = 'auto';
+      event.target.style.height = Math.min(event.target.scrollHeight, 120) + 'px';
+    },
+    [setInputText]
+  );
 
-  const handleTextareaKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      const target = event.target as HTMLTextAreaElement;
-      target.style.height = 'auto';
-      onSendMessage();
-    }
-  }, [onSendMessage]);
+  const handleTextareaKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        const target = event.target as HTMLTextAreaElement;
+        target.style.height = 'auto';
+        onSendMessage();
+      }
+    },
+    [onSendMessage]
+  );
 
-  const handleSuggestionClick = useCallback((suggestion: string) => {
-    onSendMessage(undefined, suggestion);
-  }, [onSendMessage]);
+  const handleSuggestionClick = useCallback(
+    (suggestion: string) => {
+      onSendMessage(undefined, suggestion);
+    },
+    [onSendMessage]
+  );
 
   return (
     <motion.div
       initial={false}
-      animate={{ 
-        width: isChatOpen ? 360 : 0, 
+      animate={{
+        width: isChatOpen ? 360 : 0,
         opacity: isChatOpen ? 1 : 0,
         marginRight: isChatOpen ? 16 : 0,
-        marginLeft: isChatOpen ? 8 : 0
+        marginLeft: isChatOpen ? 8 : 0,
       }}
-      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       className="flex flex-col border border-border-subtle bg-surface relative z-20 shrink-0 shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] h-[calc(100vh-2rem)] my-4 rounded-2xl overflow-hidden"
     >
       {/* Header */}
@@ -161,8 +357,8 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
             <h1 className="font-bold text-sm text-text-primary tracking-tight">{t('chat.assistant_name')}</h1>
             <div className="flex items-center gap-1.5">
               <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success/75"></span>
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success/75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-success" />
               </span>
               <p className="text-xs font-medium text-text-secondary uppercase tracking-wider">{t('chat.status_online')}</p>
             </div>
@@ -170,29 +366,24 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
         </div>
         <div className="flex items-center gap-1">
           <button
-             onClick={onResetChat}
-             className="text-text-secondary hover:text-primary p-2 rounded-lg hover:bg-background transition-colors"
-             title={t('chat.new_chat')}
+            onClick={onResetChat}
+            className="text-text-secondary hover:text-primary p-2 rounded-lg hover:bg-background transition-colors"
+            title={t('chat.new_chat')}
           >
-             <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-4 h-4" />
           </button>
           <button
-             onClick={() => setIsChatOpen(false)}
-             className="text-text-secondary hover:text-text-primary p-2 rounded-lg hover:bg-background transition-colors"
-             title={t('chat.close_chat')}
+            onClick={() => setIsChatOpen(false)}
+            className="text-text-secondary hover:text-text-primary p-2 rounded-lg hover:bg-background transition-colors"
+            title={t('chat.close_chat')}
           >
-             <X className="w-4 h-4" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Pending Draft Notification - Moved to bottom */}
-
       {/* Messages Area */}
-      <div 
-        ref={scrollContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto p-4 custom-scrollbar bg-background scroll-smooth"
-      >
+      <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4 custom-scrollbar bg-background scroll-smooth">
         {messages.map((msg) => (
           <ChatBubble
             key={msg.id}
@@ -204,65 +395,9 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
           />
         ))}
 
-
         {/* Thinking Indicator */}
         <AnimatePresence>
-          {isProcessing && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="flex justify-start mb-4"
-            >
-               <div className="bg-surface px-4 py-3 rounded-2xl rounded-bl-none border border-joule-start/50 shadow-md shadow-joule-start/10 max-w-[85%]">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-sm font-bold text-joule-start">{t('chat.thinking')}</span>
-                    <div className="flex gap-1.5" aria-hidden="true">
-                      <motion.span
-                        animate={{ scale: [1, 1.5, 1], opacity: [0.4, 1, 0.4] }}
-                        transition={{ repeat: Infinity, duration: 1, delay: 0 }}
-                        className="w-2 h-2 bg-joule-start rounded-full"
-                      />
-                      <motion.span
-                        animate={{ scale: [1, 1.5, 1], opacity: [0.4, 1, 0.4] }}
-                        transition={{ repeat: Infinity, duration: 1, delay: 0.2 }}
-                        className="w-2 h-2 bg-joule-start rounded-full"
-                      />
-                      <motion.span
-                        animate={{ scale: [1, 1.5, 1], opacity: [0.4, 1, 0.4] }}
-                        transition={{ repeat: Infinity, duration: 1, delay: 0.4 }}
-                        className="w-2 h-2 bg-joule-start rounded-full"
-                      />
-                    </div>
-                  </div>
-
-                  {thinkingPreview && (
-                    <div className="text-xs text-text-secondary italic border-l-2 border-joule-start/30 pl-3 mb-2 break-words">
-                      {thinkingPreview}
-                    </div>
-                  )}
-
-                  {processingSteps.length > 0 && (
-                    <div className="space-y-1.5 mt-2">
-                      {processingSteps.map((step, index) => (
-                        <motion.div
-                          initial={{ opacity: 0, x: -5 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          key={`${step.label}-${index}`}
-                          className="flex items-center gap-2 text-xs text-text-secondary"
-                        >
-                          <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" aria-hidden="true"></div>
-                          <span className="break-words">{step.label}</span>
-                          {typeof step.elapsedMs === 'number' && (
-                             <span className="opacity-50 shrink-0">· {(step.elapsedMs / 1000).toFixed(1)}s</span>
-                          )}
-                        </motion.div>
-                      ))}
-                    </div>
-                  )}
-               </div>
-            </motion.div>
-          )}
+          <ThinkingIndicator isProcessing={isProcessing} thinkingPreview={thinkingPreview} processingSteps={processingSteps} t={t} />
         </AnimatePresence>
         <div ref={messagesEndRef} />
       </div>
@@ -270,105 +405,25 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
       {/* Pending Draft Notification */}
       <AnimatePresence>
         {pendingDraft && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="px-4 py-3 border-t border-border-subtle border-l-4 border-l-critical bg-surface shrink-0"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-3.5 h-3.5 text-critical" aria-hidden="true" />
-                <p className="text-xs font-bold text-text-primary">{t('chat.pending.title')}</p>
-              </div>
-              <span className="text-xs font-semibold text-critical bg-critical/10 px-2 py-0.5 rounded-full border border-critical/20">
-                {t('chat.pending.action_count', { count: pendingDraft.actions.length })}
-              </span>
-            </div>
-            <div className="space-y-1 pl-5 mb-3">
-              {pendingDraft.actions.slice(0, 3).map(action => (
-                <div key={action.id} className="text-xs text-text-secondary truncate font-medium">
-                  {getActionLabel(action.action, t)} <span className="opacity-75">{getEntityLabel(action.entityType, t)}</span>
-                </div>
-              ))}
-              {pendingDraft.actions.length > 3 && (
-                <div className="text-xs text-critical italic">{t('chat.pending.more', { count: pendingDraft.actions.length - 3 })}</div>
-              )}
-            </div>
-            {draftWarnings.length > 0 && (
-              <div className="space-y-1 pl-5 mb-3">
-                {draftWarnings.map((warning, index) => (
-                  <div key={index} className="text-xs text-critical break-words">
-                    {warning}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex gap-2 pl-5">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => handleApplyDraft(pendingDraft.id)}
-                isLoading={draftProcessingState === 'applying'}
-                disabled={draftProcessingState !== null}
-                className="flex-1 h-8 bg-success hover:bg-success/90 text-success-foreground"
-              >
-                {t('chat.accept')}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleDiscardDraft(pendingDraft.id)}
-                isLoading={draftProcessingState === 'discarding'}
-                disabled={draftProcessingState !== null}
-                className="flex-1 h-8"
-              >
-                {t('chat.discard')}
-              </Button>
-            </div>
-          </motion.div>
+          <DraftNotification
+            pendingDraft={pendingDraft}
+            draftWarnings={draftWarnings}
+            draftProcessingState={draftProcessingState}
+            onApplyDraft={handleApplyDraft}
+            onDiscardDraft={handleDiscardDraft}
+            t={t}
+          />
         )}
       </AnimatePresence>
 
       {/* Input Area */}
       <div className="p-4 border-t border-border-subtle bg-surface z-20 shrink-0">
         <form onSubmit={onSendMessage} className="relative group">
-
           {/* File Attachments Preview */}
-          {pendingAttachments.length > 0 && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              className="mb-3 flex flex-wrap gap-2"
-            >
-              {pendingAttachments.map((file) => (
-                <div
-                  key={file.id}
-                  className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-3 py-1.5 text-sm text-primary"
-                >
-                  <File className="w-3 h-3" aria-hidden="true" />
-                  <span className="max-w-[120px] truncate font-medium">{file.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => onRemoveAttachment(file.id)}
-                    className="text-primary/60 hover:text-primary p-0.5 rounded-full hover:bg-primary/20 transition-colors"
-                  >
-                    <XCircle className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </motion.div>
-          )}
+          {pendingAttachments.length > 0 && <AttachmentPreview attachments={pendingAttachments} onRemove={onRemoveAttachment} />}
 
           <div className="flex items-end gap-2 bg-background p-2 rounded-xl border border-border-subtle focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/20 transition-all shadow-sm">
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              multiple
-              onChange={handleFileInputChange}
-              disabled={isProcessing}
-            />
+            <input ref={fileInputRef} type="file" className="hidden" multiple onChange={handleFileInputChange} disabled={isProcessing} />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}

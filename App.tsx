@@ -19,7 +19,7 @@ import { useDrafts } from './src/hooks/useDrafts';
 import { useAuditLogs } from './src/hooks/useAuditLogs';
 import { useChat } from './src/hooks/useChat';
 import { useExport } from './src/hooks/useExport';
-import { generateId, storageGet, storageSet, storageGetJSON, storageSetJSON } from './src/utils';
+import { generateId, storageGet, storageSet, storageGetJSON, storageSetJSON, computeGanttTimelineRange, pickZoomLevel, findZoomIndex, isMajorZoomChange, computeZoomSignature, DEFAULT_ZOOM_STATE, DEFAULT_ZOOM_META, type ZoomState, type ZoomMetaState, type ZoomSignature, type ViewMode } from './src/utils';
 import { useI18n } from './src/i18n';
 import { DAY_MS, GANTT_PX_PER_DAY, type GanttViewMode } from './src/constants/gantt';
 
@@ -27,34 +27,6 @@ import { DAY_MS, GANTT_PX_PER_DAY, type GanttViewMode } from './src/constants/ga
 const KanbanBoard = React.lazy(() => import('./components/KanbanBoard').then(module => ({ default: module.KanbanBoard })));
 const ListView = React.lazy(() => import('./components/ListView').then(module => ({ default: module.ListView })));
 const GanttChart = React.lazy(() => import('./components/GanttChart').then(module => ({ default: module.GanttChart })));
-
-type ViewMode = 'BOARD' | 'LIST' | 'GANTT';
-type ZoomState = {
-  BOARD: number;
-  LIST: number;
-  GANTT: number;
-};
-type ZoomSignature = {
-  count: number;
-  spanDays?: number;
-};
-type ZoomMeta = {
-  signature: ZoomSignature | null;
-  userOverride: boolean;
-};
-type ZoomMetaState = {
-  BOARD: ZoomMeta;
-  LIST: ZoomMeta;
-  GANTT: ZoomMeta;
-};
-
-const DEFAULT_ZOOM_STATE: ZoomState = { BOARD: 1, LIST: 1, GANTT: 1 };
-
-const DEFAULT_ZOOM_META: ZoomMetaState = {
-  BOARD: { signature: null, userOverride: false },
-  LIST: { signature: null, userOverride: false },
-  GANTT: { signature: null, userOverride: false },
-};
 
 // Memoized loading spinner component
 const LoadingSpinner = memo(({ message }: { message: string }) => (
@@ -66,46 +38,6 @@ const LoadingSpinner = memo(({ message }: { message: string }) => (
   </div>
 ));
 LoadingSpinner.displayName = 'LoadingSpinner';
-
-const computeGanttTimelineRange = (tasks: Task[], viewMode: GanttViewMode) => {
-  if (tasks.length === 0) return null;
-  const starts = tasks.map((task) => task.startDate ?? task.createdAt);
-  const ends = tasks.map((task) => {
-    const start = task.startDate ?? task.createdAt;
-    const end = task.dueDate ?? start + DAY_MS;
-    return end <= start ? start + DAY_MS : end;
-  });
-  const rawStart = Math.min(...starts);
-  const rawEnd = Math.max(...ends);
-  const startDate = new Date(rawStart);
-  startDate.setDate(startDate.getDate() - 7);
-  const endDate = new Date(rawEnd);
-  endDate.setDate(endDate.getDate() + 14);
-
-  if (viewMode === 'Year') {
-    startDate.setMonth(0, 1);
-    endDate.setMonth(11, 31);
-  } else if (viewMode === 'Month') {
-    startDate.setDate(1);
-    endDate.setMonth(endDate.getMonth() + 1, 0);
-  } else if (viewMode === 'Week') {
-    const day = startDate.getDay();
-    startDate.setDate(startDate.getDate() - ((day + 6) % 7));
-  }
-
-  startDate.setHours(0, 0, 0, 0);
-  endDate.setHours(23, 59, 59, 999);
-
-  return { startMs: startDate.getTime(), endMs: endDate.getTime() };
-};
-
-// Simplified zoom level picker - reduced from 10 to 3 lines
-const pickZoomLevel = (levels: number[], ratio: number): number => {
-  if (levels.length === 0) return 1;
-  const [min, max] = [levels[0], levels[levels.length - 1]];
-  const clamped = Math.max(min, Math.min(max, ratio));
-  return levels.filter((l) => l <= clamped).pop() ?? min;
-};
 
 function App() {
   const { t } = useI18n();
@@ -424,31 +356,29 @@ function App() {
 
   // Derived State
   const currentZoom = viewZoom[viewMode];
-  const zoomIndex = useMemo(() => {
-    const exactIndex = zoomLevels.indexOf(currentZoom);
-    if (exactIndex !== -1) return exactIndex;
-    return zoomLevels.reduce((closestIdx, level, idx) => {
-      const currentDiff = Math.abs(level - currentZoom);
-      const closestDiff = Math.abs(zoomLevels[closestIdx] - currentZoom);
-      return currentDiff < closestDiff ? idx : closestIdx;
-    }, 0);
-  }, [currentZoom, zoomLevels]);
+  const zoomIndex = useMemo(() => findZoomIndex(zoomLevels, currentZoom), [zoomLevels, currentZoom]);
 
-  const updateZoom = useCallback((mode: ViewMode, value: number, markUserOverride: boolean = true) => {
-    setViewZoom((prev) => ({ ...prev, [mode]: value }));
-    if (markUserOverride) {
-      setZoomMeta((prev) => {
-        const signature = prev[mode].signature;
-        return { ...prev, [mode]: { signature, userOverride: true } };
-      });
-    }
-  }, []);
+  const updateZoom = useCallback(
+    (mode: ViewMode, value: number, markUserOverride = true) => {
+      setViewZoom((prev) => ({ ...prev, [mode]: value }));
+      if (markUserOverride) {
+        setZoomMeta((prev) => {
+          const signature = prev[mode].signature;
+          return { ...prev, [mode]: { signature, userOverride: true } };
+        });
+      }
+    },
+    []
+  );
 
-  const handleZoomStep = useCallback((direction: -1 | 1) => {
-    const nextIndex = Math.max(0, Math.min(zoomLevels.length - 1, zoomIndex + direction));
-    const nextValue = zoomLevels[nextIndex];
-    updateZoom(viewMode, nextValue);
-  }, [updateZoom, viewMode, zoomIndex, zoomLevels]);
+  const handleZoomStep = useCallback(
+    (direction: -1 | 1) => {
+      const nextIndex = Math.max(0, Math.min(zoomLevels.length - 1, zoomIndex + direction));
+      const nextValue = zoomLevels[nextIndex];
+      updateZoom(viewMode, nextValue);
+    },
+    [updateZoom, viewMode, zoomIndex, zoomLevels]
+  );
 
   useEffect(() => {
     const el = viewContainerRef.current;
@@ -464,25 +394,10 @@ function App() {
     };
   }, [viewMode]);
 
-  const computeSignature = useCallback((mode: ViewMode): ZoomSignature => {
-    const count = activeTasks.length;
-    if (mode !== 'GANTT') return { count };
-    const range = computeGanttTimelineRange(activeTasks, ganttViewMode);
-    const spanDays = range ? Math.max(1, Math.ceil((range.endMs - range.startMs) / DAY_MS)) : 1;
-    return { count, spanDays };
-  }, [activeTasks, ganttViewMode]);
-
-  const isMajorChange = useCallback((mode: ViewMode, prev: ZoomSignature | null, next: ZoomSignature) => {
-    if (!prev) return true;
-    const countDiff = Math.abs(next.count - prev.count);
-    if (countDiff >= 3) return true;
-    if (mode === 'GANTT') {
-      const prevSpan = prev.spanDays ?? 0;
-      const nextSpan = next.spanDays ?? 0;
-      return Math.abs(nextSpan - prevSpan) >= 7;
-    }
-    return false;
-  }, []);
+  const computeSignature = useCallback(
+    (mode: ViewMode) => computeZoomSignature(mode, activeTasks, ganttViewMode),
+    [activeTasks, ganttViewMode]
+  );
 
   const computeAutoZoom = useCallback((mode: ViewMode) => {
     const { width, height } = viewContainerSize;
@@ -521,12 +436,14 @@ function App() {
     return pickZoomLevel(zoomLevels, width / neededWidth);
   }, [activeTasks, ganttViewMode, viewContainerSize, zoomLevels]);
 
+  // Auto-zoom effect
   useEffect(() => {
     const mode = viewMode;
     const signature = computeSignature(mode);
     const meta = zoomMeta[mode];
-    const shouldAuto = isMajorChange(mode, meta.signature, signature);
+    const shouldAuto = isMajorZoomChange(mode, meta.signature, signature);
     if (!shouldAuto) return;
+
     const nextZoom = computeAutoZoom(mode);
     updateZoom(mode, nextZoom, false);
     setZoomMeta((prev) => ({
@@ -536,7 +453,7 @@ function App() {
         userOverride: false,
       },
     }));
-  }, [computeAutoZoom, computeSignature, isMajorChange, updateZoom, viewMode, zoomMeta]);
+  }, [computeAutoZoom, computeSignature, updateZoom, viewMode, zoomMeta]);
 
   useEffect(() => {
     storageSetJSON('viewZoom', viewZoom);
