@@ -32,11 +32,11 @@ type AiHistoryItem = {
 };
 
 // Helper: Convert chat role to AI role
-const toAiRole = (role: ChatMessage['role']): AiHistoryItem['role'] => {
+function toAiRole(role: ChatMessage['role']): AiHistoryItem['role'] {
   if (role === 'user') return 'user';
   if (role === 'system') return 'system';
   return 'model';
-};
+}
 
 // Helper: Build AI history from chat messages with truncation tracking
 function buildAiHistory(items: ChatMessage[]): { history: AiHistoryItem[]; truncatedCount: number } {
@@ -49,16 +49,12 @@ function buildAiHistory(items: ChatMessage[]): { history: AiHistoryItem[]; trunc
   return { history, truncatedCount };
 }
 
-// Helper: Format timestamp for AI context
-const formatAiDate = (ts: number | null | undefined): string => {
-  if (!ts) return 'N/A';
-  return new Date(ts).toISOString().split('T')[0];
-};
-
 // Helper: Check if error is retryable
-const isRetryableOpenAIError = (text: string): boolean => text.includes('OpenAI request failed.');
+function isRetryableOpenAIError(text: string): boolean {
+  return text.includes('OpenAI request failed.');
+}
 
-// Create API client for tool handlers (stable factory)
+// Create API client for tool handlers
 function createApiClient(): ApiClient {
   return {
     listProjects: () => apiService.listProjects(),
@@ -90,10 +86,20 @@ export const useChat = ({
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
   const [thinkingPreview, setThinkingPreview] = useState('');
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastUserMessageRef = useRef<ChatMessage | null>(null);
   const processingStepsRef = useRef<ProcessingStep[]>([]);
+
+  // Consolidated ref management for callbacks that need fresh values
+  const callbacksRef = useRef({
+    submitDraft,
+    appendSystemMessage,
+    t,
+    allowThinking,
+  });
+  callbacksRef.current = { submitDraft, appendSystemMessage, t, allowThinking };
 
   const pushProcessingStep = useCallback((step: string, elapsedMs?: number) => {
     const current = processingStepsRef.current;
@@ -123,8 +129,7 @@ export const useChat = ({
     });
   }, []);
 
-  // Build system context for the AI (optimized to reduce token usage and recomputation)
-  // Build a stable key from task IDs to detect actual changes vs re-renders
+  // Build system context for the AI
   const tasksKey = useMemo(() => {
     return activeTasks.slice(0, TASK_SNIPPET_COUNT).map(t => t.id).join('|');
   }, [activeTasks]);
@@ -137,30 +142,11 @@ export const useChat = ({
       ? `User is inspecting: ${selectedTask.title} (ID: ${selectedTask.id.slice(0, 8)}..., Status: ${selectedTask.status})`
       : '';
 
-    const projectCount = projects.length;
-
     return `Active Project: ${activeProject.name || 'None'} (ID: ${activeProject.id || 'N/A'}).
 ${selectedTaskInfo}
-Available Projects: ${projectCount} total.
+Available Projects: ${projects.length} total.
 Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.map(t => `${t.title} (${t.id.slice(0, 8)})`).join(', ')}.`;
-  }, [activeProject.name, activeProject.id, activeTasks, selectedTask, projects.length, tasksKey]);
-
-  // Process a single conversation turn with the AI
-  // Using ref to avoid stale closure issues while maintaining dependency stability
-  const apiClientRef = useRef<ApiClient | null>(null);
-  apiClientRef.current = createApiClient();
-
-  const submitDraftRef = useRef(submitDraft);
-  submitDraftRef.current = submitDraft;
-
-  const appendSystemMessageRef = useRef(appendSystemMessage);
-  appendSystemMessageRef.current = appendSystemMessage;
-
-  const tRef = useRef(t);
-  tRef.current = t;
-
-  const allowThinkingRef = useRef(allowThinking);
-  allowThinkingRef.current = allowThinking;
+  }, [activeProject.name, activeProject.id, activeTasks, selectedTask, projects, tasksKey]);
 
   const processConversationTurn = useCallback(
     async (
@@ -172,8 +158,7 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
     ) => {
       const fullProcessingSteps: ProcessingStep[] = [...accumulatedSteps];
       let currentThinkingPreview = '';
-      const currentT = tRef.current;
-      const currentAllowThinking = allowThinkingRef.current;
+      const { t: currentT, allowThinking: currentAllowThinking, submitDraft: currentSubmitDraft, appendSystemMessage: currentAppendMessage } = callbacksRef.current;
 
       const recordStep = (label: string, elapsedMs?: number) => {
         fullProcessingSteps.push({ label, elapsedMs });
@@ -261,7 +246,7 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
           const result = await processToolCalls(
             response.toolCalls.map((call) => ({ name: call.name, args: (call.args || {}) as Record<string, unknown> })),
             {
-              api: apiClientRef.current!,
+              api: createApiClient(),
               activeProjectId,
               generateId,
               pushProcessingStep: (step) => recordStep(step),
@@ -291,7 +276,7 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
             suggestions = [];
 
             try {
-              const draft = await submitDraftRef.current(result.draftActions, {
+              const draft = await currentSubmitDraft(result.draftActions, {
                 createdBy: 'agent',
                 autoApply: false,
                 reason: result.draftReason,
@@ -311,7 +296,7 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
             const validOutputs = result.outputs.filter((o) => o.trim().length > 0);
             if (validOutputs.length > 0) {
               hasToolOutputs = true;
-              appendSystemMessageRef.current(validOutputs.join(' | '));
+              currentAppendMessage(validOutputs.join(' | '));
             }
 
             if (!finalText && result.draftActions.length > 0) {
@@ -387,10 +372,10 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
   // Helper: Process messages and handle truncation warning
   const processMessagesWithHistory = useCallback(
     async (msgs: ChatMessage[], userText: string) => {
-      pushProcessingStep(tRef.current('processing.preparing'));
+      pushProcessingStep(callbacksRef.current.t('processing.preparing'));
       const { history, truncatedCount } = buildAiHistory(msgs);
       if (truncatedCount > 0) {
-        appendSystemMessageRef.current(tRef.current('chat.history_truncated', { count: truncatedCount, max: MAX_HISTORY_PART_CHARS }));
+        callbacksRef.current.appendSystemMessage(callbacksRef.current.t('chat.history_truncated', { count: truncatedCount, max: MAX_HISTORY_PART_CHARS }));
       }
       await processConversationTurn(history, userText, systemContext, 0);
     },
@@ -406,7 +391,7 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
       const hasAttachments = pendingAttachments.length > 0;
       if (!cleanedInput && !hasAttachments) return;
 
-      const outgoingText = cleanedInput || tRef.current('chat.sent_attachments');
+      const outgoingText = cleanedInput || callbacksRef.current.t('chat.sent_attachments');
 
       const userMsg: ChatMessage = {
         id: generateId(),

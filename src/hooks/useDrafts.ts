@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiService } from '../../services/apiService';
 import { Draft, DraftAction } from '../../types';
 import { useI18n } from '../i18n';
+import { isAppError, getErrorMessage } from '../utils/error';
 
 interface UseDraftsProps {
   activeProjectId: string;
@@ -10,8 +11,6 @@ interface UseDraftsProps {
   appendSystemMessage: (text: string) => void;
   onProjectModified?: () => void;
 }
-
-type DraftOperationStatus = 'idle' | 'processing' | 'success' | 'error';
 
 interface UseDraftsResult {
   drafts: Draft[];
@@ -48,15 +47,14 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     try {
       const items = await apiService.listDrafts();
       setDrafts(items);
-      // If the pending draft is no longer pending (e.g. applied elsewhere), clear it
       setPendingDraftId(prevId => {
-         if (prevId && !items.find(item => item.id === prevId && item.status === 'pending')) {
-             return null;
-         }
-         return prevId;
+        if (prevId && !items.find(item => item.id === prevId && item.status === 'pending')) {
+          return null;
+        }
+        return prevId;
       });
-    } catch (err) {
-      // Silently fail on draft refresh
+    } catch {
+      // Silently fail on draft refresh - non-critical operation
     }
   }, []);
 
@@ -106,9 +104,9 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
       }
       return result.draft;
     } catch (error) {
-       const msg = error instanceof Error ? error.message : t('draft.submit_failed');
-       if (!options.silent) appendSystemMessage(t('chat.error_prefix', { error: msg }));
-       throw error;
+      const msg = getErrorMessage(error, t('draft.submit_failed'));
+      if (!options.silent) appendSystemMessage(t('chat.error_prefix', { error: msg }));
+      throw error;
     }
   }, [activeProjectId, refreshData, refreshAuditLogs, appendSystemMessage, onProjectModified, t]);
 
@@ -151,7 +149,7 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
       await refreshDrafts();
       await refreshAuditLogs(activeProjectId);
     } catch (error) {
-       appendSystemMessage(error instanceof Error ? t('draft.apply_failed', { error: error.message }) : t('draft.apply_failed', { error: t('common.na') }));
+      appendSystemMessage(t('draft.apply_failed', { error: getErrorMessage(error, t('common.na')) }));
     } finally {
       draftOperationRef.current.delete(draftId);
       setIsProcessingDraft(false);
@@ -166,7 +164,7 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
       await refreshDrafts();
       appendSystemMessage(t('draft.discarded', { id: draftId }));
     } catch (error) {
-       appendSystemMessage(error instanceof Error ? t('draft.discard_failed', { error: error.message }) : t('draft.discard_failed', { error: t('common.na') }));
+      appendSystemMessage(t('draft.discard_failed', { error: getErrorMessage(error, t('common.na')) }));
     }
   }, [refreshDrafts, appendSystemMessage, t]);
 

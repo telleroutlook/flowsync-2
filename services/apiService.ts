@@ -8,20 +8,38 @@ const MAX_FETCH_RETRIES = 2;
 const DEFAULT_TIMEOUT_MS = 30000;
 const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 
-const shouldRetryStatus = (status: number) => RETRYABLE_STATUS_CODES.has(status);
+// Request deduplication cache
+const pendingRequests = new Map<string, Promise<unknown>>();
 
-const isIdempotentMethod = (method?: string) => {
+function getRequestKey(input: RequestInfo, init?: RequestInit): string {
+  const url = typeof input === 'string' ? input : input.url;
+  const method = (init?.method || 'GET').toUpperCase();
+  const body = init?.body;
+
+  // Only deduplicate GET requests and safe mutations
+  if (method !== 'GET') {
+    return `${method}:${url}:${Date.now()}`;
+  }
+
+  return `${method}:${url}`;
+}
+
+function shouldRetryStatus(status: number): boolean {
+  return RETRYABLE_STATUS_CODES.has(status);
+}
+
+function isIdempotentMethod(method?: string): boolean {
   const normalized = (method || 'GET').toUpperCase();
   return normalized === 'GET' || normalized === 'HEAD';
-};
+}
 
-const createTimeoutPromise = (ms: number, url: string): Promise<never> => {
+function createTimeoutPromise(ms: number, url: string): Promise<never> {
   return new Promise((_, reject) => {
     const timeoutId = setTimeout(() => {
       reject(new TimeoutError(`Request timeout after ${ms}ms`, ms, { url }));
     }, ms);
   });
-};
+}
 
 const fetchWithRetry = async (input: RequestInfo, init?: RequestInit): Promise<Response> => {
   const canRetry = isIdempotentMethod(init?.method);
@@ -103,48 +121,68 @@ const buildHeaders = (headers?: HeadersInit) => {
 };
 
 const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> => {
-  let response: Response | null = null;
-  let text = '';
+  const requestKey = getRequestKey(input, init);
   const url = typeof input === 'string' ? input : input.url;
 
-  try {
-    response = await fetchWithRetry(input, { ...init, headers: buildHeaders(init?.headers) });
-    text = await response.text();
-  } catch (error) {
-    // Enhance error messages for better UX
-    if (error instanceof TypeError && error.message.includes('fetch')) {
-      throw new NetworkError(getErrorMessage(error, 'Failed to connect to server'), { url });
-    }
-    if (isAppError(error)) {
-      throw error;
-    }
-    throw new NetworkError(getErrorMessage(error, 'Network request failed'), { url });
+  // Check for pending duplicate request
+  const cached = pendingRequests.get(requestKey);
+  if (cached) {
+    return cached as Promise<T>;
   }
 
-  let payload: ApiResponse<T> | null = null;
-  if (text) {
+  // Create the request promise
+  const requestPromise = (async (): Promise<T> => {
     try {
-      payload = JSON.parse(text) as ApiResponse<T>;
-    } catch {
-      const snippet = text.slice(0, 160).replace(/\s+/g, ' ').trim();
-      throw new ApiError(
-        `Invalid JSON response from server. ${snippet ? `Response: ${snippet}` : 'Empty response body.'}`,
-        response?.status,
-        'INVALID_JSON'
-      );
+      let response: Response | null = null;
+      let text = '';
+
+      try {
+        response = await fetchWithRetry(input, { ...init, headers: buildHeaders(init?.headers) });
+        text = await response.text();
+      } catch (error) {
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+          throw new NetworkError(getErrorMessage(error, 'Failed to connect to server'), { url });
+        }
+        if (isAppError(error)) {
+          throw error;
+        }
+        throw new NetworkError(getErrorMessage(error, 'Network request failed'), { url });
+      }
+
+      let payload: ApiResponse<T> | null = null;
+      if (text) {
+        try {
+          payload = JSON.parse(text) as ApiResponse<T>;
+        } catch {
+          const snippet = text.slice(0, 160).replace(/\s+/g, ' ').trim();
+          throw new ApiError(
+            `Invalid JSON response from server. ${snippet ? `Response: ${snippet}` : 'Empty response body.'}`,
+            response?.status,
+            'INVALID_JSON'
+          );
+        }
+      }
+
+      if (!payload) {
+        throw new ApiError('Empty response from server', response?.status, 'EMPTY_RESPONSE');
+      }
+
+      if (!response.ok || !payload.success || payload.data === undefined) {
+        const message = payload.error?.message || `Request failed with status ${response.status}`;
+        throw new ApiError(message, response.status, payload.error?.code);
+      }
+
+      return payload.data;
+    } finally {
+      // Clean up cache after request completes
+      pendingRequests.delete(requestKey);
     }
-  }
+  })();
 
-  if (!payload) {
-    throw new ApiError('Empty response from server', response?.status, 'EMPTY_RESPONSE');
-  }
+  // Cache the promise for deduplication
+  pendingRequests.set(requestKey, requestPromise);
 
-  if (!response.ok || !payload.success || payload.data === undefined) {
-    const message = payload.error?.message || `Request failed with status ${response.status}`;
-    throw new ApiError(message, response.status, payload.error?.code);
-  }
-
-  return payload.data;
+  return requestPromise;
 };
 
 export const apiService = {
