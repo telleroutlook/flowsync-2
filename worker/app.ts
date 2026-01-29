@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { cors } from '@tinyhttp/cors';
 import type { Variables, Bindings, DrizzleDB } from './types';
 import { projectsRoute } from './routes/projects';
 import { tasksRoute } from './routes/tasks';
@@ -13,6 +12,42 @@ import { systemRoute } from './routes/system';
 
 export { Variables, Bindings };
 
+// Custom CORS middleware compatible with Cloudflare Workers
+const corsMiddleware = async (c: any, next: any) => {
+  // Allowed origins
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://workchatly.com',
+    'https://www.workchatly.com',
+  ];
+
+  const origin = c.req.header('Origin');
+  const isAllowedOrigin = origin && allowedOrigins.includes(origin);
+
+  // Handle OPTIONS preflight request
+  if (c.req.method === 'OPTIONS') {
+    if (isAllowedOrigin) {
+      c.header('Access-Control-Allow-Origin', origin);
+    }
+    c.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Workspace-Id, X-CSRF-Token');
+    c.header('Access-Control-Allow-Credentials', 'true');
+    c.header('Access-Control-Max-Age', '86400'); // 24 hours
+    c.header('Access-Control-Expose-Headers', 'Content-Length, Content-Type');
+    return new Response(null, { status: 204 });
+  }
+
+  // For all other requests, add CORS headers after the handler
+  await next();
+
+  if (isAllowedOrigin) {
+    c.header('Access-Control-Allow-Origin', origin);
+  }
+  c.header('Access-Control-Allow-Credentials', 'true');
+  c.header('Access-Control-Expose-Headers', 'Content-Length, Content-Type');
+};
+
 export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -20,23 +55,8 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
   // SECURITY MIDDLEWARE
   // ============================================================================
 
-  // CORS Configuration - Strict origin allowlist for cross-origin requests
-  app.use('*', async (c, next) => {
-    const corsMiddleware = cors({
-      origin: [
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        'https://workchatly.com',
-        'https://www.workchatly.com',
-      ],
-      credentials: true, // Allow cookies for authentication
-      maxAge: 86400, // 24 hours
-      exposedHeaders: ['Content-Length', 'Content-Type'],
-    });
-
-    // Cast to Hono MiddlewareHandler - tinyhttp/cors is compatible at runtime
-    return corsMiddleware(c, next) as Promise<Response>;
-  });
+  // CORS Configuration - Cloudflare Workers compatible
+  app.use('*', corsMiddleware);
 
   // Security Headers Middleware - Adds security headers to all responses
   app.use('*', async (c, next) => {

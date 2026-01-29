@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.3",
-    "@tinyhttp/cors": "^2.0.1",
     "drizzle-orm": "^0.44.2",
     "framer-motion": "^12.29.0",
     "hono": "^4.6.9",
