@@ -72,8 +72,11 @@ describe('draftsRoute', () => {
 
     expect(res.status).toBe(201);
     expect(json.data.draft.id).toBe('d1');
-    const call = (createDraft as ReturnType<typeof vi.fn>).mock.calls[0][1];
-    expect(call.actions[0].id).toBe('gen-1');
+    const mockCall = (createDraft as ReturnType<typeof vi.fn>).mock.calls[0];
+    const call = mockCall?.[1];
+    if (call) {
+      expect(call.actions[0].id).toBe('gen-1');
+    }
     expect(recordLog).toHaveBeenCalled();
   });
 

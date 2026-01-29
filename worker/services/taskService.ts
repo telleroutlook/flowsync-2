@@ -36,12 +36,11 @@ const buildWhere = (filters: TaskFilters) => {
   if (filters.dueDateTo !== undefined) clauses.push(lte(tasks.dueDate, filters.dueDateTo));
   if (filters.q) {
     const query = `%${filters.q}%`;
-    clauses.push(
-      or(
-        like(tasks.title, query),
-        like(sql`coalesce(${tasks.description}, '')`, query)
-      )
+    const orClause = or(
+      like(tasks.title, query),
+      like(sql`coalesce(${tasks.description}, '')`, query)
     );
+    if (orClause) clauses.push(orClause);
   }
   if (clauses.length === 0) return undefined;
   return and(...clauses);
@@ -94,7 +93,7 @@ export const listTasks = async (
 
   let countValue: number | null = null;
   try {
-    const [{ count }] = await retryOnce('tasks_count_failed', () => {
+    const countResult = await retryOnce('tasks_count_failed', () => {
       if (projectValidated) {
         return db
           .select({ count: sql<number>`count(*)` })
@@ -107,7 +106,7 @@ export const listTasks = async (
         .innerJoin(projects, eq(tasks.projectId, projects.id))
         .where(combinedClause);
     });
-    countValue = count;
+    countValue = countResult[0]?.count ?? 0;
   } catch (error) {
     if (cached) {
       console.warn('tasks_cache_fallback', { workspaceId, cacheKey });
@@ -263,7 +262,7 @@ export const updateTask = async (
     wbs: data.wbs ?? existing.wbs,
     startDate: data.startDate ?? existing.startDate,
     dueDate: data.dueDate ?? existing.dueDate,
-    completion: clampNumber(data.completion ?? existing.completion ?? undefined, 0, 100),
+    completion: clampNumber(data.completion ?? existing.completion ?? undefined, 0, 100) ?? 0,
     assignee: data.assignee ?? existing.assignee,
     isMilestone: data.isMilestone === undefined ? existing.isMilestone : data.isMilestone,
     predecessors: data.predecessors ?? existing.predecessors,
@@ -370,10 +369,10 @@ const buildSeedTaskList = (filters: TaskFilters) => {
     filtered = filtered.filter((task) => task.isMilestone === filters.isMilestone);
   }
   if (filters.startDateFrom !== undefined) {
-    filtered = filtered.filter((task) => task.startDate >= filters.startDateFrom!);
+    filtered = filtered.filter((task) => (task.startDate ?? 0) >= filters.startDateFrom!);
   }
   if (filters.startDateTo !== undefined) {
-    filtered = filtered.filter((task) => task.startDate <= filters.startDateTo!);
+    filtered = filtered.filter((task) => (task.startDate ?? 0) <= filters.startDateTo!);
   }
   if (filters.dueDateFrom !== undefined) {
     filtered = filtered.filter((task) => (task.dueDate ?? 0) >= filters.dueDateFrom!);

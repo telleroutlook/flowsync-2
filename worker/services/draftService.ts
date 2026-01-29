@@ -342,8 +342,6 @@ const handleTaskUpdate: ActionHandler = (action, context) => {
 
   // If dates were modified and constraints would change them, it's a violation
   if (datesModified && constraintResult.changed) {
-    const originalStart = existing.startDate;
-    const originalDue = existing.dueDate;
     const constrainedStart = constraintResult.task.startDate;
     const constrainedDue = constraintResult.task.dueDate;
 

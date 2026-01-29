@@ -24,7 +24,10 @@ const toBase64 = (bytes: Uint8Array) => {
   }
   let binary = '';
   for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
+    const byte = bytes[i];
+    if (byte !== undefined) {
+      binary += String.fromCharCode(byte);
+    }
   }
   return btoa(binary);
 };
@@ -60,7 +63,11 @@ export const hashPassword = async (password: string) => {
 };
 
 export const verifyPassword = async (password: string, stored: string) => {
-  const [scheme, iterationsRaw, saltB64, hashB64] = stored.split('$');
+  const parts = stored.split('$');
+  const scheme = parts[0];
+  const iterationsRaw = parts[1];
+  const saltB64 = parts[2];
+  const hashB64 = parts[3];
   if (scheme !== 'pbkdf2' || !iterationsRaw || !saltB64 || !hashB64) return false;
   const iterations = Number(iterationsRaw);
   if (!Number.isFinite(iterations) || iterations <= 0) return false;
@@ -70,7 +77,11 @@ export const verifyPassword = async (password: string, stored: string) => {
   if (expected.length !== derived.length) return false;
   let mismatch = 0;
   for (let i = 0; i < expected.length; i += 1) {
-    mismatch |= expected[i] ^ derived[i];
+    const expByte = expected[i];
+    const derByte = derived[i];
+    if (expByte !== undefined && derByte !== undefined) {
+      mismatch |= expByte ^ derByte;
+    }
   }
   return mismatch === 0;
 };
@@ -195,8 +206,10 @@ export const revokeSession = async (
 
 export const parseAuthHeader = (value: string | undefined | null) => {
   if (!value) return null;
-  const [type, token] = value.split(' ');
-  if (!token || type.toLowerCase() !== 'bearer') return null;
+  const parts = value.split(' ');
+  const type = parts[0]?.toLowerCase();
+  const token = parts[1];
+  if (!token || type !== 'bearer') return null;
   return token.trim();
 };
 

@@ -120,16 +120,18 @@ export const deleteProject = async (
   const existing = existingRows[0];
   if (!existing) return { project: null, deletedTasks: 0 };
 
-  const [{ count: taskCount }] = await db
+  const taskCountResult = await db
     .select({ count: sql<number>`count(*)` })
     .from(tasks)
     .where(eq(tasks.projectId, id));
+  const taskCount = taskCountResult[0]?.count ?? 0;
   await db.delete(tasks).where(eq(tasks.projectId, id));
   await db.delete(projects).where(eq(projects.id, id));
-  const [{ count }] = await db
+  const countResult = await db
     .select({ count: sql<number>`count(*)` })
     .from(projects)
     .where(eq(projects.workspaceId, workspaceId));
+  const count = countResult[0]?.count ?? 0;
   if (count === 0) {
     await db.insert(projects).values({
       id: generateId(),

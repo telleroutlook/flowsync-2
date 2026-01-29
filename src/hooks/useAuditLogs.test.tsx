@@ -41,8 +41,9 @@ describe('useAuditLogs', () => {
   });
 
   it('loads audit logs and supports filter updates', async () => {
-    const refreshData = vi.fn(async () => {});
-    const appendSystemMessage = vi.fn();
+    // Unused variables removed
+    vi.fn(async () => {});
+    vi.fn();
 
     const { result } = renderHook(() =>
       useAuditLogs({

@@ -364,7 +364,7 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
     // Use for loop for better performance than forEach
     for (let i = 0; i < taskEntries.length; i += 1) {
       const task = taskEntries[i];
-      if (!task.predecessors?.length) continue;
+      if (!task?.predecessors?.length) continue;
 
       const target = taskMap.get(task.id);
       if (!target) continue;
@@ -372,6 +372,7 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
       const predecessors = task.predecessors;
       for (let j = 0; j < predecessors.length; j += 1) {
         const predId = predecessors[j];
+        if (!predId) continue;
         const source = taskMap.get(predId);
         if (!source) continue;
 

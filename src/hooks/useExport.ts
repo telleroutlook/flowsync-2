@@ -209,8 +209,8 @@ export const useExport = ({
       const projectById = new Map<string, Project>();
       const projectByName = new Map<string, Project>();
 
-      const resolveProjectFn = (projectId?: string, projectName?: string, meta?: Partial<Project>) =>
-        resolveProject(projectId, projectName, meta, activeProject, projects, projectById, projectByName, importedProjects);
+      const resolveProjectFn = (projectId?: string, projectName?: string, meta?: Partial<Project> | undefined) =>
+        resolveProject(projectId, projectName, meta ?? {}, activeProject, projects, projectById, projectByName, importedProjects);
 
       // Parse JSON format
       if (lowerName.endsWith('.json')) {

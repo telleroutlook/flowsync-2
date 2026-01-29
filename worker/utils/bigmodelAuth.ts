@@ -24,7 +24,10 @@ const base64UrlEncodeBytes = (bytes: Uint8Array) => {
   }
   let binary = '';
   for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
+    const byte = bytes[i];
+    if (byte !== undefined) {
+      binary += String.fromCharCode(byte);
+    }
   }
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 };
@@ -42,7 +45,12 @@ export function parseBigModelApiKey(apiKey: string): BigModelApiKey | null {
   if (parts.length !== 2) {
     return null;
   }
-  return { id: parts[0], secret: parts[1] };
+  const id = parts[0];
+  const secret = parts[1];
+  if (!id || !secret) {
+    return null;
+  }
+  return { id, secret };
 }
 
 /**

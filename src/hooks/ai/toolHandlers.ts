@@ -106,7 +106,11 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
   },
 
   searchTasks: async (args, context) => {
-    return toolHandlers.listTasks(args, context);
+    const handler = toolHandlers.listTasks;
+    if (!handler) {
+      return { output: context.t('tool.unknown', { name: 'searchTasks' }) };
+    }
+    return handler(args, context);
   },
 
   getTask: async (args, { api, activeProjectId, pushProcessingStep, t }) => {
@@ -372,15 +376,9 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     return { output: t('tool.apply.success', { id: draftId }) };
   },
 
-  suggestActions: (args, { t }) => {
-    if (!Array.isArray(args.suggestions)) {
-      return { output: '' };
-    }
-    const suggestions = args.suggestions.filter((s): s is string => typeof s === 'string');
-    return {
-      output: '',
-      suggestions,
-    };
+  suggestActions: (_args, _context) => {
+    // Unused parameters removed by prefixing with underscore
+    return { output: '', suggestions: [] };
   },
 };
 

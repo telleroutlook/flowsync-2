@@ -21,17 +21,17 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
   // ============================================================================
 
   // CORS Configuration - Strict origin allowlist for cross-origin requests
-  // In production, replace allowedOrigins with actual allowed origins
   app.use('*', async (c, next) => {
     const corsMiddleware = cors({
-      allowedOrigins: [
+      origin: [
         'http://localhost:5173',
         'http://127.0.0.1:5173',
-        // Add production origins here when deployed
+        'https://workchatly.com',
+        'https://www.workchatly.com',
       ],
       credentials: true, // Allow cookies for authentication
       maxAge: 86400, // 24 hours
-      exposeHeaders: ['Content-Length', 'Content-Type'],
+      exposedHeaders: ['Content-Length', 'Content-Type'],
     });
 
     // @ts-ignore - tinyhttp cors middleware compatibility
@@ -83,14 +83,8 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
     if (isReadOperation) {
       // For GET requests, generate and set CSRF token in cookie
       const token = crypto.randomUUID();
-      c.cookie('csrf_token', token, {
-        httpOnly: true,
-        secure: true, // Only send over HTTPS
-        sameSite: 'Strict',
-        path: '/',
-        maxAge: 3600, // 1 hour
-      });
-      c.set('csrfToken', token);
+      c.header('set-cookie', `csrf_token=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600`);
+      // c.set('csrfToken', token);
     } else {
       // For state-changing operations (POST/PATCH/DELETE), validate CSRF token
       const cookieToken = c.req.header('cookie')?.match(/csrf_token=([^;]+)/)?.[1];

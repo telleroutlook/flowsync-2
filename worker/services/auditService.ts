@@ -80,13 +80,13 @@ export const listAuditLogs = async (
 
   let total: number | null = null;
   try {
-    const [{ count }] = await retryOnce('audit_count_failed', () =>
+    const result = await retryOnce('audit_count_failed', () =>
       db
         .select({ count: sql<number>`count(*)` })
         .from(auditLogs)
         .where(whereClause)
     );
-    total = count;
+    total = result[0]?.count ?? 0;
   } catch (error) {
     logDbError('audit_count_failed', error);
   }

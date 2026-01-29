@@ -105,7 +105,9 @@ export const parseDelimitedContent = (content: string) => {
   const delimiter = content.includes('\t') ? '\t' : ',';
   const rows = content.split(/\r?\n/).filter(line => line.trim().length > 0);
   if (rows.length === 0) return { headers: [], records: [] };
-  const headers = parseDelimitedLine(rows[0], delimiter).map(h => h.trim().toLowerCase());
+  const firstRow = rows[0];
+  if (!firstRow) return { headers: [], records: [] };
+  const headers = parseDelimitedLine(firstRow, delimiter).map(h => h.trim().toLowerCase());
   const records = rows.slice(1).map(line => {
     const cells = parseDelimitedLine(line, delimiter);
     const record: Record<string, string> = {};

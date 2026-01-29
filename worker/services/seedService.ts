@@ -6,7 +6,8 @@ import { ensurePublicWorkspace } from './workspaceService';
 
 export const ensureSeedData = async (db: ReturnType<typeof import('../db').getDb>) => {
   const publicWorkspace = await ensurePublicWorkspace(db);
-  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(projects);
+  const countResult = await db.select({ count: sql<number>`count(*)` }).from(projects);
+  const count = countResult[0]?.count ?? 0;
   if (count > 0) return;
 
   const timestamp = now();

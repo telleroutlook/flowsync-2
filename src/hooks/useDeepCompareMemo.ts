@@ -28,7 +28,7 @@ function deepEqual(a: DependencyList, b: DependencyList): boolean {
     }
 
     // Object comparison (shallow)
-    if (typeof aValue === 'object' && typeof bValue === 'object') {
+    if (typeof aValue === 'object' && typeof bValue === 'object' && aValue !== null && bValue !== null) {
       const aKeys = Object.keys(aValue);
       const bKeys = Object.keys(bValue);
       if (aKeys.length !== bKeys.length) return false;

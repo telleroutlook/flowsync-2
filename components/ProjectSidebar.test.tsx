@@ -41,7 +41,10 @@ describe('ProjectSidebar', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
 
     const deleteButtons = screen.getAllByTitle('Delete Project');
-    await user.click(deleteButtons[1]);
+    const deleteButton = deleteButtons[1];
+    if (deleteButton) {
+      await user.click(deleteButton);
+    }
     expect(onDeleteProject).toHaveBeenCalledWith('p2');
 
     confirmSpy.mockRestore();

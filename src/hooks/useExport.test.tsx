@@ -73,10 +73,10 @@ describe('useExport', () => {
     const { result } = renderHook(() =>
       useExport({
         projects: mockProjects,
-        activeProject: mockProjects[0],
+        activeProject: mockProjects[0]!,
         activeTasks: mockTasks,
         refreshData: vi.fn(async () => {}),
-        submitDraft: vi.fn(async () => ({ id: 'd1' })),
+        submitDraft: vi.fn(async () => ({ id: 'd1', projectId: 'p1', status: 'pending' as const, actions: [], createdAt: Date.now(), createdBy: 'user' as const })),
         fetchAllTasks: vi.fn(async () => []),
       }), { wrapper }
     );
@@ -99,7 +99,7 @@ describe('useExport', () => {
     const { result } = renderHook(() =>
       useExport({
         projects: mockProjects,
-        activeProject: mockProjects[0],
+        activeProject: mockProjects[0]!,
         activeTasks: mockTasks,
         refreshData,
         submitDraft,
@@ -121,7 +121,10 @@ describe('useExport', () => {
 
     await waitFor(() => expect(submitDraft).toHaveBeenCalled());
 
-    const taskCall = submitDraft.mock.calls.find((call) => call[1]?.reason === 'Import tasks');
+    const taskCall = submitDraft.mock.calls.find((call: unknown[]) => {
+      const options = call[1];
+      return options && typeof options === 'object' && 'reason' in options && options.reason === 'Import tasks';
+    });
     expect(taskCall).toBeTruthy();
     expect(refreshData).toHaveBeenCalled();
   });

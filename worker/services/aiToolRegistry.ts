@@ -586,7 +586,11 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
         if (taskList.length === 0) {
           return JSON.stringify({ success: false, error: { code: 'NOT_FOUND', message: 'Task not found' } });
         }
-        return JSON.stringify({ success: true, data: toTaskRecord(taskList[0].tasks) });
+        const taskRow = taskList[0];
+        if (!taskRow) {
+          return JSON.stringify({ success: false, error: { code: 'NOT_FOUND', message: 'Task not found' } });
+        }
+        return JSON.stringify({ success: true, data: toTaskRecord(taskRow.tasks) });
       },
     },
 

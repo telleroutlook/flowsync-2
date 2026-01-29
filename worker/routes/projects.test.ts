@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { projectsRoute } from './projects';
-import { tasks } from '../db/schema';
 import type { Variables } from '../types';
 
 vi.mock('../services/projectService', () => ({

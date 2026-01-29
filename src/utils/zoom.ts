@@ -82,9 +82,11 @@ export function computeGanttTimelineRange(tasks: Task[], viewMode: GanttViewMode
  */
 export function pickZoomLevel(levels: number[], ratio: number): number {
   if (levels.length === 0) return 1;
-  const [min, max] = [levels[0], levels[levels.length - 1]];
+  const min = levels[0] ?? 1;
+  const max = levels[levels.length - 1] ?? 1;
   const clamped = Math.max(min, Math.min(max, ratio));
-  return levels.filter((l) => l <= clamped).pop() ?? min;
+  const candidates = levels.filter((l) => l <= clamped);
+  return candidates[candidates.length - 1] ?? min;
 }
 
 /**
@@ -96,7 +98,8 @@ export function findZoomIndex(zoomLevels: number[], currentZoom: number): number
 
   return zoomLevels.reduce((closestIdx, level, idx) => {
     const currentDiff = Math.abs(level - currentZoom);
-    const closestDiff = Math.abs(zoomLevels[closestIdx] - currentZoom);
+    const closestLevel = zoomLevels[closestIdx] ?? currentZoom;
+    const closestDiff = Math.abs(closestLevel - currentZoom);
     return currentDiff < closestDiff ? idx : closestIdx;
   }, 0);
 }

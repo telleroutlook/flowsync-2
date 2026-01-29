@@ -7,8 +7,9 @@ const DAY_MS = 86400000;
  * Returns ISO date format (YYYY-MM-DD) or 'N/A' if no timestamp
  */
 export function formatTaskDate(ts: number | null | undefined): string {
-  if (!ts) return 'N/A';
-  return new Date(ts).toISOString().split('T')[0];
+  if (ts === null || ts === undefined) return 'N/A';
+  const parts = new Date(ts).toISOString().split('T');
+  return parts[0] ?? 'N/A';
 }
 
 export function getTaskStart(task: Task): number {
