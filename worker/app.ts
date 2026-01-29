@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cors } from '@tinyhttp/cors';
 import type { Variables, Bindings, DrizzleDB } from './types';
 import { projectsRoute } from './routes/projects';
 import { tasksRoute } from './routes/tasks';
@@ -14,6 +15,112 @@ export { Variables, Bindings };
 
 export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+  // ============================================================================
+  // SECURITY MIDDLEWARE
+  // ============================================================================
+
+  // CORS Configuration - Strict origin allowlist for cross-origin requests
+  // In production, replace allowedOrigins with actual allowed origins
+  app.use('*', async (c, next) => {
+    const corsMiddleware = cors({
+      allowedOrigins: [
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        // Add production origins here when deployed
+      ],
+      credentials: true, // Allow cookies for authentication
+      maxAge: 86400, // 24 hours
+      exposeHeaders: ['Content-Length', 'Content-Type'],
+    });
+
+    // @ts-ignore - tinyhttp cors middleware compatibility
+    return corsMiddleware(c, next);
+  });
+
+  // Security Headers Middleware - Adds security headers to all responses
+  app.use('*', async (c, next) => {
+    await next();
+
+    // Prevent MIME type sniffing
+    c.header('X-Content-Type-Options', 'nosniff');
+
+    // Prevent clickjacking attacks
+    c.header('X-Frame-Options', 'DENY');
+
+    // Enable XSS filtering in browsers
+    c.header('X-XSS-Protection', '1; mode=block');
+
+    // Enforce HTTPS (only in production)
+    if (c.req.header('cf-visitor')?.includes('https')) {
+      c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+
+    // Content Security Policy - Restricts resources the browser can load
+    c.header(
+      'Content-Security-Policy',
+      "default-src 'self'; " +
+      "script-src 'self' 'unsafe-inline'; " +
+      "style-src 'self' 'unsafe-inline'; " +
+      "img-src 'self' data: https:; " +
+      "font-src 'self'; " +
+      "connect-src 'self'; " +
+      "frame-ancestors 'none';"
+    );
+
+    // Permissions Policy - Restricts browser features
+    c.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+
+    // Referrer Policy - Controls referrer information
+    c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  });
+
+  // CSRF Protection - Token-based double-submit cookie pattern
+  // Generates and validates CSRF tokens for state-changing operations
+  app.use('*', async (c, next) => {
+    const isReadOperation = c.req.method === 'GET' || c.req.method === 'HEAD' || c.req.method === 'OPTIONS';
+
+    if (isReadOperation) {
+      // For GET requests, generate and set CSRF token in cookie
+      const token = crypto.randomUUID();
+      c.cookie('csrf_token', token, {
+        httpOnly: true,
+        secure: true, // Only send over HTTPS
+        sameSite: 'Strict',
+        path: '/',
+        maxAge: 3600, // 1 hour
+      });
+      c.set('csrfToken', token);
+    } else {
+      // For state-changing operations (POST/PATCH/DELETE), validate CSRF token
+      const cookieToken = c.req.header('cookie')?.match(/csrf_token=([^;]+)/)?.[1];
+      const headerToken = c.req.header('x-csrf-token');
+
+      // Skip CSRF for API routes that don't use cookies (e.g., bearer token auth)
+      const isApiRoute = c.req.path.startsWith('/api/');
+
+      if (isApiRoute && (!cookieToken || !headerToken || cookieToken !== headerToken)) {
+        console.warn('CSRF validation failed', {
+          path: c.req.path,
+          method: c.req.method,
+          hasCookieToken: !!cookieToken,
+          hasHeaderToken: !!headerToken,
+        });
+        return c.json(
+          {
+            success: false,
+            error: {
+              code: 'CSRF_VALIDATION_FAILED',
+              message: 'CSRF token validation failed. Please refresh the page and try again.',
+            },
+          },
+          403
+        );
+      }
+    }
+
+    await next();
+  });
 
   // Middleware to inject db and optional env bindings - must be before routes
   app.use('*', async (c, next) => {

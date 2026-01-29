@@ -4,7 +4,9 @@ import { generateId, now } from './utils';
 import type { UserRecord } from './types';
 
 const PASSWORD_ITERATIONS = 120_000;
-const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+// Session TTL: 7 days - shorter than 30 days to reduce window of opportunity for stolen tokens
+// while maintaining reasonable user experience. Users can re-authenticate after expiry.
+const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const SALT_BYTES = 16;
 const HASH_BYTES = 32;
 
@@ -117,7 +119,11 @@ export const createSession = async (
   db: ReturnType<typeof import('../db').getDb>,
   userId: string
 ): Promise<{ token: string; expiresAt: number }> => {
-  const token = crypto.randomUUID();
+  // Generate 256-bit random token (64 hex characters) instead of UUID v4
+  // This provides higher entropy and makes tokens harder to predict/guess
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
   const tokenHash = await hashToken(token);
   const timestamp = now();
   const expiresAt = timestamp + SESSION_TTL_MS;

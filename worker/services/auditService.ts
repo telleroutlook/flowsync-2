@@ -2,6 +2,7 @@ import { and, desc, eq, sql, like, or, gte, lte } from 'drizzle-orm';
 import { auditLogs } from '../db/schema';
 import type { AuditRecord } from './types';
 import { generateId, now } from './utils';
+import { logDbError, retryOnce } from './dbHelpers';
 
 export const recordAudit = async (
   db: ReturnType<typeof import('../db').getDb>,
@@ -155,27 +156,4 @@ export const getAuditLogById = async (
     taskId: row.taskId,
     draftId: row.draftId,
   };
-};
-
-const logDbError = (label: string, error: unknown) => {
-  if (error instanceof Error) {
-    const meta = {
-      name: error.name,
-      message: error.message,
-      cause: error.cause instanceof Error ? error.cause.message : error.cause,
-    };
-    console.error(label, meta);
-    return;
-  }
-  console.error(label, { message: String(error) });
-};
-
-const retryOnce = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
-  try {
-    return await fn();
-  } catch (error) {
-    logDbError(label, error);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    return await fn();
-  }
 };

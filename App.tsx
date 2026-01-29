@@ -3,7 +3,7 @@ import { ProjectSidebar } from './components/ProjectSidebar';
 import { WorkspacePanel } from './components/WorkspacePanel';
 import { Button } from './components/ui/Button';
 import { cn } from './src/utils/cn';
-import { Menu, X, Grid, List as ListIcon, Calendar, Upload, Download, History, MessageSquare, FileText, Check, MoreVertical, Minus, Plus, RotateCcw } from 'lucide-react';
+import { Menu, Grid, List as ListIcon, Calendar, Upload, Download, History, MessageSquare, FileText, Check, Minus, Plus, RotateCcw } from 'lucide-react';
 import { LoginModal } from './components/LoginModal';
 import WorkspaceModal from './components/WorkspaceModal';
 import { UserProfileModal } from './components/UserProfileModal';
@@ -11,7 +11,7 @@ import { ChatInterface } from './components/ChatInterface';
 import { AuditPanel } from './components/AuditPanel';
 import { TaskDetailPanel } from './components/TaskDetailPanel';
 import { CreateProjectModal } from './components/CreateProjectModal';
-import { Task, DraftAction, ChatMessage, TaskStatus } from './types';
+import { Task, ChatMessage, TaskStatus } from './types';
 import { useProjectData } from './src/hooks/useProjectData';
 import { useAuth } from './src/hooks/useAuth';
 import { useWorkspaces } from './src/hooks/useWorkspaces';
@@ -20,7 +20,7 @@ import { useAuditLogs } from './src/hooks/useAuditLogs';
 import { useChat } from './src/hooks/useChat';
 import { useExport } from './src/hooks/useExport';
 import { useImageExport } from './src/hooks/useImageExport';
-import { generateId, storageGet, storageSet, storageGetJSON, storageSetJSON, computeGanttTimelineRange, findZoomIndex, DEFAULT_ZOOM_STATE, type ZoomState, type ViewMode } from './src/utils';
+import { generateId, storageGet, storageSet, storageGetJSON, storageSetJSON, computeGanttTimelineRange, pickZoomLevel, findZoomIndex, isMajorZoomChange, computeZoomSignature, DEFAULT_ZOOM_STATE, DEFAULT_ZOOM_META, type ZoomState, type ZoomMetaState, type ViewMode } from './src/utils';
 import { MobileNavBar, MobileTab } from './components/MobileNavBar';
 import { useI18n } from './src/i18n';
 import { DAY_MS, GANTT_PX_PER_DAY, type GanttViewMode } from './src/constants/gantt';
@@ -218,16 +218,14 @@ function App() {
     auditLogs, auditTotal, isAuditLoading, auditError,
     auditPage, setAuditPage, auditPageSize, setAuditPageSize, auditFilters, setAuditFilters,
     refreshAuditLogs
-  } = useAuditLogs({ 
-    activeProjectId, 
-    refreshData,
-    appendSystemMessage 
+  } = useAuditLogs({
+    activeProjectId
   });
 
   // 4. Drafts
   const {
-    drafts, pendingDraft, pendingDraftId, setPendingDraftId, draftWarnings, isProcessingDraft,
-    refreshDrafts, submitDraft, handleApplyDraft, handleDiscardDraft
+    pendingDraft, draftWarnings, isProcessingDraft,
+    submitDraft, handleApplyDraft, handleDiscardDraft
   } = useDrafts({
     activeProjectId,
     refreshData,
@@ -247,9 +245,7 @@ function App() {
     activeTasks,
     selectedTask: selectedTask || null,
     projects,
-    refreshData,
     submitDraft,
-    handleApplyDraft,
     appendSystemMessage,
     messages,
     setMessages,
@@ -430,7 +426,7 @@ function App() {
   const handleZoomStep = useCallback(
     (direction: -1 | 1) => {
       const nextIndex = Math.max(0, Math.min(zoomLevels.length - 1, zoomIndex + direction));
-      const nextValue = zoomLevels[nextIndex];
+      const nextValue = zoomLevels[nextIndex] ?? 1;
       updateZoom(viewMode, nextValue);
     },
     [updateZoom, viewMode, zoomIndex, zoomLevels]

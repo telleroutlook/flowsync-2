@@ -1,7 +1,7 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { aiService } from '../../services/aiService';
 import { apiService } from '../../services/apiService';
-import { ChatMessage, ChatAttachment, DraftAction, Project, Task } from '../../types';
+import { ChatMessage, ChatAttachment, DraftAction, Project, Task, Draft } from '../../types';
 import { generateId } from '../utils';
 import { processToolCalls, type ApiClient, type ProcessingStep } from './ai';
 import { useI18n } from '../i18n';
@@ -17,9 +17,7 @@ interface UseChatProps {
   activeTasks: Task[];
   selectedTask?: Task | null;
   projects: Project[];
-  refreshData: () => Promise<void>;
-  submitDraft: (actions: DraftAction[], options: { reason?: string; createdBy: string; autoApply?: boolean; silent?: boolean }) => Promise<any>;
-  handleApplyDraft: (draftId: string) => Promise<void>;
+  submitDraft: (actions: DraftAction[], options: { reason?: string; createdBy: Draft['createdBy']; autoApply?: boolean; silent?: boolean }) => Promise<Draft>;
   appendSystemMessage: (text: string) => void;
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
@@ -72,9 +70,7 @@ export const useChat = ({
   activeTasks,
   selectedTask,
   projects,
-  refreshData,
   submitDraft,
-  handleApplyDraft,
   appendSystemMessage,
   messages,
   setMessages,
@@ -124,10 +120,26 @@ export const useChat = ({
   const handleRemoveAttachment = useCallback((id: string) => {
     setPendingAttachments(prev => {
       const target = prev.find(item => item.id === id);
-      if (target) URL.revokeObjectURL(target.url);
+      if (target) {
+        // Revoke blob URL to prevent memory leak
+        URL.revokeObjectURL(target.url);
+      }
       return prev.filter(item => item.id !== id);
     });
   }, []);
+
+  // Memory management: Revoke all blob URLs on component unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      pendingAttachments.forEach(att => {
+        try {
+          URL.revokeObjectURL(att.url);
+        } catch {
+          // Ignore errors from already revoked URLs
+        }
+      });
+    };
+  }, [pendingAttachments]);
 
   // Build system context for the AI
   const tasksKey = useMemo(() => {
@@ -404,6 +416,17 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
       lastUserMessageRef.current = userMsg;
       setMessages((prev) => [...prev, userMsg]);
       setInputText('');
+
+      // Memory management: Revoke blob URLs after message is sent
+      if (hasAttachments) {
+        pendingAttachments.forEach(att => {
+          try {
+            URL.revokeObjectURL(att.url);
+          } catch {
+            // Ignore errors from already revoked URLs
+          }
+        });
+      }
       setPendingAttachments([]);
       startProcessing();
 

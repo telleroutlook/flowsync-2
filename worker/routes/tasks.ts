@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
-import { jsonError, jsonOk } from './helpers';
+import { jsonError, jsonOk, requireWorkspace } from './helpers';
 import { workspaceMiddleware } from './middleware';
 import { createTask, deleteTask, getTaskById, listTasks, updateTask } from '../services/taskService';
 import { recordAudit } from '../services/auditService';
@@ -66,8 +66,9 @@ const listQuerySchema = z.object({
 });
 
 tasksRoute.get('/', async (c) => {
-  const workspace = c.get('workspace');
-  if (!workspace) return jsonError(c, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
   const parsed = listQuerySchema.safeParse(c.req.query());
   if (!parsed.success) return jsonError(c, 'INVALID_QUERY', 'Invalid query parameters.', 400);
   const result = await listTasks(c.get('db'), parsed.data, workspace.id);
@@ -75,16 +76,18 @@ tasksRoute.get('/', async (c) => {
 });
 
 tasksRoute.get('/:id', async (c) => {
-  const workspace = c.get('workspace');
-  if (!workspace) return jsonError(c, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
   const task = await getTaskById(c.get('db'), c.req.param('id'), workspace.id);
   if (!task) return jsonError(c, 'NOT_FOUND', 'Task not found.', 404);
   return jsonOk(c, task);
 });
 
 tasksRoute.post('/', zValidator('json', taskInputSchema), async (c) => {
-  const workspace = c.get('workspace');
-  if (!workspace) return jsonError(c, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
   const data = c.req.valid('json');
   const task = await createTask(c.get('db'), {
     id: data.id,
@@ -121,8 +124,9 @@ tasksRoute.post('/', zValidator('json', taskInputSchema), async (c) => {
 });
 
 tasksRoute.patch('/:id', zValidator('json', taskUpdateSchema), async (c) => {
-  const workspace = c.get('workspace');
-  if (!workspace) return jsonError(c, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
   const id = c.req.param('id');
   const before = await getTaskById(c.get('db'), id, workspace.id);
   const data = c.req.valid('json');
@@ -157,8 +161,9 @@ tasksRoute.patch('/:id', zValidator('json', taskUpdateSchema), async (c) => {
 });
 
 tasksRoute.delete('/:id', async (c) => {
-  const workspace = c.get('workspace');
-  if (!workspace) return jsonError(c, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
   const id = c.req.param('id');
   const before = await getTaskById(c.get('db'), id, workspace.id);
   const task = await deleteTask(c.get('db'), id, workspace.id);

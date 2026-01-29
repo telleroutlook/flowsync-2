@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiService } from '../../services/apiService';
 import { Draft, DraftAction } from '../../types';
 import { useI18n } from '../i18n';
-import { isAppError, getErrorMessage } from '../utils/error';
+import { getErrorMessage } from '../utils/error';
 
 interface UseDraftsProps {
   activeProjectId: string;

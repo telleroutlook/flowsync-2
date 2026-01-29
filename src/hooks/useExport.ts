@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Project, Task, DraftAction, Draft } from '../../types';
 import { apiService } from '../../services/apiService';
 import {
-  generateId,
   storageGet,
   storageSet,
   parseDelimitedContent,
@@ -21,7 +20,6 @@ import {
   processImportActions,
   parseLowercaseRecord,
   type ImportResult,
-  type ProcessedImport,
   type ImportTask,
 } from '../utils';
 import { useI18n } from '../i18n';
@@ -34,7 +32,7 @@ interface UseExportProps {
   activeProject: Project;
   activeTasks: Task[];
   refreshData: () => Promise<void>;
-  submitDraft: (actions: DraftAction[], options: { createdBy: Draft['createdBy']; autoApply?: boolean; reason?: string; silent?: boolean }) => Promise<any>;
+  submitDraft: (actions: DraftAction[], options: { createdBy: Draft['createdBy']; autoApply?: boolean; reason?: string; silent?: boolean }) => Promise<Draft>;
   fetchAllTasks: () => Promise<Task[]>;
   onError?: (message: string) => void;
   onShowMessage?: (message: string) => void;

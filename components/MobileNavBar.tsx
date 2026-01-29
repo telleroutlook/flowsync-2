@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import { memo } from 'react';
 import { Layout, CheckSquare, MessageSquare } from 'lucide-react';
 import { cn } from '../src/utils/cn';
 import { useI18n } from '../src/i18n';

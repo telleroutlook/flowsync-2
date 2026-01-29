@@ -3,7 +3,7 @@
  */
 
 import type { Task } from '../../types';
-import { DAY_MS, GANTT_PX_PER_DAY, type GanttViewMode } from '../constants/gantt';
+import { DAY_MS, type GanttViewMode } from '../constants/gantt';
 
 export type ViewMode = 'BOARD' | 'LIST' | 'GANTT';
 

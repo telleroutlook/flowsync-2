@@ -4,6 +4,7 @@ import { toProjectRecord } from './serializers';
 import { generateId, now } from './utils';
 import type { ProjectRecord } from './types';
 import { seedProjects } from '../db/seed';
+import { retryOnce } from './dbHelpers';
 
 export const listProjects = async (
   db: ReturnType<typeof import('../db').getDb>,
@@ -149,26 +150,3 @@ const PROJECT_CACHE_TTL_MS = 30_000;
 const projectCache = new Map<string, { data: ProjectRecord[]; at: number }>();
 
 const isCacheFresh = (timestamp: number) => now() - timestamp < PROJECT_CACHE_TTL_MS;
-
-const logDbError = (label: string, error: unknown) => {
-  if (error instanceof Error) {
-    const meta = {
-      name: error.name,
-      message: error.message,
-      cause: error.cause instanceof Error ? error.cause.message : error.cause,
-    };
-    console.error(label, meta);
-    return;
-  }
-  console.error(label, { message: String(error) });
-};
-
-const retryOnce = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
-  try {
-    return await fn();
-  } catch (error) {
-    logDbError(label, error);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    return await fn();
-  }
-};

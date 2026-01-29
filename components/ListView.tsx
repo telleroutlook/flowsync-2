@@ -1,5 +1,5 @@
 import React, { useMemo, memo, useCallback } from 'react';
-import { Task, Priority, TaskStatus } from '../types';
+import { Task, TaskStatus } from '../types';
 import { useI18n } from '../src/i18n';
 import { getPriorityLabel, getStatusLabel } from '../src/i18n/labels';
 import { cn } from '../src/utils/cn';
@@ -105,7 +105,7 @@ const TaskRow = memo(({ task, isSelected, onSelectTask }: TaskRowProps) => {
 TaskRow.displayName = 'TaskRow';
 
 export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, onSelectTask }) => {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
 
   const sortedTasks = useMemo(() => {
     return [...tasks].sort((a, b) => {

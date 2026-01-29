@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiService } from '../../services/apiService';
 import { storageGet, storageSet } from '../utils/storage';
 import type { User, WorkspaceJoinRequest, WorkspaceMember, WorkspaceWithMembership } from '../../types';

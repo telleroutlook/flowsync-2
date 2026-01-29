@@ -14,14 +14,8 @@ function deepEqual(a: DependencyList, b: DependencyList): boolean {
     const aValue = a[i];
     const bValue = b[i];
 
-    // Primitive comparison
+    // Primitive comparison (handles null/undefined via strict equality)
     if (aValue === bValue) continue;
-
-    // Handle null/undefined
-    if (aValue == null || bValue == null) {
-      if (aValue !== bValue) return false;
-      continue;
-    }
 
     // Array comparison (shallow for performance)
     if (Array.isArray(aValue) && Array.isArray(bValue)) {

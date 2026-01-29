@@ -5,8 +5,6 @@ import { useI18n } from '../i18n';
 
 interface UseAuditLogsProps {
   activeProjectId: string;
-  refreshData: () => Promise<void>;
-  appendSystemMessage: (text: string) => void;
 }
 
 interface AuditFilters {
@@ -27,7 +25,7 @@ const DEFAULT_FILTERS: AuditFilters = {
   to: '',
 };
 
-export const useAuditLogs = ({ activeProjectId, refreshData, appendSystemMessage }: UseAuditLogsProps) => {
+export const useAuditLogs = ({ activeProjectId }: UseAuditLogsProps) => {
   const { t } = useI18n();
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);

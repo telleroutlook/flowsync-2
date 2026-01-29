@@ -4,7 +4,7 @@ import type { WorkspaceJoinRequest, WorkspaceMember, WorkspaceWithMembership } f
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { cn } from '../src/utils/cn';
-import { X, Check, Trash2, Plus, Users, Globe, Clock, Shield, Briefcase, UserPlus } from 'lucide-react';
+import { X, Check, Plus, Users, UserPlus } from 'lucide-react';
 
 interface WorkspaceModalProps {
   isOpen: boolean;

@@ -370,7 +370,7 @@ const runAIRequest = async (
       'Content-Type': 'application/json',
     };
 
-    headers['Authorization'] = await getAuthorizationHeader(c.env.OPENAI_API_KEY, baseUrl, model);
+    headers['Authorization'] = await getAuthorizationHeader(c.env.OPENAI_API_KEY);
 
     let response: Response;
     let attempts = 0;

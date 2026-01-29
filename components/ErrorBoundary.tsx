@@ -8,10 +8,10 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  error?: Error;
+  error: Error | undefined;
 }
 
-const DefaultFallback = memo<{ error?: Error; onReset: () => void }>(({ error, onReset }) => (
+const DefaultFallback = memo<{ error?: Error; onReset?: () => void }>(({ error }) => (
   <div className="flex items-center justify-center min-h-[400px] p-6">
     <div className="text-center max-w-md">
       <div className="w-16 h-16 bg-negative/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -37,14 +37,14 @@ DefaultFallback.displayName = 'DefaultFallback';
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, error: undefined };
   }
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.props.onError?.(error, errorInfo);
     console.error('ErrorBoundary caught an error:', error, errorInfo);
   }

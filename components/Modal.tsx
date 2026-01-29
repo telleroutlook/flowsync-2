@@ -1,6 +1,5 @@
-import React, { useEffect, memo, useCallback } from 'react';
+import { useEffect, memo, useCallback } from 'react';
 import { useI18n } from '../src/i18n';
-import { cn } from '../src/utils/cn';
 import { X } from 'lucide-react';
 
 interface ModalProps {

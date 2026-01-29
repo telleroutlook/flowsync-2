@@ -57,7 +57,7 @@ describe('ChatBubble', () => {
       timestamp: Date.now(),
     };
 
-    const { container } = render(
+    render(
       <I18nProvider>
         <ChatBubble message={userMessage} />
       </I18nProvider>

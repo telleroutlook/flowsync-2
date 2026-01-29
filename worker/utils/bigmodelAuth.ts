@@ -51,7 +51,7 @@ export function parseBigModelApiKey(apiKey: string): BigModelApiKey | null {
  * @param apiKey - Zhipu AI API key (format: id.secret)
  * @param expSeconds - Expiration time (seconds), default 3600 seconds (1 hour)
  */
-export async function generateBigModelToken(apiKey: string, expSeconds: number = 3600): Promise<string> {
+export async function generateBigModelToken(apiKey: string, expSeconds = 3600): Promise<string> {
   assertCrypto();
   const parsed = parseBigModelApiKey(apiKey);
   if (!parsed) {
@@ -97,7 +97,7 @@ export function isBigModelApi(baseUrl: string, model?: string): boolean {
 /**
  * Get authorization header
  */
-export async function getAuthorizationHeader(apiKey: string, baseUrl: string, model?: string): Promise<string> {
+export async function getAuthorizationHeader(apiKey: string): Promise<string> {
   // Temporary: Disable JWT generation to test direct API Key support for 'coding' endpoint
   // if (isBigModelApi(baseUrl, model)) {
   //   const token = await generateBigModelToken(apiKey);

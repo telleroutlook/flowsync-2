@@ -3,7 +3,6 @@ import { Modal } from './Modal';
 import { useI18n } from '../src/i18n';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
-import { cn } from '../src/utils/cn';
 import { User, Lock, AlertCircle, LogIn, UserPlus } from 'lucide-react';
 
 interface LoginModalProps {

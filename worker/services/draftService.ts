@@ -103,6 +103,353 @@ const normalizeProjectInput = (
   };
 };
 
+/**
+ * Handler context for action processing
+ * Contains shared state that handlers can read and modify
+ */
+interface ActionHandlerContext {
+  /** Current project state - handlers can modify this */
+  projectState: ProjectRecord[];
+  /** Current task state - handlers can modify this */
+  taskState: TaskRecord[];
+  /** Collected warnings across all actions */
+  warnings: string[];
+  /** The workspace ID */
+  workspaceId: string;
+  /** Planned actions to be returned */
+  planned: DraftAction[];
+}
+
+/**
+ * Result returned by action handlers
+ */
+interface ActionResult {
+  /** Updated project state (optional, if unchanged return undefined) */
+  projectState?: ProjectRecord[];
+  /** Updated task state (optional, if unchanged return undefined) */
+  taskState?: TaskRecord[];
+  /** The planned action to add */
+  plannedAction: DraftAction;
+  /** Any warnings to add to the global warnings array */
+  warnings?: string[];
+  /** Whether to stop processing this action (skip further handlers) */
+  continueProcessing: boolean;
+}
+
+/**
+ * Type for action handler functions
+ */
+type ActionHandler = (
+  action: DraftAction,
+  context: ActionHandlerContext
+) => Promise<ActionResult> | ActionResult;
+
+/**
+ * Handles project creation actions
+ * @param action - The draft action to process
+ * @param context - Handler context with state and warnings
+ * @returns Action result with updated state and planned action
+ */
+const handleProjectCreate: ActionHandler = (action, context) => {
+  const { projectState, workspaceId } = context;
+  const project = normalizeProjectInput(action.after ?? {}, null, workspaceId);
+
+  return {
+    projectState: [...projectState, project],
+    plannedAction: {
+      ...action,
+      id: action.id || generateId(),
+      entityId: project.id,
+      before: null,
+      after: project,
+    },
+    continueProcessing: true,
+  };
+};
+
+/**
+ * Handles project update actions
+ * @param action - The draft action to process
+ * @param context - Handler context with state and warnings
+ * @returns Action result with updated state and planned action
+ */
+const handleProjectUpdate: ActionHandler = (action, context) => {
+  const { projectState, workspaceId, warnings } = context;
+  const existing = projectState.find((item) => item.id === action.entityId);
+
+  if (!existing) {
+    const warningMessage = 'Project not found for update.';
+    warnings.push(warningMessage);
+
+    return {
+      plannedAction: {
+        ...action,
+        id: action.id || generateId(),
+        before: null,
+        after: null,
+        warnings: [warningMessage],
+      },
+      continueProcessing: false,
+    };
+  }
+
+  const updated = normalizeProjectInput(action.after ?? {}, existing, workspaceId);
+
+  return {
+    projectState: projectState.map((item) => (item.id === existing.id ? updated : item)),
+    plannedAction: {
+      ...action,
+      id: action.id || generateId(),
+      entityId: existing.id,
+      before: existing,
+      after: updated,
+    },
+    continueProcessing: true,
+  };
+};
+
+/**
+ * Handles project deletion actions
+ * @param action - The draft action to process
+ * @param context - Handler context with state and warnings
+ * @returns Action result with updated state and planned action
+ */
+const handleProjectDelete: ActionHandler = (action, context) => {
+  const { projectState, taskState, warnings } = context;
+  const existing = projectState.find((item) => item.id === action.entityId);
+
+  if (!existing) {
+    const warningMessage = 'Project not found for delete.';
+    warnings.push(warningMessage);
+
+    return {
+      plannedAction: {
+        ...action,
+        id: action.id || generateId(),
+        before: null,
+        after: null,
+        warnings: [warningMessage],
+      },
+      continueProcessing: false,
+    };
+  }
+
+  return {
+    projectState: projectState.filter((item) => item.id !== existing.id),
+    taskState: taskState.filter((task) => task.projectId !== existing.id),
+    plannedAction: {
+      ...action,
+      id: action.id || generateId(),
+      entityId: existing.id,
+      before: existing,
+      after: null,
+    },
+    continueProcessing: true,
+  };
+};
+
+/**
+ * Handles task creation actions
+ * @param action - The draft action to process
+ * @param context - Handler context with state and warnings
+ * @returns Action result with updated state and planned action
+ */
+const handleTaskCreate: ActionHandler = (action, context) => {
+  const { taskState, warnings } = context;
+  const projectIdOverride = (action.after as Record<string, unknown> | undefined)?.projectId as string | undefined;
+  const task = normalizeTaskInput(action.after ?? {}, null, projectIdOverride);
+  const constraintResult = applyTaskConstraints(task, [...taskState, task]);
+  const updatedTask = constraintResult.task;
+
+  if (!updatedTask.projectId) {
+    constraintResult.warnings.push('Task create missing projectId.');
+  }
+
+  const actionWarnings = constraintResult.warnings;
+  if (actionWarnings.length) {
+    warnings.push(...actionWarnings);
+  }
+
+  return {
+    taskState: [...taskState, updatedTask],
+    plannedAction: {
+      ...action,
+      id: action.id || generateId(),
+      entityId: updatedTask.id,
+      before: null,
+      after: updatedTask,
+      warnings: actionWarnings.length ? actionWarnings : undefined,
+    },
+    continueProcessing: true,
+  };
+};
+
+/**
+ * Handles task update actions
+ * @param action - The draft action to process
+ * @param context - Handler context with state and warnings
+ * @returns Action result with updated state and planned action
+ */
+const handleTaskUpdate: ActionHandler = (action, context) => {
+  const { taskState, warnings } = context;
+  const existing = taskState.find((item) => item.id === action.entityId);
+
+  if (!existing) {
+    const warningMessage = 'Task not found.';
+    warnings.push(warningMessage);
+
+    return {
+      plannedAction: {
+        ...action,
+        id: action.id || generateId(),
+        before: null,
+        after: null,
+        warnings: [warningMessage],
+      },
+      continueProcessing: false,
+    };
+  }
+
+  const merged = normalizeTaskInput(action.after ?? {}, existing, existing.projectId);
+
+  // Detect which fields were explicitly modified
+  const explicitFields: string[] = [];
+  const afterObj = action.after ?? {};
+  if (afterObj.startDate !== undefined && afterObj.startDate !== existing.startDate) {
+    explicitFields.push('startDate');
+  }
+  if (afterObj.dueDate !== undefined && afterObj.dueDate !== existing.dueDate) {
+    explicitFields.push('dueDate');
+  }
+  if (afterObj.title !== undefined && afterObj.title !== existing.title) {
+    explicitFields.push('title');
+  }
+  if (afterObj.status !== undefined && afterObj.status !== existing.status) {
+    explicitFields.push('status');
+  }
+  if (afterObj.priority !== undefined && afterObj.priority !== existing.priority) {
+    explicitFields.push('priority');
+  }
+  if (afterObj.assignee !== undefined && afterObj.assignee !== existing.assignee) {
+    explicitFields.push('assignee');
+  }
+
+  // Check if dates were explicitly modified
+  const datesModified = explicitFields.includes('startDate') || explicitFields.includes('dueDate');
+
+  // First, check what the constraints would require
+  const constraintResult = applyTaskConstraints(merged, taskState.map((item) => (item.id === existing.id ? merged : item)));
+
+  // If dates were modified and constraints would change them, it's a violation
+  if (datesModified && constraintResult.changed) {
+    const originalStart = existing.startDate;
+    const originalDue = existing.dueDate;
+    const constrainedStart = constraintResult.task.startDate;
+    const constrainedDue = constraintResult.task.dueDate;
+
+    // Check if the constrained dates differ from the user's requested dates
+    const startViolated = explicitFields.includes('startDate') && constrainedStart !== merged.startDate;
+    const dueViolated = explicitFields.includes('dueDate') && constrainedDue !== merged.dueDate;
+
+    if (startViolated || dueViolated) {
+      // Instead of throwing, we warn the user and allow the system to auto-correct the dates
+      // to the valid constrained dates (which happens in the fall-through below).
+      const warningMessage = [
+        `Adjusted task dates: ${startViolated ? 'Start Date' : ''}${startViolated && dueViolated ? ' and ' : ''}${dueViolated ? 'Due Date' : ''} violated predecessor constraints`,
+        `Task "${existing.title}" has mandatory predecessors.`,
+        `Requested: ${merged.startDate ? new Date(merged.startDate).toISOString().split('T')[0] : 'N/A'} - ${merged.dueDate ? new Date(merged.dueDate).toISOString().split('T')[0] : 'N/A'}`,
+        `Adjusted to: ${constrainedStart ? new Date(constrainedStart).toISOString().split('T')[0] : 'N/A'} - ${constrainedDue ? new Date(constrainedDue).toISOString().split('T')[0] : 'N/A'}`
+      ].join('. ');
+
+      warnings.push(warningMessage);
+      // We append this specific warning to the constraint result so it appears on the action item too
+      constraintResult.warnings.push(warningMessage);
+    }
+  }
+
+  const actionWarnings = constraintResult.warnings;
+  if (actionWarnings.length) {
+    warnings.push(...actionWarnings);
+  }
+
+  return {
+    taskState: taskState.map((item) => (item.id === existing.id ? constraintResult.task : item)),
+    plannedAction: {
+      ...action,
+      id: action.id || generateId(),
+      entityId: existing.id,
+      before: existing,
+      after: constraintResult.task,
+      warnings: actionWarnings.length ? actionWarnings : undefined,
+    },
+    continueProcessing: true,
+  };
+};
+
+/**
+ * Handles task deletion actions
+ * @param action - The draft action to process
+ * @param context - Handler context with state and warnings
+ * @returns Action result with updated state and planned action
+ */
+const handleTaskDelete: ActionHandler = (action, context) => {
+  const { taskState } = context;
+  const existing = taskState.find((item) => item.id === action.entityId);
+
+  if (!existing) {
+    const warningMessage = 'Task not found.';
+    context.warnings.push(warningMessage);
+
+    return {
+      plannedAction: {
+        ...action,
+        id: action.id || generateId(),
+        before: null,
+        after: null,
+        warnings: [warningMessage],
+      },
+      continueProcessing: false,
+    };
+  }
+
+  return {
+    taskState: taskState.filter((item) => item.id !== existing.id),
+    plannedAction: {
+      ...action,
+      id: action.id || generateId(),
+      entityId: existing.id,
+      before: existing,
+      after: null,
+    },
+    continueProcessing: true,
+  };
+};
+
+/**
+ * Strategy lookup table for action handlers
+ * Maps entity type and action to the appropriate handler function
+ */
+const ACTION_HANDLERS: Record<string, ActionHandler> = {
+  'project.create': handleProjectCreate,
+  'project.update': handleProjectUpdate,
+  'project.delete': handleProjectDelete,
+  'task.create': handleTaskCreate,
+  'task.update': handleTaskUpdate,
+  'task.delete': handleTaskDelete,
+};
+
+/**
+ * Plans draft actions by validating and preparing them for application
+ *
+ * This function processes draft actions, validates constraints, and prepares
+ * the actions for application. It uses a strategy pattern with dedicated handlers
+ * for each combination of entity type and action.
+ *
+ * @param db - Database connection
+ * @param actions - Array of draft actions to plan
+ * @param workspaceId - Workspace ID for scoping
+ * @returns Planned actions with any warnings
+ */
 const planActions = async (
   db: ReturnType<typeof import('../db').getDb>,
   actions: DraftAction[],
@@ -216,183 +563,42 @@ const planActions = async (
     taskState = taskRows.map((row) => toTaskRecord(row.tasks));
   }
 
+  // Initialize handler context
+  const context: ActionHandlerContext = {
+    projectState,
+    taskState,
+    warnings,
+    workspaceId,
+    planned,
+  };
+
+  // Process each action using the strategy pattern
   for (const action of actions) {
-    if (action.entityType === 'project') {
-      if (action.action === 'create') {
-        const project = normalizeProjectInput(action.after ?? {}, null, workspaceId);
-        projectState = [...projectState, project];
-        planned.push({
-          ...action,
-          id: action.id || generateId(),
-          entityId: project.id,
-          before: null,
-          after: project,
-        });
-      } else if (action.action === 'update') {
-        const existing = projectState.find((item) => item.id === action.entityId);
-        if (!existing) {
-          planned.push({
-            ...action,
-            id: action.id || generateId(),
-            before: null,
-            after: null,
-            warnings: ['Project not found for update.'],
-          });
-          warnings.push('Project not found for update.');
-          continue;
-        }
-        const updated = normalizeProjectInput(action.after ?? {}, existing, workspaceId);
-        projectState = projectState.map((item) => (item.id === existing.id ? updated : item));
-        planned.push({
-          ...action,
-          id: action.id || generateId(),
-          entityId: existing.id,
-          before: existing,
-          after: updated,
-        });
-      } else if (action.action === 'delete') {
-        const existing = projectState.find((item) => item.id === action.entityId);
-        if (!existing) {
-          planned.push({
-            ...action,
-            id: action.id || generateId(),
-            before: null,
-            after: null,
-            warnings: ['Project not found for delete.'],
-          });
-          warnings.push('Project not found for delete.');
-          continue;
-        }
-        projectState = projectState.filter((item) => item.id !== existing.id);
-        taskState = taskState.filter((task) => task.projectId !== existing.id);
-        planned.push({
-          ...action,
-          id: action.id || generateId(),
-          entityId: existing.id,
-          before: existing,
-          after: null,
-        });
-      }
+    const handlerKey = `${action.entityType}.${action.action}`;
+    const handler = ACTION_HANDLERS[handlerKey];
+
+    if (!handler) {
+      // Unknown action type - skip with a warning
+      warnings.push(`Unknown action type: ${handlerKey}`);
       continue;
     }
 
-    if (action.entityType === 'task') {
-      if (action.action === 'create') {
-        const projectIdOverride = (action.after as Record<string, unknown> | undefined)?.projectId as string | undefined;
-        const task = normalizeTaskInput(action.after ?? {}, null, projectIdOverride);
-        const constraintResult = applyTaskConstraints(task, [...taskState, task]);
-        const updatedTask = constraintResult.task;
-        if (!updatedTask.projectId) {
-          constraintResult.warnings.push('Task create missing projectId.');
-        }
-        taskState = [...taskState, updatedTask];
-        if (constraintResult.warnings.length) warnings.push(...constraintResult.warnings);
-        planned.push({
-          ...action,
-          id: action.id || generateId(),
-          entityId: updatedTask.id,
-          before: null,
-          after: updatedTask,
-          warnings: constraintResult.warnings.length ? constraintResult.warnings : undefined,
-        });
-        continue;
-      }
+    const result = await handler(action, context);
 
-      const existing = taskState.find((item) => item.id === action.entityId);
-      if (!existing) {
-        planned.push({
-          ...action,
-          id: action.id || generateId(),
-          before: null,
-          after: null,
-          warnings: ['Task not found.'],
-        });
-        warnings.push('Task not found.');
-        continue;
-      }
+    // Update context with result
+    if (result.projectState !== undefined) {
+      context.projectState = result.projectState;
+    }
+    if (result.taskState !== undefined) {
+      context.taskState = result.taskState;
+    }
 
-      if (action.action === 'update') {
-        const merged = normalizeTaskInput(action.after ?? {}, existing, existing.projectId);
+    // Add the planned action
+    context.planned.push(result.plannedAction);
 
-        // Detect which fields were explicitly modified
-        const explicitFields: string[] = [];
-        const afterObj = action.after ?? {};
-        if (afterObj.startDate !== undefined && afterObj.startDate !== existing.startDate) {
-          explicitFields.push('startDate');
-        }
-        if (afterObj.dueDate !== undefined && afterObj.dueDate !== existing.dueDate) {
-          explicitFields.push('dueDate');
-        }
-        if (afterObj.title !== undefined && afterObj.title !== existing.title) {
-          explicitFields.push('title');
-        }
-        if (afterObj.status !== undefined && afterObj.status !== existing.status) {
-          explicitFields.push('status');
-        }
-        if (afterObj.priority !== undefined && afterObj.priority !== existing.priority) {
-          explicitFields.push('priority');
-        }
-        if (afterObj.assignee !== undefined && afterObj.assignee !== existing.assignee) {
-          explicitFields.push('assignee');
-        }
-
-        // Check if dates were explicitly modified
-        const datesModified = explicitFields.includes('startDate') || explicitFields.includes('dueDate');
-
-        // First, check what the constraints would require
-        const constraintResult = applyTaskConstraints(merged, taskState.map((item) => (item.id === existing.id ? merged : item)));
-
-        // If dates were modified and constraints would change them, it's a violation
-        if (datesModified && constraintResult.changed) {
-          const originalStart = existing.startDate;
-          const originalDue = existing.dueDate;
-          const constrainedStart = constraintResult.task.startDate;
-          const constrainedDue = constraintResult.task.dueDate;
-
-          // Check if the constrained dates differ from the user's requested dates
-          const startViolated = explicitFields.includes('startDate') && constrainedStart !== merged.startDate;
-          const dueViolated = explicitFields.includes('dueDate') && constrainedDue !== merged.dueDate;
-
-          if (startViolated || dueViolated) {
-            // Instead of throwing, we warn the user and allow the system to auto-correct the dates
-            // to the valid constrained dates (which happens in the fall-through below).
-            const warningMessage = [
-              `Adjusted task dates: ${startViolated ? 'Start Date' : ''}${startViolated && dueViolated ? ' and ' : ''}${dueViolated ? 'Due Date' : ''} violated predecessor constraints`,
-              `Task "${existing.title}" has mandatory predecessors.`,
-              `Requested: ${merged.startDate ? new Date(merged.startDate).toISOString().split('T')[0] : 'N/A'} - ${merged.dueDate ? new Date(merged.dueDate).toISOString().split('T')[0] : 'N/A'}`,
-              `Adjusted to: ${constrainedStart ? new Date(constrainedStart).toISOString().split('T')[0] : 'N/A'} - ${constrainedDue ? new Date(constrainedDue).toISOString().split('T')[0] : 'N/A'}`
-            ].join('. ');
-            
-            warnings.push(warningMessage);
-            // We append this specific warning to the constraint result so it appears on the action item too
-            constraintResult.warnings.push(warningMessage);
-          }
-        }
-
-        // If no violation, apply the constraints and proceed
-        taskState = taskState.map((item) => (item.id === existing.id ? constraintResult.task : item));
-        if (constraintResult.warnings.length) warnings.push(...constraintResult.warnings);
-        planned.push({
-          ...action,
-          id: action.id || generateId(),
-          entityId: existing.id,
-          before: existing,
-          after: constraintResult.task,
-          warnings: constraintResult.warnings.length ? constraintResult.warnings : undefined,
-        });
-        continue;
-      }
-
-      if (action.action === 'delete') {
-        taskState = taskState.filter((item) => item.id !== existing.id);
-        planned.push({
-          ...action,
-          id: action.id || generateId(),
-          entityId: existing.id,
-          before: existing,
-          after: null,
-        });
-      }
+    // Stop processing this action if the handler indicates to continue
+    if (!result.continueProcessing) {
+      continue;
     }
   }
 

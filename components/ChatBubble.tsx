@@ -1,12 +1,45 @@
-import React, { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { ChatMessage, ChatAttachment } from '../types';
-import { Paperclip, RotateCcw, ChevronDown, ChevronRight, BrainCircuit } from 'lucide-react';
+import { Paperclip, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import DOMPurify from 'isomorphic-dompurify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useI18n } from '../src/i18n';
 import { cn } from '../src/utils/cn';
 import { Button } from './ui/Button';
+
+// ============================================================================
+// XSS PROTECTION CONFIGURATION
+// ============================================================================
+
+// DOMPurify configuration to balance security and functionality
+// Allows safe HTML elements for markdown rendering while sanitizing malicious content
+const PURIFY_CONFIG = {
+  ALLOWED_TAGS: [
+    'p', 'br', 'strong', 'em', 'u', 's', 'code', 'pre',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'ul', 'ol', 'li',
+    'blockquote',
+    'a', 'img',
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
+    'div', 'span',
+  ],
+  ALLOWED_ATTR: [
+    'href', 'src', 'alt', 'title', 'class', 'target', 'rel',
+    'colspan', 'rowspan',
+  ],
+  // Allow data: URIs for images (needed for markdown)
+  ALLOW_DATA_ATTR: true,
+  // Allow URI schemes for links
+  ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+};
+
+// Sanitize markdown content to prevent XSS attacks
+// This protects against malicious script injection in AI-generated content
+const sanitizeMarkdown = (content: string): string => {
+  return DOMPurify.sanitize(content, PURIFY_CONFIG);
+};
 
 interface ChatBubbleProps {
   message: ChatMessage;
@@ -39,7 +72,7 @@ const Attachment = memo<AttachmentProps>(({ attachment, isUser }) => (
         ? "border-primary-foreground/20 bg-primary-foreground/10 text-primary-foreground hover:bg-primary-foreground/20"
         : "border-border-subtle bg-background text-text-primary hover:bg-secondary/10"
     )}
-    rel="noreferrer"
+    rel="noopener noreferrer nofollow"
   >
     <Paperclip className="w-3.5 h-3.5 opacity-70" />
     <div className="flex flex-col min-w-0">
@@ -59,6 +92,10 @@ interface MarkdownContentProps {
 }
 
 const MarkdownContent = memo<MarkdownContentProps>(({ content, isUser, codeLabel }) => {
+  // Sanitize content to prevent XSS attacks before rendering markdown
+  // This is critical for AI-generated content which could contain malicious scripts
+  const sanitizedContent = useMemo(() => sanitizeMarkdown(content), [content]);
+
   // Move components definition outside useMemo to simplify - only style-dependent parts vary
   const tableClass = "overflow-x-auto my-2 rounded-lg border border-inherit/20";
   const theadClass = isUser ? 'bg-primary-foreground/10' : 'bg-background';
@@ -81,7 +118,8 @@ const MarkdownContent = memo<MarkdownContentProps>(({ content, isUser, codeLabel
     tr: ({ node, ...props }: any) => <tr className={trClass} {...props} />,
     td: ({ node, ...props }: any) => <td className="px-2 py-1.5" {...props} />,
     p: ({ node, ...props }: any) => <p className="mb-1.5 last:mb-0 leading-relaxed" {...props} />,
-    a: ({ node, ...props }: any) => <a target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 opacity-90 hover:opacity-100 font-medium" {...props} />,
+    // Add rel="noopener noreferrer nofollow" to all links for security
+    a: ({ node, ...props }: any) => <a target="_blank" rel="noopener noreferrer nofollow" className="underline underline-offset-2 opacity-90 hover:opacity-100 font-medium" {...props} />,
     ul: ({ node, ...props }: any) => <ul className="list-disc list-outside ml-4 mb-1.5 space-y-0.5" {...props} />,
     ol: ({ node, ...props }: any) => <ol className="list-decimal list-outside ml-4 mb-1.5 space-y-0.5" {...props} />,
     li: ({ node, ...props }: any) => <li className="pl-0.5" {...props} />,
@@ -109,7 +147,7 @@ const MarkdownContent = memo<MarkdownContentProps>(({ content, isUser, codeLabel
   return (
     <div className={isUser ? 'text-primary-foreground' : 'text-text-primary'}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {content}
+        {sanitizedContent}
       </ReactMarkdown>
     </div>
   );

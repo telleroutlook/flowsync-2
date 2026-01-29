@@ -47,8 +47,6 @@ describe('useAuditLogs', () => {
     const { result } = renderHook(() =>
       useAuditLogs({
         activeProjectId: 'p1',
-        refreshData,
-        appendSystemMessage,
       }), { wrapper }
     );
 

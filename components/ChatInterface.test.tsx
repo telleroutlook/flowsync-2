@@ -25,6 +25,10 @@ const attachments: ChatAttachment[] = [
   { id: 'f1', name: 'specs.pdf', size: 100, type: 'application/pdf', url: 'file://specs.pdf' },
 ];
 
+// Helper to create typed refs
+const createDivRef = () => React.createRef<HTMLDivElement>();
+const createInputRef = () => React.createRef<HTMLInputElement>();
+
 describe('ChatInterface', () => {
   it('renders draft actions and handles apply/discard', async () => {
     const user = userEvent.setup();
@@ -45,12 +49,12 @@ describe('ChatInterface', () => {
           isProcessing={false}
           processingSteps={[]}
           thinkingPreview=""
-          messagesEndRef={React.createRef()}
+          messagesEndRef={createDivRef()}
           onSendMessage={vi.fn()}
           onRetryLastMessage={vi.fn()}
           pendingAttachments={attachments}
           onRemoveAttachment={vi.fn()}
-          fileInputRef={React.createRef()}
+          fileInputRef={createInputRef()}
           onAttachFiles={vi.fn()}
           inputText=""
           setInputText={vi.fn()}
@@ -68,7 +72,6 @@ describe('ChatInterface', () => {
   });
 
   it('enables submit when text exists and calls onSendMessage', async () => {
-    const user = userEvent.setup();
     const onSendMessage = vi.fn();
 
     const { container, rerender } = render(
@@ -85,12 +88,12 @@ describe('ChatInterface', () => {
           isProcessing={false}
           processingSteps={[]}
           thinkingPreview=""
-          messagesEndRef={React.createRef()}
+          messagesEndRef={createDivRef()}
           onSendMessage={onSendMessage}
           onRetryLastMessage={vi.fn()}
           pendingAttachments={[]}
           onRemoveAttachment={vi.fn()}
-          fileInputRef={React.createRef()}
+          fileInputRef={createInputRef()}
           onAttachFiles={vi.fn()}
           inputText=""
           setInputText={vi.fn()}
@@ -115,12 +118,12 @@ describe('ChatInterface', () => {
           isProcessing={false}
           processingSteps={[]}
           thinkingPreview=""
-          messagesEndRef={React.createRef()}
+          messagesEndRef={createDivRef()}
           onSendMessage={onSendMessage}
           onRetryLastMessage={vi.fn()}
           pendingAttachments={[]}
           onRemoveAttachment={vi.fn()}
-          fileInputRef={React.createRef()}
+          fileInputRef={createInputRef()}
           onAttachFiles={vi.fn()}
           inputText="Hello"
           setInputText={vi.fn()}

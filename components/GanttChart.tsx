@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect, useId, memo, useCallback } from 'react';
-import { Task, Priority } from '../types';
+import { Task } from '../types';
 import { useI18n } from '../src/i18n';
 import { cn } from '../src/utils/cn';
 import { DAY_MS, GANTT_VIEW_SETTINGS, type GanttViewMode } from '../src/constants/gantt';

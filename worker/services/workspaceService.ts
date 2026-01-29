@@ -132,7 +132,7 @@ export const listPublicWorkspaces = async (
       .from(workspaces)
       .where(eq(workspaces.isPublic, true))
       .orderBy(workspaces.createdAt)
-  ).catch((error) => {
+  ).catch(() => {
     if (cachedPublicList) {
       console.warn('workspace_list_cache_fallback', {});
       return cachedPublicList;

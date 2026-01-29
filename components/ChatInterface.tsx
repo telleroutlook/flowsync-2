@@ -199,12 +199,12 @@ interface ChatInterfaceProps {
   isProcessing: boolean;
   processingSteps: { label: string; elapsedMs?: number }[];
   thinkingPreview: string;
-  messagesEndRef: React.RefObject<HTMLDivElement>;
+  messagesEndRef: React.RefObject<HTMLDivElement | null>;
   onSendMessage: (e?: React.FormEvent, overrideText?: string) => void;
   onRetryLastMessage: () => void;
   pendingAttachments: ChatAttachment[];
   onRemoveAttachment: (id: string) => void;
-  fileInputRef: React.RefObject<HTMLInputElement>;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
   onAttachFiles: (files: FileList | null) => void;
   inputText: string;
   setInputText: (text: string) => void;

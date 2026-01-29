@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { eq } from 'drizzle-orm';
-import { jsonError, jsonOk } from './helpers';
+import { jsonError, jsonOk, requireWorkspace } from './helpers';
 import { workspaceMiddleware } from './middleware';
 import { createProject, deleteProject, getProjectById, listProjects, updateProject } from '../services/projectService';
 import { recordAudit } from '../services/auditService';
@@ -29,23 +29,26 @@ const projectUpdateSchema = z.object({
 });
 
 projectsRoute.get('/', async (c) => {
-  const workspace = c.get('workspace');
-  if (!workspace) return jsonError(c, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
   const projects = await listProjects(c.get('db'), workspace.id);
   return jsonOk(c, projects);
 });
 
 projectsRoute.get('/:id', async (c) => {
-  const workspace = c.get('workspace');
-  if (!workspace) return jsonError(c, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
   const project = await getProjectById(c.get('db'), c.req.param('id'), workspace.id);
   if (!project) return jsonError(c, 'NOT_FOUND', 'Project not found.', 404);
   return jsonOk(c, project);
 });
 
 projectsRoute.post('/', zValidator('json', projectInputSchema), async (c) => {
-  const workspace = c.get('workspace');
-  if (!workspace) return jsonError(c, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
   const data = c.req.valid('json');
   const project = await createProject(c.get('db'), {
     id: data.id,
@@ -73,8 +76,9 @@ projectsRoute.post('/', zValidator('json', projectInputSchema), async (c) => {
 });
 
 projectsRoute.patch('/:id', zValidator('json', projectUpdateSchema), async (c) => {
-  const workspace = c.get('workspace');
-  if (!workspace) return jsonError(c, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
   const id = c.req.param('id');
   const before = await getProjectById(c.get('db'), id, workspace.id);
   const data = c.req.valid('json');
@@ -101,8 +105,9 @@ projectsRoute.patch('/:id', zValidator('json', projectUpdateSchema), async (c) =
 });
 
 projectsRoute.delete('/:id', async (c) => {
-  const workspace = c.get('workspace');
-  if (!workspace) return jsonError(c, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
   const id = c.req.param('id');
   const before = await getProjectById(c.get('db'), id, workspace.id);
   if (!before) return jsonError(c, 'NOT_FOUND', 'Project not found.', 404);

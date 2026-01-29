@@ -1,6 +1,6 @@
 import type { Task, Project } from '../../types';
 import { TaskStatus, Priority } from '../../types';
-import { generateId, getTaskStart, getTaskEnd, formatExportDate, parseDateFlexible } from './index';
+import { getTaskStart, getTaskEnd, formatExportDate, parseDateFlexible } from './index';
 
 export const clampCompletion = (value: number) => Math.min(100, Math.max(0, value));
 

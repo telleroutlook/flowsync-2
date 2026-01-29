@@ -161,7 +161,7 @@ export const PUBLIC_WORKSPACE_ID = 'public';
 // AI Tool Arguments
 export interface ToolCall {
   name: string;
-  args: any;
+  args: Record<string, unknown>;
 }
 export interface TaskActionArgs {
   action: 'create' | 'update' | 'delete';

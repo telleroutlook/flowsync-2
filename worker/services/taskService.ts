@@ -5,6 +5,8 @@ import { toTaskRecord } from './serializers';
 import { clampNumber, generateId, now } from './utils';
 import type { Priority, TaskRecord, TaskStatus } from './types';
 import { seedTasks } from '../db/seed';
+import { retryOnce } from './dbHelpers';
+import { LRUCache } from 'lru-cache';
 
 export type TaskFilters = {
   projectId?: string;
@@ -286,35 +288,19 @@ export const deleteTask = async (
 };
 
 const TASK_CACHE_TTL_MS = 15_000;
-const taskCache = new Map<
+
+// Memory management: LRU cache prevents unbounded growth in long-running Workers
+// Automatically evicts least-recently-used entries when max size is reached
+const taskCache = new LRUCache<
   string,
   { data: { data: TaskRecord[]; total: number; page: number; pageSize: number }; at: number }
->();
+>({
+  max: 500, // Maximum number of cached entries
+  ttl: TASK_CACHE_TTL_MS, // Time-to-live in milliseconds
+  updateAgeOnGet: true, // Refresh entry age on access (true LRU behavior)
+});
 
 const isCacheFresh = (timestamp: number) => now() - timestamp < TASK_CACHE_TTL_MS;
-
-const logDbError = (label: string, error: unknown) => {
-  if (error instanceof Error) {
-    const meta = {
-      name: error.name,
-      message: error.message,
-      cause: error.cause instanceof Error ? error.cause.message : error.cause,
-    };
-    console.error(label, meta);
-    return;
-  }
-  console.error(label, { message: String(error) });
-};
-
-const retryOnce = async <T>(label: string, fn: () => PromiseLike<T>): Promise<T> => {
-  try {
-    return await fn();
-  } catch (error) {
-    logDbError(label, error);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    return await fn();
-  }
-};
 
 const buildTaskCacheKey = (filters: TaskFilters, workspaceId: string) => {
   // Build a more efficient cache key by only including relevant filters
@@ -333,6 +319,8 @@ const buildTaskCacheKey = (filters: TaskFilters, workspaceId: string) => {
 // Export function to manually clear all task cache for a workspace
 export const clearTaskCache = (workspaceId?: string) => {
   if (workspaceId) {
+    // Use LRU cache's clear() to efficiently remove all entries
+    // Since LRU cache doesn't support prefix-based deletion, we iterate
     for (const key of taskCache.keys()) {
       if (key.startsWith(`${workspaceId}|`)) {
         taskCache.delete(key);
@@ -344,6 +332,8 @@ export const clearTaskCache = (workspaceId?: string) => {
 };
 
 const invalidateTaskCache = (workspaceId: string, projectId?: string) => {
+  // Iterate through cache keys and invalidate matching entries
+  // LRU cache handles automatic eviction when size limit is reached
   for (const key of taskCache.keys()) {
     if (!key.startsWith(`${workspaceId}|`)) continue;
     if (!projectId || key.includes(`p:${projectId}`)) {

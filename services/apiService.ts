@@ -1,6 +1,5 @@
 import type { ApiResponse, AuditLog, Draft, DraftAction, Project, Task, User, Workspace, WorkspaceJoinRequest, WorkspaceMember, WorkspaceMemberActionResult, WorkspaceMembership, WorkspaceWithMembership } from '../types';
 import { sleep, getRetryDelay } from '../src/utils/retry';
-import { storageGet } from '../src/utils/storage';
 import { buildAuthHeaders } from './aiService';
 import { ApiError, TimeoutError, NetworkError, getErrorMessage, isAppError } from '../src/utils/error';
 
@@ -14,7 +13,6 @@ const pendingRequests = new Map<string, Promise<unknown>>();
 function getRequestKey(input: RequestInfo, init?: RequestInit): string {
   const url = typeof input === 'string' ? input : input.url;
   const method = (init?.method || 'GET').toUpperCase();
-  const body = init?.body;
 
   // Only deduplicate GET requests and safe mutations
   if (method !== 'GET') {
@@ -35,7 +33,7 @@ function isIdempotentMethod(method?: string): boolean {
 
 function createTimeoutPromise(ms: number, url: string): Promise<never> {
   return new Promise((_, reject) => {
-    const timeoutId = setTimeout(() => {
+    setTimeout(() => {
       reject(new TimeoutError(`Request timeout after ${ms}ms`, ms, { url }));
     }, ms);
   });
@@ -111,8 +109,26 @@ const buildQueryString = (params: Record<string, string | number | boolean | und
   return suffix ? `?${suffix}` : '';
 };
 
-const buildHeaders = (headers?: HeadersInit) => {
+// Helper to extract CSRF token from cookies
+const getCsrfToken = (): string | undefined => {
+  const cookies = document.cookie.split(';');
+  const csrfCookie = cookies.find(cookie => cookie.trim().startsWith('csrf_token='));
+  return csrfCookie?.split('=')[1]?.trim();
+};
+
+const buildHeaders = (headers?: HeadersInit, method?: string) => {
   const merged = new Headers(buildAuthHeaders());
+
+  // Add CSRF token header for state-changing operations (POST/PATCH/DELETE)
+  // This implements the double-submit cookie pattern for CSRF protection
+  const isMutation = method && ['POST', 'PATCH', 'DELETE', 'PUT'].includes(method.toUpperCase());
+  if (isMutation) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      merged.set('x-csrf-token', csrfToken);
+    }
+  }
+
   if (headers) {
     const additional = new Headers(headers);
     additional.forEach((value, key) => merged.set(key, value));
@@ -137,7 +153,7 @@ const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> 
       let text = '';
 
       try {
-        response = await fetchWithRetry(input, { ...init, headers: buildHeaders(init?.headers) });
+        response = await fetchWithRetry(input, { ...init, headers: buildHeaders(init?.headers, init?.method) });
         text = await response.text();
       } catch (error) {
         if (error instanceof TypeError && error.message.includes('fetch')) {

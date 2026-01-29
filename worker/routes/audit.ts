@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { jsonError, jsonOk } from './helpers';
+import { jsonError, jsonOk, requireWorkspace } from './helpers';
 import { workspaceMiddleware } from './middleware';
 import { getAuditLogById, listAuditLogs } from '../services/auditService';
 import type { Variables } from '../types';
@@ -22,8 +22,9 @@ const querySchema = z.object({
 });
 
 auditRoute.get('/', async (c) => {
-  const workspace = c.get('workspace');
-  if (!workspace) return jsonError(c, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
   const parsed = querySchema.safeParse(c.req.query());
   if (!parsed.success) return jsonError(c, 'INVALID_QUERY', 'Invalid query parameters.', 400);
   const logs = await listAuditLogs(c.get('db'), { ...parsed.data, workspaceId: workspace.id });
@@ -31,8 +32,9 @@ auditRoute.get('/', async (c) => {
 });
 
 auditRoute.get('/:id', async (c) => {
-  const workspace = c.get('workspace');
-  if (!workspace) return jsonError(c, 'WORKSPACE_NOT_FOUND', 'Workspace not found.', 404);
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
   const entry = await getAuditLogById(c.get('db'), c.req.param('id'), workspace.id);
   if (!entry) return jsonError(c, 'NOT_FOUND', 'Audit log not found.', 404);
   return jsonOk(c, entry);
