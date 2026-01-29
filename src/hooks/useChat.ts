@@ -93,13 +93,14 @@ export const useChat = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastUserMessageRef = useRef<ChatMessage | null>(null);
+  const processingStepsRef = useRef<ProcessingStep[]>([]);
 
   const pushProcessingStep = useCallback((step: string, elapsedMs?: number) => {
-    setProcessingSteps(prev => {
-      if (prev[prev.length - 1]?.label === step) return prev;
-      const next = [...prev, { label: step, elapsedMs }];
-      return next.slice(-6);
-    });
+    const current = processingStepsRef.current;
+    if (current[current.length - 1]?.label === step) return;
+    const next = [...current, { label: step, elapsedMs }].slice(-6);
+    processingStepsRef.current = next;
+    setProcessingSteps(next);
   }, []);
 
   const handleAttachFiles = useCallback((files: FileList | null) => {
@@ -142,7 +143,7 @@ Active Project ID: ${activeProject.id || 'N/A'}.
 ${selectedTaskInfo}
 Available Projects: ${projectList}.
 Task IDs in Active Project (JSON): ${mappingJson}.`;
-  }, [activeProject, activeTasks, selectedTask, projects]);
+  }, [activeProject.name, activeProject.id, activeTasks, selectedTask, projects]);
 
   // Process a single conversation turn with the AI
   const processConversationTurn = useCallback(
@@ -346,6 +347,9 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
     [activeProjectId, submitDraft, appendSystemMessage, pushProcessingStep, setMessages, setThinkingPreview, allowThinking, t]
   );
 
+  // Stabilize the processMessagesWithHistory callback
+  const stableProcessConversationTurn = useCallback(processConversationTurn, [processConversationTurn]);
+
   // Helper: Reset processing state
   const startProcessing = useCallback(() => {
     setIsProcessing(true);
@@ -383,9 +387,9 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
       if (truncatedCount > 0) {
         appendSystemMessage(t('chat.history_truncated', { count: truncatedCount, max: MAX_HISTORY_PART_CHARS }));
       }
-      await processConversationTurn(history, userText, systemContext, 0);
+      await stableProcessConversationTurn(history, userText, systemContext, 0);
     },
-    [pushProcessingStep, processConversationTurn, systemContext, appendSystemMessage, t]
+    [pushProcessingStep, stableProcessConversationTurn, systemContext, appendSystemMessage, t]
   );
 
   const handleSendMessage = useCallback(

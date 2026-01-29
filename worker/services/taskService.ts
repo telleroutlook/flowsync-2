@@ -317,17 +317,36 @@ const retryOnce = async <T>(label: string, fn: () => PromiseLike<T>): Promise<T>
 };
 
 const buildTaskCacheKey = (filters: TaskFilters, workspaceId: string) => {
-  const entries = Object.entries(filters)
-    .filter(([, value]) => value !== undefined)
-    .sort(([a], [b]) => a.localeCompare(b));
-  const payload = Object.fromEntries(entries);
-  return `${workspaceId}:${JSON.stringify(payload)}`;
+  // Build a more efficient cache key by only including relevant filters
+  const parts: string[] = [workspaceId];
+  if (filters.projectId) parts.push(`p:${filters.projectId}`);
+  if (filters.status) parts.push(`s:${filters.status}`);
+  if (filters.priority) parts.push(`pr:${filters.priority}`);
+  if (filters.assignee) parts.push(`a:${filters.assignee}`);
+  if (filters.isMilestone !== undefined) parts.push(`m:${filters.isMilestone}`);
+  if (filters.q) parts.push(`q:${filters.q.length}`); // Only store length for queries
+  if (filters.page && filters.page > 1) parts.push(`pg:${filters.page}`);
+  if (filters.pageSize && filters.pageSize !== 50) parts.push(`psz:${filters.pageSize}`);
+  return parts.join('|');
+};
+
+// Export function to manually clear all task cache for a workspace
+export const clearTaskCache = (workspaceId?: string) => {
+  if (workspaceId) {
+    for (const key of taskCache.keys()) {
+      if (key.startsWith(`${workspaceId}|`)) {
+        taskCache.delete(key);
+      }
+    }
+  } else {
+    taskCache.clear();
+  }
 };
 
 const invalidateTaskCache = (workspaceId: string, projectId?: string) => {
   for (const key of taskCache.keys()) {
-    if (!key.startsWith(`${workspaceId}:`)) continue;
-    if (!projectId || key.includes(`\"projectId\":\"${projectId}\"`)) {
+    if (!key.startsWith(`${workspaceId}|`)) continue;
+    if (!projectId || key.includes(`p:${projectId}`)) {
       taskCache.delete(key);
     }
   }

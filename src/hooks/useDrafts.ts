@@ -8,9 +8,10 @@ interface UseDraftsProps {
   refreshData: () => Promise<void>;
   refreshAuditLogs: (projectId?: string) => Promise<void>;
   appendSystemMessage: (text: string) => void;
+  onProjectModified?: () => void;
 }
 
-export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appendSystemMessage }: UseDraftsProps) => {
+export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appendSystemMessage, onProjectModified }: UseDraftsProps) => {
   const { t } = useI18n();
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [pendingDraftId, setPendingDraftId] = useState<string | null>(null);
@@ -65,6 +66,10 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
       if (options.autoApply) {
         const applied = await apiService.applyDraft(result.draft.id, options.createdBy);
         setDrafts(prev => prev.map(draft => (draft.id === applied.draft.id ? applied.draft : draft)));
+        // Invalidate project cache if any project actions were applied
+        if (result.draft.actions.some(a => a.entityType === 'project')) {
+          onProjectModified?.();
+        }
         await refreshData();
         await refreshAuditLogs(activeProjectId);
         if (!options.silent) {
@@ -83,13 +88,18 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
        if (!options.silent) appendSystemMessage(t('chat.error_prefix', { error: msg }));
        throw error;
     }
-  }, [activeProjectId, refreshData, refreshAuditLogs, appendSystemMessage, t]);
+  }, [activeProjectId, refreshData, refreshAuditLogs, appendSystemMessage, onProjectModified, t]);
 
   const handleApplyDraft = useCallback(async (draftId: string) => {
     try {
       const result = await apiService.applyDraft(draftId, 'user');
       setDrafts(prev => prev.map(draft => (draft.id === result.draft.id ? result.draft : draft)));
       setPendingDraftId(null);
+      // Invalidate project cache if the draft contained project modifications
+      const draft = drafts.find(d => d.id === draftId);
+      if (draft?.actions.some(a => a.entityType === 'project')) {
+        onProjectModified?.();
+      }
       await refreshData();
       await refreshDrafts();
       await refreshAuditLogs(activeProjectId);
@@ -97,7 +107,7 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     } catch (error) {
        appendSystemMessage(error instanceof Error ? t('draft.apply_failed', { error: error.message }) : t('draft.apply_failed', { error: t('common.na') }));
     }
-  }, [refreshData, refreshDrafts, refreshAuditLogs, activeProjectId, appendSystemMessage, t]);
+  }, [drafts, refreshData, refreshDrafts, refreshAuditLogs, activeProjectId, appendSystemMessage, onProjectModified, t]);
 
   const handleDiscardDraft = useCallback(async (draftId: string) => {
     try {

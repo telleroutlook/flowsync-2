@@ -5,9 +5,13 @@ import { Project, Task } from '../../types';
 import { useI18n } from '../i18n';
 
 const PAGE_SIZE = 100;
+const PROJECT_CACHE_TTL_MS = 30000; // 30 seconds
 
 const getProjectStorageKey = (workspaceId: string): string =>
   workspaceId ? `activeProjectId:${workspaceId}` : 'activeProjectId';
+
+// Simple in-memory cache for projects
+let projectCache: { data: Project[]; timestamp: number } | null = null;
 
 export const useProjectData = (workspaceId: string) => {
   const { t } = useI18n();
@@ -50,11 +54,20 @@ export const useProjectData = (workspaceId: string) => {
     }
   }, []);
 
-  const refreshData = useCallback(async () => {
+  const refreshData = useCallback(async (forceRefresh = false) => {
     try {
       setIsLoading(true);
       setError(null);
-      const projectList = await apiService.listProjects();
+
+      // Use cache if available and not force refreshing
+      let projectList: Project[];
+      if (!forceRefresh && projectCache && (Date.now() - projectCache.timestamp) < PROJECT_CACHE_TTL_MS) {
+        projectList = projectCache.data;
+      } else {
+        projectList = await apiService.listProjects();
+        projectCache = { data: projectList, timestamp: Date.now() };
+      }
+
       if (!isMountedRef.current) return;
 
       setProjects(projectList);
@@ -129,6 +142,7 @@ export const useProjectData = (workspaceId: string) => {
     error,
     refreshData,
     handleSelectProject,
-    fetchAllTasks
+    fetchAllTasks,
+    invalidateCache: useCallback(() => { projectCache = null; }, [])
   };
 };

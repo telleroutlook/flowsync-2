@@ -110,18 +110,19 @@ function App() {
   } = useWorkspaces(user);
 
   // 2. Data
-  const { 
-    projects, 
-    tasks, 
-    setTasks, 
-    activeProjectId, 
-    activeProject, 
-    activeTasks, 
-    isLoading: isLoadingData, 
+  const {
+    projects,
+    tasks,
+    setTasks,
+    activeProjectId,
+    activeProject,
+    activeTasks,
+    isLoading: isLoadingData,
     error: dataError,
-    refreshData, 
+    refreshData,
     handleSelectProject,
-    fetchAllTasks
+    fetchAllTasks,
+    invalidateCache
   } = useProjectData(activeWorkspaceId);
 
   const selectedTask = useMemo(
@@ -187,11 +188,12 @@ function App() {
   const {
     drafts, pendingDraft, pendingDraftId, setPendingDraftId, draftWarnings,
     refreshDrafts, submitDraft, handleApplyDraft, handleDiscardDraft
-  } = useDrafts({ 
-    activeProjectId, 
-    refreshData, 
-    refreshAuditLogs, 
-    appendSystemMessage 
+  } = useDrafts({
+    activeProjectId,
+    refreshData,
+    refreshAuditLogs,
+    appendSystemMessage,
+    onProjectModified: invalidateCache
   });
 
   // 5. Chat Logic
@@ -287,6 +289,7 @@ function App() {
   }, []);
 
   const handleCreateProject = useCallback(async (name: string, description: string) => {
+    invalidateCache();
     await submitDraft(
       [
         {
@@ -298,7 +301,7 @@ function App() {
       ],
       { createdBy: 'user', autoApply: true, reason: 'Manual project create' }
     );
-  }, [submitDraft]);
+  }, [submitDraft, invalidateCache]);
 
   const handleDeleteProject = useCallback(async (id: string) => {
     await submitDraft(

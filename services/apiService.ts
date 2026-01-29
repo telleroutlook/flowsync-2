@@ -2,6 +2,7 @@ import type { ApiResponse, AuditLog, Draft, DraftAction, Project, Task, User, Wo
 import { sleep, getRetryDelay } from '../src/utils/retry';
 import { storageGet } from '../src/utils/storage';
 import { buildAuthHeaders } from './aiService';
+import { ApiError, getErrorMessage } from '../src/utils/error';
 
 const MAX_FETCH_RETRIES = 2;
 
@@ -73,16 +74,17 @@ const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> 
       payload = JSON.parse(text) as ApiResponse<T>;
     } catch {
       const snippet = text.slice(0, 160).replace(/\s+/g, ' ').trim();
-      throw new Error(`Invalid JSON response (${response.status}). ${snippet || 'Empty body.'}`);
+      throw new ApiError(`Invalid JSON response. ${snippet || 'Empty body.'}`, response.status, 'INVALID_JSON');
     }
   }
 
   if (!payload) {
-    throw new Error(`Empty response (${response.status}).`);
+    throw new ApiError(`Empty response.`, response.status, 'EMPTY_RESPONSE');
   }
 
   if (!response.ok || !payload.success || payload.data === undefined) {
-    throw new Error(payload.error?.message || `Request failed (${response.status}).`);
+    const message = payload.error?.message || `Request failed (${response.status}).`;
+    throw new ApiError(message, response.status, payload.error?.code);
   }
 
   return payload.data;

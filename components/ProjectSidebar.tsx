@@ -5,7 +5,7 @@ import { cn } from '../src/utils/cn';
 import { Button } from './ui/Button';
 import { Plus, ChevronLeft, Trash2, Lightbulb } from 'lucide-react';
 
-interface ProjectSidebarProps {
+export interface ProjectSidebarProps {
   topSlot?: React.ReactNode;
   projects: Project[];
   activeProjectId: string;
@@ -14,6 +14,76 @@ interface ProjectSidebarProps {
   onDeleteProject: (id: string) => void;
   onClose: () => void;
 }
+
+export interface ProjectItemProps {
+  project: Project;
+  isActive: boolean;
+  onSelectProject: (id: string) => void;
+  onDeleteProject: (event: React.MouseEvent, id: string, name: string) => void;
+  t: ReturnType<typeof useI18n>['t'];
+}
+
+const ProjectItem = memo<ProjectItemProps>(({ project, isActive, onSelectProject, onDeleteProject, t }) => {
+  const handleClick = useCallback(() => {
+    onSelectProject(project.id);
+  }, [project.id, onSelectProject]);
+
+  const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onSelectProject(project.id);
+    }
+  }, [project.id, onSelectProject]);
+
+  const handleDelete = useCallback((event: React.MouseEvent) => {
+    onDeleteProject(event, project.id, project.name);
+  }, [project.id, project.name, onDeleteProject, t]);
+
+  return (
+    <div
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      className={cn(
+        "group flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer transition-all duration-200 border",
+        isActive
+          ? "bg-primary/10 text-primary border-primary/20 shadow-sm"
+          : "text-text-secondary hover:bg-surface border-transparent hover:border-border-subtle"
+      )}
+      role="button"
+      tabIndex={0}
+      aria-pressed={isActive}
+    >
+      <div className="flex items-center gap-3 overflow-hidden">
+        <span className={cn(
+          "flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-sm font-semibold shadow-sm transition-transform group-hover:scale-105",
+          isActive ? "bg-surface text-primary ring-1 ring-primary/20" : "bg-surface text-text-secondary ring-1 ring-border-subtle"
+        )} aria-hidden="true">
+          {project.icon || project.name.charAt(0).toUpperCase()}
+        </span>
+        <div className="flex flex-col min-w-0">
+          <span className="truncate text-sm font-medium leading-tight">{project.name}</span>
+          {project.description && (
+            <span className="truncate text-[10px] text-text-secondary/80 leading-tight mt-0.5">{project.description}</span>
+          )}
+        </div>
+      </div>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={handleDelete}
+        className={cn(
+          "h-7 w-7 opacity-0 group-hover:opacity-100 text-text-secondary hover:text-negative hover:bg-negative/10 transition-all",
+          isActive && "text-primary/60 hover:text-negative"
+        )}
+        title={t('app.sidebar.delete')}
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </Button>
+    </div>
+  );
+});
+ProjectItem.displayName = 'ProjectItem';
 
 export const ProjectSidebar = memo<ProjectSidebarProps>(({
   topSlot,
@@ -68,58 +138,16 @@ export const ProjectSidebar = memo<ProjectSidebarProps>(({
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
-        {projects.map(project => {
-          const isActive = project.id === activeProjectId;
-          return (
-            <div
-              key={project.id}
-              onClick={() => onSelectProject(project.id)}
-              className={cn(
-                "group flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer transition-all duration-200 border",
-                isActive
-                  ? "bg-primary/10 text-primary border-primary/20 shadow-sm"
-                  : "text-text-secondary hover:bg-surface border-transparent hover:border-border-subtle"
-              )}
-              role="button"
-              tabIndex={0}
-              aria-pressed={isActive}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onSelectProject(project.id);
-                }
-              }}
-            >
-              <div className="flex items-center gap-3 overflow-hidden">
-                <span className={cn(
-                  "flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-sm font-semibold shadow-sm transition-transform group-hover:scale-105",
-                  isActive ? "bg-surface text-primary ring-1 ring-primary/20" : "bg-surface text-text-secondary ring-1 ring-border-subtle"
-                )} aria-hidden="true">
-                  {project.icon || project.name.charAt(0).toUpperCase()}
-                </span>
-                <div className="flex flex-col min-w-0">
-                   <span className="truncate text-sm font-medium leading-tight">{project.name}</span>
-                   {project.description && (
-                     <span className="truncate text-[10px] text-text-secondary/80 leading-tight mt-0.5">{project.description}</span>
-                   )}
-                </div>
-              </div>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={(e) => handleDeleteProject(e, project.id, project.name)}
-                className={cn(
-                  "h-7 w-7 opacity-0 group-hover:opacity-100 text-text-secondary hover:text-error hover:bg-error/10 transition-all",
-                  isActive && "text-primary/60 hover:text-error"
-                )}
-                title={t('app.sidebar.delete')}
-              >
-                 <Trash2 className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          );
-        })}
+        {projects.map(project => (
+          <ProjectItem
+            key={project.id}
+            project={project}
+            isActive={project.id === activeProjectId}
+            onSelectProject={onSelectProject}
+            onDeleteProject={handleDeleteProject}
+            t={t}
+          />
+        ))}
       </div>
 
       <div className="p-3 border-t border-border-subtle bg-surface/30">

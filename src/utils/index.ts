@@ -4,3 +4,5 @@ export * from './storage';
 export * from './export';
 export * from './import';
 export * from './zoom';
+export * from './error';
+export * from './retry';
