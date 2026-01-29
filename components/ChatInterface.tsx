@@ -1,12 +1,13 @@
 import React, { memo, useCallback, useRef, useState } from 'react';
 import { ChatBubble } from './ChatBubble';
-import { ChatMessage, ChatAttachment, Draft, DraftAction } from '../types';
+import { ChatMessage, ChatAttachment, Draft, DraftAction, Project, Task } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, RotateCcw, X, Paperclip, Send, File, XCircle, AlertTriangle } from 'lucide-react';
+import { Sparkles, RotateCcw, X, Paperclip, Send, File, XCircle, AlertTriangle, Download } from 'lucide-react';
 import { useI18n } from '../src/i18n';
 import { getActionLabel, getEntityLabel } from '../src/i18n/labels';
 import { Button } from './ui/Button';
 import { cn } from '../src/utils/cn';
+import { exportChatToHtml } from '../src/utils/chatExport';
 
 // Extracted sub-components for better memoization
 
@@ -209,6 +210,8 @@ interface ChatInterfaceProps {
   setInputText: (text: string) => void;
   onResetChat: () => void;
   isMobile?: boolean;
+  project?: Project;
+  tasks?: Task[];
 }
 
 export const ChatInterface = memo<ChatInterfaceProps>(({
@@ -233,6 +236,8 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   setInputText,
   onResetChat,
   isMobile = false,
+  project,
+  tasks,
 }) => {
   const { t } = useI18n();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -338,6 +343,10 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
     [onSendMessage]
   );
 
+  const handleExportChat = useCallback(() => {
+    exportChatToHtml(messages, t('chat.assistant_name'), project, tasks);
+  }, [messages, t, project, tasks]);
+
   return (
     <motion.div
       initial={false}
@@ -378,6 +387,13 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={handleExportChat}
+            className="text-text-secondary hover:text-primary p-2 rounded-lg hover:bg-background transition-colors"
+            title={t('app.header.export_chat')}
+          >
+            <Download className="w-4 h-4" />
+          </button>
           <button
             onClick={onResetChat}
             className="text-text-secondary hover:text-primary p-2 rounded-lg hover:bg-background transition-colors"

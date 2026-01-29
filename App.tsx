@@ -931,6 +931,8 @@ function App() {
           inputText={inputText}
           setInputText={setInputText}
           isMobile={isMobile}
+          project={activeProject ?? undefined}
+          tasks={activeTasks}
         />
       </div>
 
