@@ -1,17 +1,34 @@
 import { storageGet } from '../src/utils/storage';
 
-export function buildAuthHeaders(): Headers {
+// Helper to extract CSRF token from cookies
+const getCsrfToken = (): string | undefined => {
+  const cookies = document.cookie.split(';');
+  const csrfCookie = cookies.find(cookie => cookie.trim().startsWith('csrf_token='));
+  return csrfCookie?.split('=')[1]?.trim();
+};
+
+export function buildAuthHeaders(includeCsrf = false): Headers {
   const headers = new Headers({ 'Content-Type': 'application/json' });
   const token = storageGet('authToken');
   if (token) headers.set('Authorization', `Bearer ${token}`);
   const workspaceId = storageGet('activeWorkspaceId');
   if (workspaceId) headers.set('X-Workspace-Id', workspaceId);
+
+  // Add CSRF token header for state-changing operations (POST/PATCH/DELETE)
+  if (includeCsrf) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      headers.set('x-csrf-token', csrfToken);
+    }
+  }
+
   return headers;
 }
 
 export class AIService {
   private buildHeaders() {
-    return buildAuthHeaders();
+    // All AI requests are POST, so always include CSRF token
+    return buildAuthHeaders(true);
   }
 
   async sendMessageStream(
