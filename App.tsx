@@ -219,7 +219,7 @@ function App() {
   // 6. Export/Import
   const {
     isExportOpen, setIsExportOpen,
-    lastExportFormat, importStrategy, recordImportPreference,
+    lastExportFormat,
     handleExportTasks, handleImportFile
   } = useExport({
     projects,
@@ -611,19 +611,6 @@ function App() {
                 <Upload className="w-3.5 h-3.5 mr-1.5" />
                 {t('app.header.import')}
               </Button>
-              <div className="w-px h-3 bg-border-subtle"></div>
-              <select
-                value={importStrategy}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  recordImportPreference(value === 'merge' ? 'merge' : 'append');
-                }}
-                className="bg-transparent text-xs font-medium text-text-secondary outline-none cursor-pointer hover:text-primary border-none py-0 focus:ring-0 h-7"
-                aria-label={t('app.header.import_strategy')}
-              >
-                <option value="append">{t('app.header.import.append')}</option>
-                <option value="merge">{t('app.header.import.merge')}</option>
-              </select>
              </div>
 
              {/* Audit Button */}
