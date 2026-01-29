@@ -20,7 +20,7 @@ import { useAuditLogs } from './src/hooks/useAuditLogs';
 import { useChat } from './src/hooks/useChat';
 import { useExport } from './src/hooks/useExport';
 import { useImageExport } from './src/hooks/useImageExport';
-import { generateId, storageGet, storageSet, storageGetJSON, storageSetJSON, computeGanttTimelineRange, pickZoomLevel, findZoomIndex, isMajorZoomChange, computeZoomSignature, DEFAULT_ZOOM_STATE, DEFAULT_ZOOM_META, type ZoomState, type ZoomMetaState, type ZoomSignature, type ViewMode } from './src/utils';
+import { generateId, storageGet, storageSet, storageGetJSON, storageSetJSON, computeGanttTimelineRange, findZoomIndex, DEFAULT_ZOOM_STATE, type ZoomState, type ViewMode } from './src/utils';
 import { MobileNavBar, MobileTab } from './components/MobileNavBar';
 import { useI18n } from './src/i18n';
 import { DAY_MS, GANTT_PX_PER_DAY, type GanttViewMode } from './src/constants/gantt';
@@ -64,12 +64,8 @@ function App() {
   const [viewZoom, setViewZoom] = useState<ZoomState>(() =>
     storageGetJSON('viewZoom', DEFAULT_ZOOM_STATE)
   );
-  const [zoomMeta, setZoomMeta] = useState<ZoomMetaState>(() =>
-    storageGetJSON('viewZoomMeta', DEFAULT_ZOOM_META)
-  );
   const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>('Month');
   const viewContainerRef = useRef<HTMLDivElement>(null);
-  const [viewContainerSize, setViewContainerSize] = useState({ width: 0, height: 0 });
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -425,14 +421,8 @@ function App() {
   const zoomIndex = useMemo(() => findZoomIndex(zoomLevels, currentZoom), [zoomLevels, currentZoom]);
 
   const updateZoom = useCallback(
-    (mode: ViewMode, value: number, markUserOverride = true) => {
+    (mode: ViewMode, value: number) => {
       setViewZoom((prev) => ({ ...prev, [mode]: value }));
-      if (markUserOverride) {
-        setZoomMeta((prev) => {
-          const signature = prev[mode].signature;
-          return { ...prev, [mode]: { signature, userOverride: true } };
-        });
-      }
     },
     []
   );
@@ -447,93 +437,14 @@ function App() {
   );
 
   useEffect(() => {
-    const el = viewContainerRef.current;
-    if (!el) return;
-    const updateSize = () => {
-      setViewContainerSize({ width: el.clientWidth || 0, height: el.clientHeight || 0 });
-    };
-    updateSize();
-    const observer = new ResizeObserver(() => updateSize());
-    observer.observe(el);
-    return () => {
-      observer.disconnect();
-    };
-  }, [viewMode]);
-
-  const computeSignature = useCallback(
-    (mode: ViewMode) => computeZoomSignature(mode, activeTasks, ganttViewMode),
-    [activeTasks, ganttViewMode]
-  );
-
-  const computeAutoZoom = useCallback((mode: ViewMode) => {
-    const { width, height } = viewContainerSize;
-    if (width <= 0 || height <= 0) return 1;
-
-    if (mode === 'LIST') {
-      const headerHeight = 48;
-      const rowHeight = 44;
-      const rows = activeTasks.length;
-      if (rows === 0) return 1;
-      const neededHeight = headerHeight + rows * rowHeight;
-      return pickZoomLevel(zoomLevels, height / neededHeight);
-    }
-
-    if (mode === 'BOARD') {
-      const counts = {
-        todo: activeTasks.filter((task) => task.status === TaskStatus.TODO).length,
-        inProgress: activeTasks.filter((task) => task.status === TaskStatus.IN_PROGRESS).length,
-        done: activeTasks.filter((task) => task.status === TaskStatus.DONE).length,
-      };
-      const maxCards = Math.max(counts.todo, counts.inProgress, counts.done);
-      if (maxCards === 0) return 1;
-      const headerHeight = 72;
-      const cardHeight = 160;
-      const cardGap = 12;
-      const padding = 24;
-      const neededHeight = headerHeight + padding + maxCards * cardHeight + Math.max(0, maxCards - 1) * cardGap;
-      return pickZoomLevel(zoomLevels, height / neededHeight);
-    }
-
-    const range = computeGanttTimelineRange(activeTasks, ganttViewMode);
-    if (!range) return 1;
-    const spanDays = Math.max(1, Math.ceil((range.endMs - range.startMs) / DAY_MS));
-    const pxPerDay = GANTT_PX_PER_DAY[ganttViewMode] || 10;
-    const neededWidth = spanDays * pxPerDay;
-    return pickZoomLevel(zoomLevels, width / neededWidth);
-  }, [activeTasks, ganttViewMode, viewContainerSize, zoomLevels]);
-
-  // Auto-zoom effect
-  useEffect(() => {
-    // Disable auto-zoom on mobile
-    if (isMobile) return;
-
-    const mode = viewMode;
-    const signature = computeSignature(mode);
-    const meta = zoomMeta[mode];
-    const shouldAuto = isMajorZoomChange(mode, meta.signature, signature);
-    if (!shouldAuto) return;
-
-    const nextZoom = computeAutoZoom(mode);
-    updateZoom(mode, nextZoom, false);
-    setZoomMeta((prev) => ({
-      ...prev,
-      [mode]: {
-        signature,
-        userOverride: false,
-      },
-    }));
-  }, [computeAutoZoom, computeSignature, updateZoom, viewMode, zoomMeta]);
-
-  useEffect(() => {
     storageSetJSON('viewZoom', viewZoom);
   }, [viewZoom]);
 
-  useEffect(() => {
-    storageSetJSON('viewZoomMeta', zoomMeta);
-  }, [zoomMeta]);
-
   return (
-    <div className="flex h-screen h-[100dvh] w-full bg-background overflow-hidden text-text-primary font-sans selection:bg-primary/20 selection:text-primary flex-col md:flex-row">
+    <div 
+      className="flex h-screen h-[100dvh] w-full bg-background overflow-hidden text-text-primary font-sans selection:bg-primary/20 selection:text-primary flex-col md:flex-row"
+      style={{ zoom: currentZoom } as React.CSSProperties}
+    >
       
       {/* 1. Project Sidebar (Left) */}
       <div className={cn(
@@ -885,7 +796,7 @@ function App() {
                       <GanttChart
                         tasks={activeTasks}
                         projectId={activeProjectId}
-                        zoom={viewZoom.GANTT}
+                        zoom={1}
                         onViewModeChange={setGanttViewMode}
                         selectedTaskId={selectedTaskId}
                         onSelectTask={handleSelectTask}
