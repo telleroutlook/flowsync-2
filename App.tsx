@@ -19,10 +19,12 @@ import { useDrafts } from './src/hooks/useDrafts';
 import { useAuditLogs } from './src/hooks/useAuditLogs';
 import { useChat } from './src/hooks/useChat';
 import { useExport } from './src/hooks/useExport';
+import { useImageExport } from './src/hooks/useImageExport';
 import { generateId, storageGet, storageSet, storageGetJSON, storageSetJSON, computeGanttTimelineRange, pickZoomLevel, findZoomIndex, isMajorZoomChange, computeZoomSignature, DEFAULT_ZOOM_STATE, DEFAULT_ZOOM_META, type ZoomState, type ZoomMetaState, type ZoomSignature, type ViewMode } from './src/utils';
 import { MobileNavBar, MobileTab } from './components/MobileNavBar';
 import { useI18n } from './src/i18n';
 import { DAY_MS, GANTT_PX_PER_DAY, type GanttViewMode } from './src/constants/gantt';
+import { Image as ImageIcon } from 'lucide-react';
 
 // Lazy Load View Components
 const KanbanBoard = React.lazy(() => import('./components/KanbanBoard').then(module => ({ default: module.KanbanBoard })));
@@ -272,6 +274,13 @@ function App() {
     fetchAllTasks
   });
 
+  const { handleExportImage } = useImageExport({
+    viewContainerRef,
+    viewMode,
+    projectId: activeProjectId,
+    projectName: activeProject.name
+  });
+
   // --- EFFECTS & HANDLERS ---
 
   // Handle selected task validation
@@ -318,12 +327,17 @@ function App() {
     const target = event.target as HTMLElement | null;
     const button = target?.closest<HTMLButtonElement>('[data-export-format]');
     if (!button) return;
-    const format = button.dataset.exportFormat as 'csv' | 'pdf' | 'json' | 'markdown' | undefined;
+    const format = button.dataset.exportFormat as 'csv' | 'pdf' | 'json' | 'markdown' | 'image' | undefined;
     if (!format) return;
+    
     event.preventDefault();
-    void handleExportTasks(format);
+    if (format === 'image') {
+      void handleExportImage();
+    } else {
+      void handleExportTasks(format);
+    }
     setIsExportOpen(false);
-  }, [handleExportTasks]);
+  }, [handleExportTasks, handleExportImage]);
 
   const handleSelectTask = useCallback((id: string | null) => {
     setSelectedTaskId(id);
@@ -726,6 +740,7 @@ function App() {
                    <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-text-secondary/50">{t('app.header.format')}</div>
                    <div className="grid grid-cols-1 gap-1">
                      {([
+                       { id: 'image', label: t('export.format.image') || 'Image (PNG)', desc: t('export.format.image_desc') || 'Export view as image', icon: ImageIcon },
                        { id: 'csv', label: 'CSV', desc: t('export.format.csv_desc'), icon: FileText },
                        { id: 'pdf', label: 'PDF', desc: t('export.format.pdf_desc'), icon: FileText },
                        { id: 'json', label: 'JSON', desc: t('export.format.json_desc'), icon: FileText },
