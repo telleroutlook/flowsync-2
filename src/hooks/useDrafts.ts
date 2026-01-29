@@ -92,18 +92,34 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
 
   const handleApplyDraft = useCallback(async (draftId: string) => {
     try {
-      const result = await apiService.applyDraft(draftId, 'user');
-      setDrafts(prev => prev.map(draft => (draft.id === result.draft.id ? result.draft : draft)));
+      const pendingDrafts = drafts.filter(draft => draft.status === 'pending');
+      const targetIds = pendingDrafts.length > 0
+        ? pendingDrafts.map(draft => draft.id)
+        : [draftId];
+      const uniqueIds = Array.from(new Set(targetIds));
+      let projectModified = false;
+
+      for (const id of uniqueIds) {
+        const result = await apiService.applyDraft(id, 'user');
+        setDrafts(prev => {
+          const exists = prev.some(draft => draft.id === result.draft.id);
+          if (!exists) return [...prev, result.draft];
+          return prev.map(draft => (draft.id === result.draft.id ? result.draft : draft));
+        });
+        const draft = drafts.find(d => d.id === id);
+        if (draft?.actions.some(a => a.entityType === 'project')) {
+          projectModified = true;
+        }
+        appendSystemMessage(t('draft.applied', { id }));
+      }
+
       setPendingDraftId(null);
-      // Invalidate project cache if the draft contained project modifications
-      const draft = drafts.find(d => d.id === draftId);
-      if (draft?.actions.some(a => a.entityType === 'project')) {
+      if (projectModified) {
         onProjectModified?.();
       }
       await refreshData();
       await refreshDrafts();
       await refreshAuditLogs(activeProjectId);
-      appendSystemMessage(t('draft.applied', { id: draftId }));
     } catch (error) {
        appendSystemMessage(error instanceof Error ? t('draft.apply_failed', { error: error.message }) : t('draft.apply_failed', { error: t('common.na') }));
     }

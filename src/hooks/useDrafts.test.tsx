@@ -90,6 +90,12 @@ describe('useDrafts', () => {
     const refreshData = vi.fn(async () => {});
     const refreshAuditLogs = vi.fn(async () => {});
 
+    const pendingDrafts: Draft[] = [
+      { ...draftBase, id: 'd1', status: 'pending' },
+      { ...draftBase, id: 'd2', status: 'pending' },
+    ];
+
+    api.listDrafts.mockResolvedValue(pendingDrafts);
     api.applyDraft.mockResolvedValue({
       draft: { ...draftBase, status: 'applied' },
       results: [],
@@ -115,10 +121,12 @@ describe('useDrafts', () => {
     });
 
     expect(api.applyDraft).toHaveBeenCalledWith('d1', 'user');
+    expect(api.applyDraft).toHaveBeenCalledWith('d2', 'user');
     expect(refreshData).toHaveBeenCalledTimes(1);
     expect(refreshAuditLogs).toHaveBeenCalledWith('p1');
     expect(result.current.pendingDraftId).toBe(null);
     expect(appendSystemMessage).toHaveBeenCalledWith('Draft applied: d1');
+    expect(appendSystemMessage).toHaveBeenCalledWith('Draft applied: d2');
   });
 
   it('discards a draft and refreshes list', async () => {
