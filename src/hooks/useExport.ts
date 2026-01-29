@@ -36,6 +36,8 @@ interface UseExportProps {
   refreshData: () => Promise<void>;
   submitDraft: (actions: DraftAction[], options: { createdBy: Draft['createdBy']; autoApply?: boolean; reason?: string; silent?: boolean }) => Promise<any>;
   fetchAllTasks: () => Promise<Task[]>;
+  onError?: (message: string) => void;
+  onShowMessage?: (message: string) => void;
 }
 
 export const useExport = ({
@@ -44,12 +46,31 @@ export const useExport = ({
   activeTasks,
   refreshData,
   submitDraft,
-  fetchAllTasks
+  fetchAllTasks,
+  onError,
+  onShowMessage
 }: UseExportProps) => {
   const { t } = useI18n();
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [lastExportFormat, setLastExportFormat] = useState<ExportFormat>('csv');
   const [importStrategy, setImportStrategy] = useState<ImportStrategy>('append');
+
+  // Helper to show error messages
+  const showError = useCallback((message: string) => {
+    if (onError) {
+      onError(message);
+    } else {
+      // Fallback to console if no error handler provided
+      console.error('[useExport]', message);
+    }
+  }, [onError]);
+
+  // Helper to show info messages
+  const showMessage = useCallback((message: string) => {
+    if (onShowMessage) {
+      onShowMessage(message);
+    }
+  }, [onShowMessage]);
 
   useEffect(() => {
     const storedFormat = storageGet('exportFormat');
@@ -161,9 +182,9 @@ export const useExport = ({
       recordExportPreference(format);
     } catch (error) {
       console.error('Failed to export tasks:', error);
-      alert(t('app.error.generic') || 'Export failed');
+      showError(t('app.error.generic') || 'Export failed');
     }
-  }, [activeProject, activeTasks, buildExportRowsCallback, buildDisplayRowsCallback, recordExportPreference, t]);
+  }, [activeProject, activeTasks, buildExportRowsCallback, buildDisplayRowsCallback, recordExportPreference, t, showError]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -198,11 +219,11 @@ export const useExport = ({
         try {
           const payload = JSON.parse(content) as Record<string, unknown>;
           if (payload.version !== 2) {
-            alert(t('import.failed_invalid_version'));
+            showError(t('import.failed_invalid_version'));
             return null;
           }
           if (!Array.isArray(payload.projects) || !Array.isArray(payload.tasks)) {
-            alert(t('import.failed_invalid_format'));
+            showError(t('import.failed_invalid_format'));
             return null;
           }
           for (const raw of payload.projects as Record<string, unknown>[]) {
@@ -216,7 +237,7 @@ export const useExport = ({
             importedTasks.push(task);
           }
         } catch {
-          alert(t('import.failed_invalid_json'));
+          showError(t('import.failed_invalid_json'));
           return null;
         }
       }
@@ -228,7 +249,7 @@ export const useExport = ({
         const hasRequiredHeaders = requiredHeaders.every((header) => headerSet.has(header));
         if (!hasRequiredHeaders) {
           const missing = requiredHeaders.filter((header) => !headerSet.has(header));
-          alert(t('import.failed_missing_headers', { headers: missing.join(', ') }));
+          showError(t('import.failed_missing_headers', { headers: missing.join(', ') }));
           return null;
         }
 
@@ -236,7 +257,7 @@ export const useExport = ({
           const normalizedRecord = parseLowercaseRecord(record);
           const rowType = (normalizedRecord.rowType as string | undefined)?.toLowerCase();
           if (rowType !== 'project' && rowType !== 'task') {
-            alert(t('import.failed_invalid_rowtype'));
+            showError(t('import.failed_invalid_rowtype'));
             return null;
           }
 
@@ -249,18 +270,18 @@ export const useExport = ({
           importedTasks.push(parseTaskRecord(normalizedRecord, resolveProjectFn));
         }
       } else {
-        alert(t('import.failed_invalid_format'));
+        showError(t('import.failed_invalid_format'));
         return null;
       }
 
       if (importedTasks.length === 0 && importedProjects.length === 0) {
-        alert(t('import.no_tasks'));
+        showError(t('import.no_tasks'));
         return null;
       }
 
       return { projects: importedProjects, tasks: importedTasks };
     },
-    [activeProject, projects, t]
+    [activeProject, projects, t, showError]
   );
 
   // Process import and submit drafts
@@ -285,14 +306,14 @@ export const useExport = ({
 
       if (projectActions.length > 0 || taskActions.length > 0) {
         await refreshData();
-        alert(
+        showMessage(
           importStrategy === 'merge'
             ? t('import.success_summary_merged', { projectCount, taskCount })
             : t('import.success_summary_imported', { projectCount, taskCount })
         );
       }
     },
-    [importStrategy, activeProject, fetchAllTasks, submitDraft, refreshData, t]
+    [importStrategy, activeProject, fetchAllTasks, submitDraft, refreshData, t, showMessage]
   );
 
   const handleImportFile = useCallback(

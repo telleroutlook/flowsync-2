@@ -11,6 +11,24 @@ interface UseDraftsProps {
   onProjectModified?: () => void;
 }
 
+type DraftOperationStatus = 'idle' | 'processing' | 'success' | 'error';
+
+interface UseDraftsResult {
+  drafts: Draft[];
+  pendingDraft: Draft | null;
+  pendingDraftId: string | null;
+  setPendingDraftId: (id: string | null) => void;
+  draftWarnings: string[];
+  isProcessingDraft: boolean;
+  refreshDrafts: () => Promise<void>;
+  submitDraft: (
+    actions: DraftAction[],
+    options: { reason?: string; createdBy: Draft['createdBy']; autoApply?: boolean; silent?: boolean }
+  ) => Promise<Draft>;
+  handleApplyDraft: (draftId: string) => Promise<void>;
+  handleDiscardDraft: (draftId: string) => Promise<void>;
+}
+
 export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appendSystemMessage, onProjectModified }: UseDraftsProps) => {
   const { t } = useI18n();
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -26,7 +44,7 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     [drafts, pendingDraftId]
   );
 
-  const refreshDrafts = useCallback(async () => {
+  const refreshDrafts = useCallback(async (): Promise<void> => {
     try {
       const items = await apiService.listDrafts();
       setDrafts(items);
@@ -50,7 +68,7 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
   const submitDraft = useCallback(async (
     actions: DraftAction[],
     options: { reason?: string; createdBy: Draft['createdBy']; autoApply?: boolean; silent?: boolean }
-  ) => {
+  ): Promise<Draft> => {
     try {
       const result = await apiService.createDraft({
         projectId: activeProjectId || undefined,
@@ -163,5 +181,5 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     submitDraft,
     handleApplyDraft,
     handleDiscardDraft
-  };
+  } satisfies UseDraftsResult;
 };

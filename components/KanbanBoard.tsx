@@ -6,25 +6,13 @@ import { cn } from '../src/utils/cn';
 import { ClipboardList, Calendar } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './ui/Card';
 import { Badge } from './ui/Badge';
+import { PRIORITY_COLORS_KANBAN, STATUS_INDICATOR_COLORS } from '../shared/constants/colors';
 
 interface KanbanBoardProps {
   tasks: Task[];
   selectedTaskId?: string | null;
   onSelectTask?: (id: string) => void;
 }
-
-// Move constants outside component to avoid recreation
-const PRIORITY_COLORS: Record<Priority, string> = {
-  [Priority.LOW]: 'bg-success/10 text-success border-success/20 ring-success/30',
-  [Priority.MEDIUM]: 'bg-warning/10 text-warning border-warning/20 ring-warning/30',
-  [Priority.HIGH]: 'bg-negative/10 text-negative border-negative/20 ring-negative/30',
-} as const;
-
-const STATUS_INDICATOR_COLORS: Record<TaskStatus, string> = {
-  [TaskStatus.TODO]: 'bg-text-secondary',
-  [TaskStatus.IN_PROGRESS]: 'bg-primary shadow-sm shadow-primary/30',
-  [TaskStatus.DONE]: 'bg-success shadow-sm shadow-success/30',
-} as const;
 
 interface TaskCardProps {
   task: Task;
@@ -79,9 +67,9 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect }) 
                 <span className="break-words">{task.title}</span>
              </div>
           </CardTitle>
-          <Badge 
-            variant="outline" 
-            className={cn("shrink-0 uppercase tracking-wider text-[10px] px-2 py-0.5 h-auto", PRIORITY_COLORS[task.priority])}
+          <Badge
+            variant="outline"
+            className={cn("shrink-0 uppercase tracking-wider text-[10px] px-2 py-0.5 h-auto", PRIORITY_COLORS_KANBAN[task.priority])}
           >
             {getPriorityShortLabel(task.priority, t)}
           </Badge>

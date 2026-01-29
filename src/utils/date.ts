@@ -2,6 +2,15 @@ import type { Task } from '../../types';
 
 const DAY_MS = 86400000;
 
+/**
+ * Format a timestamp for display in task context
+ * Returns ISO date format (YYYY-MM-DD) or 'N/A' if no timestamp
+ */
+export function formatTaskDate(ts: number | null | undefined): string {
+  if (!ts) return 'N/A';
+  return new Date(ts).toISOString().split('T')[0];
+}
+
 export function getTaskStart(task: Task): number {
   return task.startDate ?? task.createdAt;
 }

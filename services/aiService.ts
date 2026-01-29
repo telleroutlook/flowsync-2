@@ -122,17 +122,16 @@ export class AIService {
     systemContext?: string,
     allowThinking?: boolean
   ): Promise<{ text: string; toolCalls?: { name: string; args: unknown }[] }> {
+    const REQUEST_TIMEOUT_MS = 180000;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     try {
-      const REQUEST_TIMEOUT_MS = 180000;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
       const response = await fetch('/api/ai', {
         method: 'POST',
         headers: this.buildHeaders(),
         body: JSON.stringify({ history, message: newMessage, systemContext, allowThinking }),
         signal: controller.signal,
-      }).finally(() => {
-        clearTimeout(timeoutId);
       });
 
       const payload = (await response.json().catch(() => null)) as | {
@@ -151,6 +150,8 @@ export class AIService {
         return { text: 'Request timed out, please try again later.' };
       }
       return { text: "Sorry, I encountered an error processing your request." };
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 }

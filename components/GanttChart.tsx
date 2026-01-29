@@ -3,6 +3,7 @@ import { Task, Priority } from '../types';
 import { useI18n } from '../src/i18n';
 import { cn } from '../src/utils/cn';
 import { DAY_MS, GANTT_VIEW_SETTINGS, type GanttViewMode } from '../src/constants/gantt';
+import { getTaskColorClass } from '../shared/constants/colors';
 
 interface GanttChartProps {
   tasks: Task[];
@@ -27,18 +28,6 @@ type DragState = {
 };
 
 type TaskEntry = Task & { startMs: number; endMs: number };
-
-// Move outside component and use record lookup for better performance
-const TASK_COLOR_CLASSES: Record<Priority, string> = {
-  [Priority.LOW]: 'bg-success',
-  [Priority.MEDIUM]: 'bg-warning',
-  [Priority.HIGH]: 'bg-negative',
-} as const;
-
-const getTaskColorClass = (priority: Priority, isMilestone?: boolean): string => {
-  if (isMilestone) return 'border-accent';
-  return TASK_COLOR_CLASSES[priority] || 'bg-primary';
-};
 
 // Constants for Gantt rendering
 const ROW_HEIGHT = 44;

@@ -3,25 +3,13 @@ import { Task, Priority, TaskStatus } from '../types';
 import { useI18n } from '../src/i18n';
 import { getPriorityLabel, getStatusLabel } from '../src/i18n/labels';
 import { cn } from '../src/utils/cn';
+import { PRIORITY_COLORS, STATUS_COLORS } from '../shared/constants/colors';
 
 interface ListViewProps {
   tasks: Task[];
   selectedTaskId?: string | null;
   onSelectTask?: (id: string) => void;
 }
-
-// Move constants outside component to avoid recreation
-const PRIORITY_COLORS: Record<Priority, string> = {
-  [Priority.LOW]: 'text-success bg-success/10 border-success/20',
-  [Priority.MEDIUM]: 'text-critical bg-critical/10 border-critical/20',
-  [Priority.HIGH]: 'text-negative bg-negative/10 border-negative/20',
-} as const;
-
-const STATUS_COLORS: Record<TaskStatus, string> = {
-  [TaskStatus.TODO]: 'text-text-secondary bg-secondary/10',
-  [TaskStatus.IN_PROGRESS]: 'text-primary bg-primary/10',
-  [TaskStatus.DONE]: 'text-success bg-success/10',
-} as const;
 
 interface TaskRowProps {
   task: Task;

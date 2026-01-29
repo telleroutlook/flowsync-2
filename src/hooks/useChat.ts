@@ -124,6 +124,11 @@ export const useChat = ({
   }, []);
 
   // Build system context for the AI (optimized to reduce token usage and recomputation)
+  // Build a stable key from task IDs to detect actual changes vs re-renders
+  const tasksKey = useMemo(() => {
+    return activeTasks.slice(0, TASK_SNIPPET_COUNT).map(t => t.id).join('|');
+  }, [activeTasks]);
+
   const systemContext = useMemo(() => {
     const taskCount = activeTasks.length;
     const taskSnippets = activeTasks.slice(0, TASK_SNIPPET_COUNT);
@@ -138,7 +143,7 @@ export const useChat = ({
 ${selectedTaskInfo}
 Available Projects: ${projectCount} total.
 Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.map(t => `${t.title} (${t.id.slice(0, 8)})`).join(', ')}.`;
-  }, [activeProject.name, activeProject.id, activeTasks, selectedTask, projects.length]);
+  }, [activeProject.name, activeProject.id, activeTasks, selectedTask, projects.length, tasksKey]);
 
   // Process a single conversation turn with the AI
   // Using ref to avoid stale closure issues while maintaining dependency stability

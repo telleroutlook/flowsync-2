@@ -8,6 +8,7 @@
 import type { DraftAction } from '../../../types';
 import type { ApiClient } from './types';
 import type { TFunction } from '../../i18n/types';
+import { formatTaskDate as formatTaskDateUtil } from '../../utils/date';
 
 // Context passed to tool handlers
 export interface ToolHandlerContext {
@@ -34,10 +35,10 @@ type ToolHandlerFunction = (
   context: ToolHandlerContext
 ) => Promise<ToolExecutionResult> | ToolExecutionResult;
 
-// Helper to format task dates consistently
+// Helper to format task dates consistently using shared utility
 const formatTaskDate = (ts: number | null | undefined, t: TFunction) => {
-  if (!ts) return t('common.na');
-  return new Date(ts).toISOString().split('T')[0];
+  const formatted = formatTaskDateUtil(ts);
+  return formatted === 'N/A' ? t('common.na') : formatted;
 };
 
 // Helper to extract string parameter safely
