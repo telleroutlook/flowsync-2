@@ -37,9 +37,9 @@ export const WorkspacePanel = memo<WorkspacePanelProps>(({
   }, [onSelectWorkspace]);
 
   return (
-    <div className="space-y-3">
+    <div className="p-4 space-y-4">
       {/* User Info Section */}
-      <div className="flex items-center justify-between gap-2 px-1">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 overflow-hidden">
            <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-sm shadow-sm ${
              user ? 'bg-primary/10 text-primary' : 'bg-secondary/10 text-secondary'
@@ -84,11 +84,11 @@ export const WorkspacePanel = memo<WorkspacePanelProps>(({
       </div>
 
       {/* Workspace Selector */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-bold text-secondary uppercase tracking-widest px-1">
+      <div className="space-y-2">
+        <label className="text-xs font-bold text-secondary uppercase tracking-widest">
           {t('workspace.title')}
         </label>
-        <div className="flex gap-1.5">
+        <div className="flex gap-2">
           <div className="relative flex-1">
             <select
               value={activeWorkspaceId}

@@ -73,8 +73,8 @@ const WorkspaceModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-text-primary/40 backdrop-blur-sm animate-fade-in">
-      <div className="bg-surface rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] border border-border-subtle">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-text-primary/40 backdrop-blur-sm animate-fade-in">
+      <div className="bg-surface rounded-xl shadow-2xl w-full sm:max-w-2xl lg:max-w-3xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-[85vh] border border-border-subtle">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-border-subtle bg-surface sticky top-0 z-10">
           <div>

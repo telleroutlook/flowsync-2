@@ -91,7 +91,8 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
 }) => {
   const { t, locale } = useI18n();
   const [viewMode, setViewMode] = useState<ViewMode>('Month');
-  const [showList, setShowList] = useState(true);
+  // Default to hiding list on small screens
+  const [showList, setShowList] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragDeltaMs, setDragDeltaMs] = useState(0);
   const dragDeltaRef = useRef(0);

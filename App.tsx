@@ -460,6 +460,9 @@ function App() {
 
   // Auto-zoom effect
   useEffect(() => {
+    // Disable auto-zoom on mobile
+    if (isMobile) return;
+
     const mode = viewMode;
     const signature = computeSignature(mode);
     const meta = zoomMeta[mode];
@@ -531,7 +534,10 @@ function App() {
         (isMobile && mobileTab !== 'workspace') ? "hidden" : "flex"
       )}>
         {/* Header */}
-        <div className="min-h-[3.5rem] py-2 border-b border-border-subtle flex items-center justify-between flex-wrap gap-x-4 gap-y-2 px-4 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0">
+        <div className={cn(
+          "min-h-[3.5rem] py-2 border-b border-border-subtle flex items-center justify-between flex-wrap gap-x-4 gap-y-2 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0",
+          isMobile ? "px-2" : "px-4"
+        )}>
           <div className="flex items-center flex-wrap gap-3 flex-1 min-w-0">
             <Button
               variant="ghost"
@@ -802,7 +808,10 @@ function App() {
         />
 
         {/* View Area */}
-        <div className="p-4 flex-1 overflow-hidden relative z-10 custom-scrollbar flex gap-4">
+        <div className={cn(
+          "flex-1 overflow-hidden relative z-10 custom-scrollbar flex",
+          isMobile ? "p-1.5 gap-1.5" : "p-4 gap-4"
+        )}>
           {isLoadingData ? (
             <LoadingSpinner message={t('app.loading.project_data')} />
           ) : (
@@ -810,15 +819,7 @@ function App() {
               <div ref={viewContainerRef} className="flex-1 min-w-0 h-full overflow-hidden relative">
                 <Suspense fallback={<LoadingSpinner message={t('app.loading.view')} />}>
                   {viewMode === 'BOARD' && (
-                    <div
-                      className="h-full w-full"
-                      style={{
-                        transform: `scale(${viewZoom.BOARD})`,
-                        transformOrigin: 'top left',
-                        width: `${100 / viewZoom.BOARD}%`,
-                        height: `${100 / viewZoom.BOARD}%`,
-                      }}
-                    >
+                    <div className="h-full w-full">
                       <KanbanBoard
                         tasks={activeTasks}
                         selectedTaskId={selectedTaskId}
@@ -827,15 +828,7 @@ function App() {
                     </div>
                   )}
                   {viewMode === 'LIST' && (
-                    <div
-                      className="h-full w-full"
-                      style={{
-                        transform: `scale(${viewZoom.LIST})`,
-                        transformOrigin: 'top left',
-                        width: `${100 / viewZoom.LIST}%`,
-                        height: `${100 / viewZoom.LIST}%`,
-                      }}
-                    >
+                    <div className="h-full w-full">
                       <ListView
                         tasks={activeTasks}
                         selectedTaskId={selectedTaskId}
@@ -863,7 +856,9 @@ function App() {
 
               <div className={cn(
                 "transition-all duration-300",
-                selectedTask ? "w-[350px] opacity-100 translate-x-0" : "w-0 opacity-0 translate-x-10 pointer-events-none"
+                selectedTask 
+                  ? (isMobile ? "fixed inset-0 z-50 p-4 bg-background/95 backdrop-blur-sm" : "w-[350px] opacity-100 translate-x-0") 
+                  : (isMobile ? "hidden" : "w-0 opacity-0 translate-x-10 pointer-events-none")
               )}>
                 {selectedTask && (
                   <TaskDetailPanel
