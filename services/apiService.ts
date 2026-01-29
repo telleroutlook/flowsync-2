@@ -2,9 +2,10 @@ import type { ApiResponse, AuditLog, Draft, DraftAction, Project, Task, User, Wo
 import { sleep, getRetryDelay } from '../src/utils/retry';
 import { storageGet } from '../src/utils/storage';
 import { buildAuthHeaders } from './aiService';
-import { ApiError, getErrorMessage } from '../src/utils/error';
+import { ApiError, TimeoutError, NetworkError, getErrorMessage } from '../src/utils/error';
 
 const MAX_FETCH_RETRIES = 2;
+const DEFAULT_TIMEOUT_MS = 30000;
 
 const shouldRetryStatus = (status: number) =>
   status === 408 || status === 429 || (status >= 500 && status <= 599);
@@ -14,33 +15,72 @@ const isIdempotentMethod = (method?: string) => {
   return normalized === 'GET' || normalized === 'HEAD';
 };
 
+const createTimeoutPromise = (ms: number, url: string): Promise<never> => {
+  return new Promise((_, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new TimeoutError(`Request timeout after ${ms}ms`, ms, { url }));
+    }, ms);
+    // Allow the timeout to be cleared if the fetch completes first
+    (timeoutId as unknown as { _cleared: boolean })._cleared = false;
+  });
+};
+
 const fetchWithRetry = async (input: RequestInfo, init?: RequestInit): Promise<Response> => {
   const canRetry = isIdempotentMethod(init?.method);
+  const url = typeof input === 'string' ? input : input.url;
   let lastError: unknown;
+
   for (let attempt = 0; attempt <= MAX_FETCH_RETRIES; attempt += 1) {
     if (init?.signal?.aborted) {
       throw new DOMException('Aborted', 'AbortError');
     }
+
     try {
-      const response = await fetch(input, init);
+      // Create a timeout promise
+      const timeoutPromise = createTimeoutPromise(DEFAULT_TIMEOUT_MS, url);
+
+      // Race between fetch and timeout
+      const response = await Promise.race([
+        fetch(input, init),
+        timeoutPromise
+      ]) as Response;
+
       if (!canRetry || !shouldRetryStatus(response.status) || attempt === MAX_FETCH_RETRIES) {
         return response;
       }
+
       const delayMs = getRetryDelay(attempt, response.headers.get('Retry-After'));
       await sleep(delayMs);
     } catch (error) {
       lastError = error;
-      if (!canRetry) throw error;
+
+      // Don't retry on abort
       if (error instanceof DOMException && error.name === 'AbortError') {
         throw error;
       }
+
+      // Don't retry on TimeoutError for non-idempotent methods
+      if (error instanceof TimeoutError && !canRetry) {
+        throw error;
+      }
+
+      // Don't retry network errors for POST/PUT/DELETE
+      if (!canRetry) {
+        if (error instanceof TypeError) {
+          throw new NetworkError(`Network error: ${getErrorMessage(error, 'Connection failed')}`, { url, method: init?.method });
+        }
+        throw error;
+      }
+
       if (attempt === MAX_FETCH_RETRIES) {
         throw error;
       }
+
       const delayMs = getRetryDelay(attempt);
       await sleep(delayMs);
     }
   }
+
   throw lastError;
 };
 
@@ -65,8 +105,21 @@ const buildHeaders = (headers?: HeadersInit) => {
 };
 
 const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> => {
-  const response = await fetchWithRetry(input, { ...init, headers: buildHeaders(init?.headers) });
-  const text = await response.text();
+  let response: Response | null = null;
+  let text = '';
+
+  try {
+    response = await fetchWithRetry(input, { ...init, headers: buildHeaders(init?.headers) });
+    text = await response.text();
+  } catch (error) {
+    // Enhance error messages for better UX
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new NetworkError(getErrorMessage(error, 'Failed to connect to server'), {
+        url: typeof input === 'string' ? input : input.url
+      });
+    }
+    throw error;
+  }
 
   let payload: ApiResponse<T> | null = null;
   if (text) {
@@ -74,12 +127,12 @@ const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> 
       payload = JSON.parse(text) as ApiResponse<T>;
     } catch {
       const snippet = text.slice(0, 160).replace(/\s+/g, ' ').trim();
-      throw new ApiError(`Invalid JSON response. ${snippet || 'Empty body.'}`, response.status, 'INVALID_JSON');
+      throw new ApiError(`Invalid JSON response. ${snippet || 'Empty body.'}`, response?.status, 'INVALID_JSON');
     }
   }
 
   if (!payload) {
-    throw new ApiError(`Empty response.`, response.status, 'EMPTY_RESPONSE');
+    throw new ApiError('Empty response from server', response?.status, 'EMPTY_RESPONSE');
   }
 
   if (!response.ok || !payload.success || payload.data === undefined) {

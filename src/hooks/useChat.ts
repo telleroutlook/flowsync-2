@@ -7,9 +7,9 @@ import { processToolCalls, type ApiClient, type ProcessingStep } from './ai';
 import { useI18n } from '../i18n';
 import { MAX_HISTORY_PART_CHARS } from '../../shared/aiLimits';
 
-// Local constants
 const MAX_RETRIES = 3;
 const MAX_HISTORY_MESSAGES = 10;
+const TASK_SNIPPET_COUNT = 20;
 
 interface UseChatProps {
   activeProjectId: string;
@@ -58,8 +58,8 @@ const formatAiDate = (ts: number | null | undefined): string => {
 // Helper: Check if error is retryable
 const isRetryableOpenAIError = (text: string): boolean => text.includes('OpenAI request failed.');
 
-// Helper: Create API client for tool handlers
-function createApiClient(t: ReturnType<typeof useI18n>['t']): ApiClient {
+// Create API client for tool handlers (stable factory)
+function createApiClient(): ApiClient {
   return {
     listProjects: () => apiService.listProjects(),
     getProject: (id: string) => apiService.getProject(id),
@@ -123,39 +123,52 @@ export const useChat = ({
     });
   }, []);
 
-  // Build system context for the AI
+  // Build system context for the AI (optimized to reduce token usage and recomputation)
   const systemContext = useMemo(() => {
-    const taskIdsAndTitles = activeTasks.slice(0, 30).map((task) => ({ id: task.id, title: task.title }));
-    const mappingJson = JSON.stringify({
-      limit: 30,
-      total: activeTasks.length,
-      taskIdMap: taskIdsAndTitles,
-    });
+    const taskCount = activeTasks.length;
+    const taskSnippets = activeTasks.slice(0, TASK_SNIPPET_COUNT);
 
     const selectedTaskInfo = selectedTask
-      ? `User is currently inspecting task: ${selectedTask.title} (ID: ${selectedTask.id}, Status: ${selectedTask.status}, Start: ${formatAiDate(selectedTask.startDate)}, Due: ${formatAiDate(selectedTask.dueDate)}).`
+      ? `User is inspecting: ${selectedTask.title} (ID: ${selectedTask.id.slice(0, 8)}..., Status: ${selectedTask.status})`
       : '';
 
-    const projectList = projects.map((p) => `${p.name} (${p.id})`).join(', ');
+    const projectCount = projects.length;
 
-    return `Active Project: ${activeProject.name || 'None'}.
-Active Project ID: ${activeProject.id || 'N/A'}.
+    return `Active Project: ${activeProject.name || 'None'} (ID: ${activeProject.id || 'N/A'}).
 ${selectedTaskInfo}
-Available Projects: ${projectList}.
-Task IDs in Active Project (JSON): ${mappingJson}.`;
-  }, [activeProject.name, activeProject.id, activeTasks, selectedTask, projects]);
+Available Projects: ${projectCount} total.
+Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.map(t => `${t.title} (${t.id.slice(0, 8)})`).join(', ')}.`;
+  }, [activeProject.name, activeProject.id, activeTasks, selectedTask, projects.length]);
 
   // Process a single conversation turn with the AI
+  // Using ref to avoid stale closure issues while maintaining dependency stability
+  const apiClientRef = useRef<ApiClient | null>(null);
+  apiClientRef.current = createApiClient();
+
+  const submitDraftRef = useRef(submitDraft);
+  submitDraftRef.current = submitDraft;
+
+  const appendSystemMessageRef = useRef(appendSystemMessage);
+  appendSystemMessageRef.current = appendSystemMessage;
+
+  const tRef = useRef(t);
+  tRef.current = t;
+
+  const allowThinkingRef = useRef(allowThinking);
+  allowThinkingRef.current = allowThinking;
+
   const processConversationTurn = useCallback(
     async (
       initialHistory: AiHistoryItem[],
       userMessage: string,
-      systemContext: string,
+      sysContext: string,
       attempt = 0,
       accumulatedSteps: ProcessingStep[] = []
     ) => {
       const fullProcessingSteps: ProcessingStep[] = [...accumulatedSteps];
       let currentThinkingPreview = '';
+      const currentT = tRef.current;
+      const currentAllowThinking = allowThinkingRef.current;
 
       const recordStep = (label: string, elapsedMs?: number) => {
         fullProcessingSteps.push({ label, elapsedMs });
@@ -166,44 +179,41 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
         const trimmed = text.trim();
         if (!trimmed) return;
         currentThinkingPreview = trimmed;
-        if (allowThinking) {
+        if (currentAllowThinking) {
           const maxLen = 160;
           const start = Math.max(0, trimmed.length - maxLen);
           const tail = trimmed.slice(start);
           setThinkingPreview(start > 0 ? `...${tail}` : tail);
         } else {
-          setThinkingPreview(t('processing.generating'));
+          setThinkingPreview(currentT('processing.generating'));
         }
       };
 
-      // Validate retry limit
       if (attempt > MAX_RETRIES) {
-        throw new Error(t('chat.max_retries'));
+        throw new Error(currentT('chat.max_retries'));
       }
 
-      recordStep(t('processing.calling_ai'));
-      setThinkingPreview(t('chat.processing_request'));
+      recordStep(currentT('processing.calling_ai'));
+      setThinkingPreview(currentT('chat.processing_request'));
 
       if (attempt > 0) {
-        recordStep(t('chat.auto_retry', { attempt, max: MAX_RETRIES }));
-        setThinkingPreview(t('chat.attempt_fix', { attempt, max: MAX_RETRIES }));
+        recordStep(currentT('chat.auto_retry', { attempt, max: MAX_RETRIES }));
+        setThinkingPreview(currentT('chat.attempt_fix', { attempt, max: MAX_RETRIES }));
       }
 
-      // Stage labels for streaming events
       const stageLabels: Record<string, string> = {
-        received: t('processing.received'),
-        prepare_request: t('processing.preparing'),
-        upstream_request: t('processing.calling_ai'),
-        upstream_response: t('processing.parsing'),
-        done: t('processing.done'),
+        received: currentT('processing.received'),
+        prepare_request: currentT('processing.preparing'),
+        upstream_request: currentT('processing.calling_ai'),
+        upstream_response: currentT('processing.parsing'),
+        done: currentT('processing.done'),
       };
 
       try {
-        // Call AI Service with streaming
         const response = await aiService.sendMessageStream(
           initialHistory,
           userMessage,
-          systemContext,
+          sysContext,
           (event, data) => {
             const elapsedMs = typeof data.elapsedMs === 'number' ? data.elapsedMs : undefined;
 
@@ -211,7 +221,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
               case 'assistant_text':
                 if (typeof data.text === 'string') {
                   updateThinkingPreview(data.text);
-                  recordStep(t('processing.generating'), elapsedMs);
+                  recordStep(currentT('processing.generating'), elapsedMs);
                 }
                 break;
               case 'result':
@@ -219,7 +229,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
                 break;
               case 'tool_start':
                 if (typeof data.name === 'string') {
-                  recordStep(t('processing.executing_tool', { name: data.name }), elapsedMs);
+                  recordStep(currentT('processing.executing_tool', { name: data.name }), elapsedMs);
                 }
                 break;
               case 'stage':
@@ -229,35 +239,33 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
                 }
                 break;
               case 'retry':
-                recordStep(t('chat.retrying'), elapsedMs);
+                recordStep(currentT('chat.retrying'), elapsedMs);
                 break;
             }
           },
-          allowThinking
+          currentAllowThinking
         );
 
         let finalText = response.text;
         let suggestions: string[] = [];
         let hasToolOutputs = false;
 
-        // Process tool calls
         if (response.toolCalls && response.toolCalls.length > 0) {
-          recordStep(t('processing.executing_tool_call'));
+          recordStep(currentT('processing.executing_tool_call'));
 
           const result = await processToolCalls(
             response.toolCalls.map((call) => ({ name: call.name, args: (call.args || {}) as Record<string, unknown> })),
             {
-              api: createApiClient(t),
+              api: apiClientRef.current!,
               activeProjectId,
               generateId,
               pushProcessingStep: (step) => recordStep(step),
-              t,
+              t: currentT,
             }
           );
 
           suggestions = result.suggestions ?? [];
 
-          // Handle retry logic for invalid responses
           if (result.shouldRetry && attempt < MAX_RETRIES) {
             const nextHistory: AiHistoryItem[] = [
               ...initialHistory,
@@ -266,59 +274,54 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
             await processConversationTurn(
               nextHistory,
               `System Alert: ${result.retryReason}`,
-              systemContext,
+              sysContext,
               attempt + 1,
               fullProcessingSteps
             );
             return;
           }
 
-          // Submit draft if there are actions to apply
           if (result.draftActions.length > 0) {
-            recordStep(t('processing.submitting_draft'));
-            // Clear suggestions when draft is created - UI shows draft panel
+            recordStep(currentT('processing.submitting_draft'));
             suggestions = [];
 
             try {
-              const draft = await submitDraft(result.draftActions, {
+              const draft = await submitDraftRef.current(result.draftActions, {
                 createdBy: 'agent',
                 autoApply: false,
                 reason: result.draftReason,
               });
-              result.outputs.push(t('draft.created_action_count', { id: draft.id, count: result.draftActions.length }));
+              result.outputs.push(currentT('draft.created_action_count', { id: draft.id, count: result.draftActions.length }));
             } catch (draftError) {
               const errorMessage = draftError instanceof Error ? draftError.message : String(draftError);
-              result.outputs.push(t('draft.create_failed', { error: errorMessage }));
+              result.outputs.push(currentT('draft.create_failed', { error: errorMessage }));
               finalText = errorMessage;
             }
           }
 
-          // Display tool results
           if (result.outputs.length > 0) {
-            recordStep(t('processing.aggregating_tool_results'));
-            recordStep(t('processing.generating'));
+            recordStep(currentT('processing.aggregating_tool_results'));
+            recordStep(currentT('processing.generating'));
 
             const validOutputs = result.outputs.filter((o) => o.trim().length > 0);
             if (validOutputs.length > 0) {
               hasToolOutputs = true;
-              appendSystemMessage(validOutputs.join(' | '));
+              appendSystemMessageRef.current(validOutputs.join(' | '));
             }
 
             if (!finalText && result.draftActions.length > 0) {
-              finalText = t('chat.draft_created_review');
+              finalText = currentT('chat.draft_created_review');
             }
           }
         } else {
-          recordStep(t('processing.generating'));
+          recordStep(currentT('processing.generating'));
         }
 
-        // Determine effective text
         let effectiveText = finalText;
         if (!effectiveText) {
-          effectiveText = hasToolOutputs ? t('chat.action_completed') : t('chat.processed');
+          effectiveText = hasToolOutputs ? currentT('chat.action_completed') : currentT('chat.processed');
         }
 
-        // Add final AI message to chat
         setMessages((prev) => [
           ...prev,
           {
@@ -327,28 +330,25 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
             text: effectiveText,
             timestamp: Date.now(),
             suggestions: suggestions.length > 0 ? suggestions : undefined,
-            thinking: allowThinking ? { steps: fullProcessingSteps, preview: currentThinkingPreview || undefined } : undefined,
+            thinking: currentAllowThinking ? { steps: fullProcessingSteps, preview: currentThinkingPreview || undefined } : undefined,
           },
         ]);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : t('chat.error_generic');
+        const errorMessage = error instanceof Error ? error.message : currentT('chat.error_generic');
         setMessages((prev) => [
           ...prev,
           {
             id: generateId(),
             role: 'model',
-            text: t('chat.error_prefix', { error: errorMessage }),
+            text: currentT('chat.error_prefix', { error: errorMessage }),
             timestamp: Date.now(),
-            thinking: allowThinking ? { steps: fullProcessingSteps, preview: currentThinkingPreview || undefined } : undefined,
+            thinking: currentAllowThinking ? { steps: fullProcessingSteps, preview: currentThinkingPreview || undefined } : undefined,
           },
         ]);
       }
     },
-    [activeProjectId, submitDraft, appendSystemMessage, pushProcessingStep, setMessages, setThinkingPreview, allowThinking, t]
+    [activeProjectId, pushProcessingStep, setMessages, setThinkingPreview]
   );
-
-  // Stabilize the processMessagesWithHistory callback
-  const stableProcessConversationTurn = useCallback(processConversationTurn, [processConversationTurn]);
 
   // Helper: Reset processing state
   const startProcessing = useCallback(() => {
@@ -376,20 +376,20 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
           timestamp: Date.now(),
         },
       ]),
-    [t]
+    [setMessages, t]
   );
 
   // Helper: Process messages and handle truncation warning
   const processMessagesWithHistory = useCallback(
     async (msgs: ChatMessage[], userText: string) => {
-      pushProcessingStep(t('processing.preparing'));
+      pushProcessingStep(tRef.current('processing.preparing'));
       const { history, truncatedCount } = buildAiHistory(msgs);
       if (truncatedCount > 0) {
-        appendSystemMessage(t('chat.history_truncated', { count: truncatedCount, max: MAX_HISTORY_PART_CHARS }));
+        appendSystemMessageRef.current(tRef.current('chat.history_truncated', { count: truncatedCount, max: MAX_HISTORY_PART_CHARS }));
       }
-      await stableProcessConversationTurn(history, userText, systemContext, 0);
+      await processConversationTurn(history, userText, systemContext, 0);
     },
-    [pushProcessingStep, stableProcessConversationTurn, systemContext, appendSystemMessage, t]
+    [pushProcessingStep, processConversationTurn, systemContext]
   );
 
   const handleSendMessage = useCallback(
@@ -401,7 +401,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
       const hasAttachments = pendingAttachments.length > 0;
       if (!cleanedInput && !hasAttachments) return;
 
-      const outgoingText = cleanedInput || t('chat.sent_attachments');
+      const outgoingText = cleanedInput || tRef.current('chat.sent_attachments');
 
       const userMsg: ChatMessage = {
         id: generateId(),
@@ -425,7 +425,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
         endProcessing();
       }
     },
-    [isProcessing, inputText, pendingAttachments, messages, startProcessing, endProcessing, processMessagesWithHistory, addErrorMessage, t]
+    [isProcessing, inputText, pendingAttachments, messages, startProcessing, endProcessing, processMessagesWithHistory, addErrorMessage, setMessages, setInputText, setPendingAttachments]
   );
 
   // Helper: Filter messages for retry (removes system messages and retryable errors)
@@ -463,7 +463,7 @@ Task IDs in Active Project (JSON): ${mappingJson}.`;
     } finally {
       endProcessing();
     }
-  }, [isProcessing, messages, startProcessing, endProcessing, filterMessagesForRetry, processMessagesWithHistory, addErrorMessage]);
+  }, [isProcessing, messages, startProcessing, endProcessing, filterMessagesForRetry, processMessagesWithHistory, addErrorMessage, setMessages]);
 
   return {
     messages,
