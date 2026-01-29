@@ -9,10 +9,11 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#F5F6F7', // Fiori Horizon App Background
-        surface: '#FFFFFF', // Fiori Card/Header Background
+        background: '#F5F7FA', // Slightly cooler/modern gray
+        surface: '#FFFFFF', 
+        'surface-active': '#F0F2F5', // Added for hover states
         primary: {
-          DEFAULT: '#0070F2', // SAP Blue
+          DEFAULT: '#0070F2', 
           hover: '#005AC2',
           foreground: '#FFFFFF'
         },
@@ -21,18 +22,18 @@ export default {
           foreground: '#FFFFFF'
         },
         accent: {
-          DEFAULT: '#5D36FF', // Joule Purple
+          DEFAULT: '#5D36FF', 
           hover: '#4B2BD0',
           foreground: '#FFFFFF'
         },
         text: {
-          primary: '#131E29',
+          primary: '#1C2937', // Slightly softer black
           secondary: '#556B82',
         },
         border: {
-          subtle: '#D9D9D9',
+          subtle: '#E2E8F0', // Lighter, cooler border
         },
-        input: '#D9D9D9',
+        input: '#E2E8F0',
         ring: '#0070F2',
         joule: {
           start: '#5d36ff',
@@ -47,17 +48,25 @@ export default {
           foreground: '#FFFFFF',
         },
         critical: {
-          DEFAULT: '#E76500',
+          DEFAULT: '#D93025', // More standard error red
           foreground: '#FFFFFF',
         },
         negative: {
-          DEFAULT: '#AA0808',
+          DEFAULT: '#D93025',
           foreground: '#FFFFFF',
         },
         error: {
-          DEFAULT: '#AA0808',
+          DEFAULT: '#D93025',
           foreground: '#FFFFFF',
         },
+      },
+      boxShadow: {
+        'sm': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        'DEFAULT': '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+        'md': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        'lg': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+        'xl': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+        'float': '0 8px 30px rgba(0,0,0,0.08)', // Custom float shadow
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],

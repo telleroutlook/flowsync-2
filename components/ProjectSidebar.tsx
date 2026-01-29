@@ -3,7 +3,7 @@ import { Project } from '../types';
 import { useI18n } from '../src/i18n';
 import { cn } from '../src/utils/cn';
 import { Button } from './ui/Button';
-import { Plus, ChevronLeft, Trash2, Lightbulb } from 'lucide-react';
+import { Plus, ChevronLeft, Trash2, Lightbulb, Box } from 'lucide-react';
 
 export interface ProjectSidebarProps {
   topSlot?: React.ReactNode;
@@ -44,26 +44,31 @@ const ProjectItem = memo<ProjectItemProps>(({ project, isActive, onSelectProject
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       className={cn(
-        "group flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer transition-all duration-200 border",
+        "group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 border mb-1",
         isActive
-          ? "bg-primary/10 text-primary border-primary/20 shadow-sm"
-          : "text-text-secondary hover:bg-surface border-transparent hover:border-border-subtle"
+          ? "bg-surface text-primary border-border-subtle shadow-sm ring-1 ring-primary/5"
+          : "text-text-secondary hover:bg-surface-active border-transparent hover:border-transparent"
       )}
       role="button"
       tabIndex={0}
       aria-pressed={isActive}
     >
       <div className="flex items-center gap-3 overflow-hidden">
-        <span className={cn(
-          "flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-sm font-semibold shadow-sm transition-transform group-hover:scale-105",
-          isActive ? "bg-surface text-primary ring-1 ring-primary/20" : "bg-surface text-text-secondary ring-1 ring-border-subtle"
+        <div className={cn(
+          "flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-sm font-bold shadow-sm transition-transform group-hover:scale-105",
+          isActive 
+            ? "bg-primary text-primary-foreground" 
+            : "bg-surface text-text-secondary border border-border-subtle"
         )} aria-hidden="true">
           {project.icon || project.name.charAt(0).toUpperCase()}
-        </span>
+        </div>
         <div className="flex flex-col min-w-0">
-          <span className="truncate text-sm font-medium leading-tight">{project.name}</span>
+          <span className={cn(
+            "truncate text-sm font-semibold leading-tight",
+            isActive ? "text-text-primary" : "text-text-primary/80"
+          )}>{project.name}</span>
           {project.description && (
-            <span className="truncate text-[10px] text-text-secondary/80 leading-tight mt-0.5">{project.description}</span>
+            <span className="truncate text-[10px] text-text-secondary leading-tight mt-0.5">{project.description}</span>
           )}
         </div>
       </div>
@@ -73,8 +78,8 @@ const ProjectItem = memo<ProjectItemProps>(({ project, isActive, onSelectProject
         size="icon"
         onClick={handleDelete}
         className={cn(
-          "h-7 w-7 opacity-0 group-hover:opacity-100 text-text-secondary hover:text-negative hover:bg-negative/10 transition-all",
-          isActive && "text-primary/60 hover:text-negative"
+          "h-7 w-7 opacity-0 group-hover:opacity-100 text-text-secondary hover:text-negative hover:bg-negative/10 transition-all rounded-md",
+          isActive && "opacity-0 group-hover:opacity-100"
         )}
         title={t('app.sidebar.delete')}
       >
@@ -104,20 +109,30 @@ export const ProjectSidebar = memo<ProjectSidebarProps>(({
   }, [t, onDeleteProject]);
 
   return (
-    <div className="w-full bg-background flex flex-col h-full shrink-0 shadow-sm z-10">
-      {topSlot && (
-        <div className="p-3 border-b border-border-subtle bg-surface/50 backdrop-blur-sm">
+    <div className="w-full bg-background/50 flex flex-col h-full shrink-0 shadow-sm z-10 md:bg-background">
+      {/* Brand / Top Slot Area */}
+      {topSlot ? (
+        <div className="border-b border-border-subtle bg-surface/50 backdrop-blur-sm">
           {topSlot}
         </div>
+      ) : (
+        <div className="h-14 flex items-center px-4 border-b border-border-subtle bg-surface">
+             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-sm mr-3">
+                <Box className="w-5 h-5 text-white" />
+             </div>
+             <span className="font-bold text-text-primary tracking-tight">FlowSync</span>
+        </div>
       )}
-      <div className="p-3 border-b border-border-subtle flex items-center justify-between bg-surface/50 backdrop-blur-sm z-10">
-        <h3 className="text-xs font-bold text-text-secondary uppercase tracking-widest pl-1">{t('app.sidebar.projects')}</h3>
+
+      {/* Projects Header */}
+      <div className="px-4 py-3 flex items-center justify-between">
+        <h3 className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">{t('app.sidebar.projects')}</h3>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
             onClick={onCreateProject}
-            className="h-8 w-8 text-text-secondary hover:text-primary"
+            className="h-7 w-7 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-md"
             title={t('app.sidebar.create')}
           >
             <Plus className="w-4 h-4" />
@@ -129,7 +144,7 @@ export const ProjectSidebar = memo<ProjectSidebarProps>(({
               e.stopPropagation();
               onClose();
             }}
-            className="h-8 w-8 text-text-secondary hover:text-text-primary"
+            className="h-7 w-7 text-text-secondary hover:text-text-primary hover:bg-surface-active rounded-md md:hidden"
             title={t('app.sidebar.collapse')}
           >
             <ChevronLeft className="w-4 h-4" />
@@ -137,7 +152,8 @@ export const ProjectSidebar = memo<ProjectSidebarProps>(({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+      {/* Project List */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-3 pb-3 space-y-0.5">
         {projects.map(project => (
           <ProjectItem
             key={project.id}
@@ -148,17 +164,30 @@ export const ProjectSidebar = memo<ProjectSidebarProps>(({
             t={t}
           />
         ))}
+        
+        {projects.length === 0 && (
+             <div className="text-center py-8 px-4">
+                 <p className="text-xs text-text-secondary mb-3">{t('project.none')}</p>
+                 <Button size="sm" variant="outline" onClick={onCreateProject} className="w-full">
+                    {t('app.sidebar.create')}
+                 </Button>
+             </div>
+        )}
       </div>
 
+      {/* Footer / Tip */}
       <div className="p-3 border-t border-border-subtle bg-surface/30">
          <a 
            href={`mailto:teller.lin@sap.com?subject=${encodeURIComponent(t('app.sidebar.tip.subject'))}`}
-           className="bg-surface rounded-lg p-3 border border-border-subtle shadow-sm flex items-start gap-2 hover:bg-surface-active transition-colors cursor-pointer group/tip"
+           className="bg-surface rounded-xl p-3 border border-border-subtle shadow-sm flex items-start gap-3 hover:bg-surface-active hover:shadow-md transition-all cursor-pointer group/tip"
          >
-            <Lightbulb className="w-4 h-4 text-accent mt-0.5 group-hover/tip:scale-110 transition-transform" />
-            <p className="text-xs text-text-secondary leading-snug group-hover/tip:text-text-primary transition-colors">
-               {t('app.sidebar.tip')}
-            </p>
+            <div className="p-1.5 rounded-full bg-accent/10 text-accent shrink-0 group-hover/tip:bg-accent group-hover/tip:text-white transition-colors">
+                <Lightbulb className="w-4 h-4" />
+            </div>
+            <div className="flex flex-col">
+                <span className="text-xs font-semibold text-text-primary mb-0.5">{t('app.sidebar.tip')}</span>
+                <span className="text-[10px] text-text-secondary">Click to send feedback</span>
+            </div>
          </a>
       </div>
     </div>

@@ -20,6 +20,7 @@ import { useAuditLogs } from './src/hooks/useAuditLogs';
 import { useChat } from './src/hooks/useChat';
 import { useExport } from './src/hooks/useExport';
 import { generateId, storageGet, storageSet, storageGetJSON, storageSetJSON, computeGanttTimelineRange, pickZoomLevel, findZoomIndex, isMajorZoomChange, computeZoomSignature, DEFAULT_ZOOM_STATE, DEFAULT_ZOOM_META, type ZoomState, type ZoomMetaState, type ZoomSignature, type ViewMode } from './src/utils';
+import { MobileNavBar, MobileTab } from './components/MobileNavBar';
 import { useI18n } from './src/i18n';
 import { DAY_MS, GANTT_PX_PER_DAY, type GanttViewMode } from './src/constants/gantt';
 
@@ -44,6 +45,17 @@ function App() {
   const zoomLevels = useMemo(() => [0.6, 0.8, 1, 1.2, 1.4], []);
   const exportButtonRef = useRef<HTMLButtonElement | null>(null);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Mobile State
+  const [mobileTab, setMobileTab] = useState<MobileTab>('workspace');
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // UI State
   const [viewMode, setViewMode] = useState<ViewMode>('LIST');
@@ -474,12 +486,16 @@ function App() {
   }, [zoomMeta]);
 
   return (
-    <div className="flex h-screen h-[100dvh] w-full bg-background overflow-hidden text-text-primary font-sans selection:bg-primary/20 selection:text-primary">
+    <div className="flex h-screen h-[100dvh] w-full bg-background overflow-hidden text-text-primary font-sans selection:bg-primary/20 selection:text-primary flex-col md:flex-row">
       
       {/* 1. Project Sidebar (Left) */}
       <div className={cn(
         "transition-all duration-300 overflow-hidden bg-surface relative z-20 flex-shrink-0",
-        isSidebarOpen ? "w-[260px] border-r border-border-subtle" : "w-0 border-none"
+        // Desktop
+        "md:block",
+        isSidebarOpen ? "md:w-[260px] md:border-r md:border-border-subtle" : "md:w-0 md:border-none",
+        // Mobile
+        (isMobile && mobileTab === 'projects') ? "flex-1 w-full border-b border-border-subtle" : (isMobile ? "hidden" : "")
       )}>
         <ProjectSidebar 
           topSlot={(
@@ -496,70 +512,80 @@ function App() {
           )}
           projects={projects}
           activeProjectId={activeProjectId}
-          onSelectProject={handleSelectProject}
+          onSelectProject={(id) => {
+            handleSelectProject(id);
+            if (isMobile) setMobileTab('workspace');
+          }}
           onCreateProject={manualCreateProject}
           onDeleteProject={handleDeleteProject}
-          onClose={() => setIsSidebarOpen(false)}
+          onClose={() => {
+            setIsSidebarOpen(false);
+            if (isMobile) setMobileTab('workspace');
+          }}
         />
       </div>
 
       {/* 2. Workspace (Middle) */}
-      <div className="flex-1 flex flex-col h-full bg-background relative overflow-hidden min-w-0">
+      <div className={cn(
+        "flex-1 flex flex-col h-full bg-background relative overflow-hidden min-w-0",
+        (isMobile && mobileTab !== 'workspace') ? "hidden" : "flex"
+      )}>
         {/* Header */}
         <div className="min-h-[3.5rem] py-2 border-b border-border-subtle flex items-center justify-between flex-wrap gap-x-4 gap-y-2 px-4 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0">
-          <div className="flex items-center flex-wrap gap-3">
+          <div className="flex items-center flex-wrap gap-3 flex-1 min-w-0">
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setIsSidebarOpen(prev => !prev)}
               title={isSidebarOpen ? t('app.sidebar.close') : t('app.sidebar.open')}
-              className="h-8 w-8"
+              className={cn("h-8 w-8 text-text-secondary hover:text-primary", isMobile && "hidden")}
             >
               <Menu className="w-4 h-4" />
             </Button>
 
-            <div className="flex flex-col justify-center">
-              <h2 className="text-sm font-bold text-text-primary leading-tight truncate max-w-[200px]">{activeProject.name}</h2>
+            <div className="flex flex-col justify-center min-w-0">
+              <h2 className="text-sm font-bold text-text-primary leading-tight truncate">{activeProject.name}</h2>
               {activeProject.description && (
-                 <p className="text-[10px] font-medium text-text-secondary truncate max-w-[200px]">{activeProject.description}</p>
+                 <p className="text-[10px] font-medium text-text-secondary truncate">{activeProject.description}</p>
               )}
             </div>
             
             <div className="h-5 w-px bg-border-subtle mx-1 hidden sm:block"></div>
 
             {/* View Switcher */}
-            <div className="flex flex-wrap p-1 bg-background/50 rounded-lg border border-border-subtle gap-1">
+            <div className="flex flex-wrap p-1 bg-surface/50 rounded-lg border border-border-subtle gap-1 shadow-sm">
                <Button
                  variant={viewMode === 'BOARD' ? 'secondary' : 'ghost'}
                  size="sm"
                  onClick={() => setViewMode('BOARD')}
-                 className="h-8 px-3 text-xs"
+                 className="h-7 px-2 md:h-8 md:px-3 text-xs"
                >
-                 <Grid className="w-4 h-4 mr-2" />
-                 {t('app.view.board')}
+                 <Grid className="w-4 h-4 md:mr-2" />
+                 <span className="hidden md:inline">{t('app.view.board')}</span>
                </Button>
                <Button
                  variant={viewMode === 'LIST' ? 'secondary' : 'ghost'}
                  size="sm"
                  onClick={() => setViewMode('LIST')}
-                 className="h-8 px-3 text-xs"
+                 className="h-7 px-2 md:h-8 md:px-3 text-xs"
                >
-                 <ListIcon className="w-4 h-4 mr-2" />
-                 {t('app.view.list')}
+                 <ListIcon className="w-4 h-4 md:mr-2" />
+                 <span className="hidden md:inline">{t('app.view.list')}</span>
                </Button>
                <Button
                  variant={viewMode === 'GANTT' ? 'secondary' : 'ghost'}
                  size="sm"
                  onClick={() => setViewMode('GANTT')}
-                 className="h-8 px-3 text-xs"
+                 className="h-7 px-2 md:h-8 md:px-3 text-xs"
                >
-                 <Calendar className="w-4 h-4 mr-2" />
-                 {t('app.view.gantt')}
+                 <Calendar className="w-4 h-4 md:mr-2" />
+                 <span className="hidden md:inline">{t('app.view.gantt')}</span>
                </Button>
             </div>
           </div>
 
-          <div className="flex items-center flex-wrap gap-2">
+          {/* Desktop Tools */}
+          <div className={cn("items-center flex-wrap gap-2", isMobile ? "hidden" : "flex")}>
              {/* Zoom Panel */}
              <div className="flex items-center flex-wrap gap-1 bg-background/50 rounded-lg border border-border-subtle px-2 py-1">
                <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary/70 mr-1">{t('app.zoom')}</span>
@@ -699,7 +725,7 @@ function App() {
                 size="icon"
                 onClick={() => setIsChatOpen(prev => !prev)}
                 title={t('app.header.toggle_chat')}
-                className="h-8 w-8"
+                className={cn("h-8 w-8", isMobile && "hidden")}
              >
                 <MessageSquare className="w-4 h-4" />
              </Button>
@@ -855,27 +881,37 @@ function App() {
       </div>
 
       {/* 3. Chat Interface (Right) */}
-      <ChatInterface
-        isChatOpen={isChatOpen}
-        setIsChatOpen={setIsChatOpen}
-        onResetChat={handleResetChat}
-        pendingDraft={pendingDraft}
-        draftWarnings={draftWarnings}
-        onApplyDraft={handleApplyDraft}
-        onDiscardDraft={handleDiscardDraft}
-        messages={messages}
-        isProcessing={isProcessing}
-        processingSteps={processingSteps}
-        thinkingPreview={thinkingPreview}
-        messagesEndRef={messagesEndRef}
-        onSendMessage={handleSendMessage}
-        onRetryLastMessage={handleRetryLastMessage}
-        pendingAttachments={pendingAttachments}
-        onRemoveAttachment={handleRemoveAttachment}
-        fileInputRef={fileInputRef}
-        onAttachFiles={handleAttachFiles}
-        inputText={inputText}
-        setInputText={setInputText}
+      <div className={cn(
+          (isMobile && mobileTab !== 'chat') ? "hidden" : "block h-full md:h-auto"
+      )}>
+        <ChatInterface
+          isChatOpen={isChatOpen}
+          setIsChatOpen={setIsChatOpen}
+          onResetChat={handleResetChat}
+          pendingDraft={pendingDraft}
+          draftWarnings={draftWarnings}
+          onApplyDraft={handleApplyDraft}
+          onDiscardDraft={handleDiscardDraft}
+          messages={messages}
+          isProcessing={isProcessing}
+          processingSteps={processingSteps}
+          thinkingPreview={thinkingPreview}
+          messagesEndRef={messagesEndRef}
+          onSendMessage={handleSendMessage}
+          onRetryLastMessage={handleRetryLastMessage}
+          pendingAttachments={pendingAttachments}
+          onRemoveAttachment={handleRemoveAttachment}
+          fileInputRef={fileInputRef}
+          onAttachFiles={handleAttachFiles}
+          inputText={inputText}
+          setInputText={setInputText}
+          isMobile={isMobile}
+        />
+      </div>
+
+      <MobileNavBar
+        activeTab={mobileTab}
+        onSelectTab={setMobileTab}
       />
     </div>
   );

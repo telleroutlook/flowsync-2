@@ -207,6 +207,7 @@ interface ChatInterfaceProps {
   inputText: string;
   setInputText: (text: string) => void;
   onResetChat: () => void;
+  isMobile?: boolean;
 }
 
 export const ChatInterface = memo<ChatInterfaceProps>(({
@@ -230,6 +231,7 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   inputText,
   setInputText,
   onResetChat,
+  isMobile = false,
 }) => {
   const { t } = useI18n();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -338,14 +340,24 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   return (
     <motion.div
       initial={false}
-      animate={{
+      animate={isMobile ? {
+        width: '100%',
+        opacity: 1,
+        marginRight: 0,
+        marginLeft: 0,
+      } : {
         width: isChatOpen ? 360 : 0,
         opacity: isChatOpen ? 1 : 0,
         marginRight: isChatOpen ? 16 : 0,
         marginLeft: isChatOpen ? 8 : 0,
       }}
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="flex flex-col border border-border-subtle bg-surface relative z-20 shrink-0 shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] h-[calc(100vh-2rem)] my-4 rounded-2xl overflow-hidden"
+      className={cn(
+        "flex flex-col bg-surface relative z-20 shrink-0 overflow-hidden",
+        isMobile 
+          ? "h-full border-none rounded-none shadow-none" 
+          : "h-[calc(100vh-2rem)] my-4 rounded-2xl border border-border-subtle/50 shadow-float ring-1 ring-black/5"
+      )}
     >
       {/* Header */}
       <div className="h-14 px-4 border-b border-border-subtle flex items-center justify-between bg-surface/95 backdrop-blur-md sticky top-0 z-10 shrink-0">
