@@ -6,6 +6,7 @@ import { Sparkles, RotateCcw, X, Paperclip, Send, File, XCircle, AlertTriangle }
 import { useI18n } from '../src/i18n';
 import { getActionLabel, getEntityLabel } from '../src/i18n/labels';
 import { Button } from './ui/Button';
+import { cn } from '../src/utils/cn';
 
 // Extracted sub-components for better memoization
 
