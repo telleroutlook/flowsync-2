@@ -111,24 +111,41 @@ const planActions = async (
   const planned: DraftAction[] = [];
   const warnings: string[] = [];
 
-  // Extract IDs that we need to fetch
+  // Extract IDs that we need to fetch using Sets for O(1) lookups
   const projectIdsToFetch = new Set<string>();
   const taskIdsToFetch = new Set<string>();
   const projectIdsReferenced = new Set<string>();
+  const taskPredecessorIds = new Set<string>();
 
+  // Single pass to collect all IDs we need
   for (const action of actions) {
     if (action.entityType === 'project') {
       if (action.action !== 'create') {
-        projectIdsToFetch.add(action.entityId || '');
+        const id = action.entityId;
+        if (id) projectIdsToFetch.add(id);
       }
     } else if (action.entityType === 'task') {
       if (action.action !== 'create') {
-        taskIdsToFetch.add(action.entityId || '');
+        const id = action.entityId;
+        if (id) taskIdsToFetch.add(id);
       }
       // Collect project IDs from task actions
       const projectId = (action.after as Record<string, unknown> | undefined)?.projectId as string | undefined;
       if (projectId) projectIdsReferenced.add(projectId);
+
+      // Collect predecessor IDs for constraint validation
+      const predecessors = (action.after as Record<string, unknown> | undefined)?.predecessors as string[] | undefined;
+      if (predecessors?.length) {
+        for (const predId of predecessors) {
+          if (predId) taskPredecessorIds.add(predId);
+        }
+      }
     }
+  }
+
+  // Include predecessor IDs in tasks to fetch
+  for (const predId of taskPredecessorIds) {
+    taskIdsToFetch.add(predId);
   }
 
   // Fetch only the projects we need
@@ -136,11 +153,16 @@ const planActions = async (
   if (projectIdsToFetch.size > 0 || projectIdsReferenced.size > 0) {
     const { and, inArray, or } = await import('drizzle-orm');
     const conditions = [];
-    if (projectIdsToFetch.size > 0) {
-      conditions.push(inArray(projects.id, Array.from(projectIdsToFetch).filter(Boolean)));
+
+    // Use empty array check to avoid empty IN clauses
+    const fetchProjectIds = Array.from(projectIdsToFetch).filter(Boolean);
+    const referencedProjectIds = Array.from(projectIdsReferenced).filter(Boolean);
+
+    if (fetchProjectIds.length > 0) {
+      conditions.push(inArray(projects.id, fetchProjectIds));
     }
-    if (projectIdsReferenced.size > 0) {
-      conditions.push(inArray(projects.id, Array.from(projectIdsReferenced).filter(Boolean)));
+    if (referencedProjectIds.length > 0) {
+      conditions.push(inArray(projects.id, referencedProjectIds));
     }
     const targetClause = conditions.length > 1 ? or(...conditions) : conditions[0];
     const whereClause = targetClause ? and(eq(projects.workspaceId, workspaceId), targetClause) : eq(projects.workspaceId, workspaceId);
@@ -151,7 +173,7 @@ const planActions = async (
   // For tasks, we need to fetch:
   // 1. Tasks being modified
   // 2. Tasks that are predecessors of tasks being modified (for constraint validation)
-  // Optimization: For small drafts, load all. For large drafts, load selectively.
+  // Optimization: For small drafts, load selectively. For large drafts, load all.
   const SELECTIVE_LOAD_THRESHOLD = 50;
   let taskState: TaskRecord[] = [];
 
@@ -172,21 +194,18 @@ const planActions = async (
     const conditions = [];
 
     // Tasks being directly modified
-    if (taskIdsToFetch.size > 0) {
-      const validIds = Array.from(taskIdsToFetch).filter(Boolean);
-      if (validIds.length > 0) {
-        conditions.push(inArray(tasks.id, validIds));
-      }
+    const fetchTaskIds = Array.from(taskIdsToFetch).filter(Boolean);
+    if (fetchTaskIds.length > 0) {
+      conditions.push(inArray(tasks.id, fetchTaskIds));
     }
 
     // Tasks in the same projects (for predecessor constraint validation)
-    if (projectIdsReferenced.size > 0) {
-      const validProjectIds = Array.from(projectIdsReferenced).filter(Boolean);
-      if (validProjectIds.length > 0) {
-        conditions.push(inArray(tasks.projectId, validProjectIds));
-      }
+    const referencedProjectIds = Array.from(projectIdsReferenced).filter(Boolean);
+    if (referencedProjectIds.length > 0) {
+      conditions.push(inArray(tasks.projectId, referencedProjectIds));
     }
 
+    // Build WHERE clause with proper empty check
     const taskFilter = conditions.length === 0 ? undefined : (conditions.length === 1 ? conditions[0] : or(...conditions));
     const combinedClause = taskFilter ? and(taskFilter, eq(projects.workspaceId, workspaceId)) : eq(projects.workspaceId, workspaceId);
     const taskRows = await db

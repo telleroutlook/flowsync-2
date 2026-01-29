@@ -33,17 +33,19 @@ const TASK_COLOR_CLASSES: Record<Priority, string> = {
   [Priority.LOW]: 'bg-success',
   [Priority.MEDIUM]: 'bg-warning',
   [Priority.HIGH]: 'bg-negative',
-};
+} as const;
 
 const getTaskColorClass = (priority: Priority, isMilestone?: boolean): string => {
   if (isMilestone) return 'border-accent';
   return TASK_COLOR_CLASSES[priority] || 'bg-primary';
 };
 
+// Constants for Gantt rendering
 const ROW_HEIGHT = 44;
 const BAR_HEIGHT = 32;
 const BAR_OFFSET_Y = (ROW_HEIGHT - BAR_HEIGHT) / 2;
 const LIST_WIDTH = 256;
+const TODAY_MARKER_UPDATE_INTERVAL = 60000; // Update today marker every minute
 
 const computeTimelineRange = (entries: TaskEntry[], viewMode: ViewMode) => {
   if (entries.length === 0) return null;
@@ -100,6 +102,15 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
   const arrowId = useId();
   const userSelectedViewRef = useRef(false);
   const [timelineWidth, setTimelineWidth] = useState(0);
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  // Update current time periodically for today marker
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, TODAY_MARKER_UPDATE_INTERVAL);
+    return () => clearInterval(interval);
+  }, []);
 
   const headerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -361,14 +372,20 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
       label: string;
     }> = [];
 
-    taskEntries.forEach(task => {
-      if (!task.predecessors?.length) return;
-      const target = taskMap.get(task.id);
-      if (!target) return;
+    // Use for loop for better performance than forEach
+    for (let i = 0; i < taskEntries.length; i += 1) {
+      const task = taskEntries[i];
+      if (!task.predecessors?.length) continue;
 
-      task.predecessors.forEach(predId => {
+      const target = taskMap.get(task.id);
+      if (!target) continue;
+
+      const predecessors = task.predecessors;
+      for (let j = 0; j < predecessors.length; j += 1) {
+        const predId = predecessors[j];
         const source = taskMap.get(predId);
-        if (!source) return;
+        if (!source) continue;
+
         const sourceTask = taskById.get(predId);
         const targetTask = taskById.get(task.id);
         const label = sourceTask && targetTask ? `${sourceTask.title} → ${targetTask.title}` : t('gantt.dependency');
@@ -381,8 +398,8 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
         const d = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
 
         links.push({ key: `${source.id}-${target.id}`, d, label });
-      });
-    });
+      }
+    }
 
     return links;
   }, [taskEntries, taskMap, taskById, t]);
@@ -497,10 +514,10 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
                    ))}
                    
                    {/* Today Marker */}
-                   {Date.now() >= startMs && Date.now() <= endMs && (
-                     <div 
+                   {currentTime >= startMs && currentTime <= endMs && (
+                     <div
                        className="absolute top-0 bottom-0 w-px bg-critical z-0"
-                       style={{ left: getX(Date.now()) }}
+                       style={{ left: getX(currentTime) }}
                      >
                        {/* Label moved to header if we wanted, but sticking it here is fine too */}
                      </div>

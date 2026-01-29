@@ -5,13 +5,28 @@ import { Project, Task } from '../../types';
 import { useI18n } from '../i18n';
 
 const PAGE_SIZE = 100;
-const PROJECT_CACHE_TTL_MS = 30000; // 30 seconds
+const PROJECT_CACHE_TTL_MS = 30000;
 
 const getProjectStorageKey = (workspaceId: string): string =>
   workspaceId ? `activeProjectId:${workspaceId}` : 'activeProjectId';
 
-// Simple in-memory cache for projects
-let projectCache: { data: Project[]; timestamp: number } | null = null;
+// In-memory cache for projects with workspace isolation
+const projectCacheByWorkspace = new Map<string, { data: Project[]; timestamp: number }>();
+
+const getProjectCache = (workspaceId: string): { data: Project[]; timestamp: number } | null =>
+  projectCacheByWorkspace.get(workspaceId) || null;
+
+const setProjectCache = (workspaceId: string, data: Project[]): void => {
+  projectCacheByWorkspace.set(workspaceId, { data, timestamp: Date.now() });
+};
+
+const invalidateProjectCache = (workspaceId?: string): void => {
+  if (workspaceId) {
+    projectCacheByWorkspace.delete(workspaceId);
+  } else {
+    projectCacheByWorkspace.clear();
+  }
+};
 
 export const useProjectData = (workspaceId: string) => {
   const { t } = useI18n();
@@ -19,6 +34,7 @@ export const useProjectData = (workspaceId: string) => {
   const [activeProjectId, setActiveProjectId] = useState<string>('');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isMountedRef = useRef(true);
@@ -61,11 +77,12 @@ export const useProjectData = (workspaceId: string) => {
 
       // Use cache if available and not force refreshing
       let projectList: Project[];
-      if (!forceRefresh && projectCache && (Date.now() - projectCache.timestamp) < PROJECT_CACHE_TTL_MS) {
-        projectList = projectCache.data;
+      const cached = getProjectCache(workspaceId);
+      if (!forceRefresh && cached && (Date.now() - cached.timestamp) < PROJECT_CACHE_TTL_MS) {
+        projectList = cached.data;
       } else {
         projectList = await apiService.listProjects();
-        projectCache = { data: projectList, timestamp: Date.now() };
+        setProjectCache(workspaceId, projectList);
       }
 
       if (!isMountedRef.current) return;
@@ -101,7 +118,7 @@ export const useProjectData = (workspaceId: string) => {
     const storageKey = getProjectStorageKey(workspaceId);
     storageSet(storageKey, id);
     try {
-      setIsLoading(true);
+      setIsLoadingTasks(true);
       const newTasks = await fetchAllTasks(id);
       if (!isMountedRef.current) return;
       setTasks(newTasks);
@@ -110,7 +127,7 @@ export const useProjectData = (workspaceId: string) => {
       setError(t('error.load_project_tasks'));
     } finally {
       if (isMountedRef.current) {
-        setIsLoading(false);
+        setIsLoadingTasks(false);
       }
     }
   }, [fetchAllTasks, t, workspaceId]);
@@ -139,10 +156,11 @@ export const useProjectData = (workspaceId: string) => {
     activeProject,
     activeTasks,
     isLoading,
+    isLoadingTasks,
     error,
     refreshData,
     handleSelectProject,
     fetchAllTasks,
-    invalidateCache: useCallback(() => { projectCache = null; }, [])
+    invalidateCache: useCallback(() => invalidateProjectCache(workspaceId), [workspaceId])
   };
 };

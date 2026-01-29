@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiService } from '../../services/apiService';
 import { Draft, DraftAction } from '../../types';
 import { useI18n } from '../i18n';
@@ -16,6 +16,10 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [pendingDraftId, setPendingDraftId] = useState<string | null>(null);
   const [draftWarnings, setDraftWarnings] = useState<string[]>([]);
+  const [isProcessingDraft, setIsProcessingDraft] = useState(false);
+
+  // Track draft operations to prevent race conditions
+  const draftOperationRef = useRef<Set<string>>(new Set());
 
   const pendingDraft = useMemo(
     () => drafts.find(draft => draft.id === pendingDraftId) || null,
@@ -91,7 +95,15 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
   }, [activeProjectId, refreshData, refreshAuditLogs, appendSystemMessage, onProjectModified, t]);
 
   const handleApplyDraft = useCallback(async (draftId: string) => {
+    // Prevent duplicate operations
+    if (draftOperationRef.current.has(draftId)) {
+      return;
+    }
+
     try {
+      draftOperationRef.current.add(draftId);
+      setIsProcessingDraft(true);
+
       const pendingDrafts = drafts.filter(draft => draft.status === 'pending');
       const targetIds = pendingDrafts.length > 0
         ? pendingDrafts.map(draft => draft.id)
@@ -122,6 +134,9 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
       await refreshAuditLogs(activeProjectId);
     } catch (error) {
        appendSystemMessage(error instanceof Error ? t('draft.apply_failed', { error: error.message }) : t('draft.apply_failed', { error: t('common.na') }));
+    } finally {
+      draftOperationRef.current.delete(draftId);
+      setIsProcessingDraft(false);
     }
   }, [drafts, refreshData, refreshDrafts, refreshAuditLogs, activeProjectId, appendSystemMessage, onProjectModified, t]);
 
@@ -143,6 +158,7 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     pendingDraftId,
     setPendingDraftId,
     draftWarnings,
+    isProcessingDraft,
     refreshDrafts,
     submitDraft,
     handleApplyDraft,

@@ -226,7 +226,7 @@ function App() {
 
   // 4. Drafts
   const {
-    drafts, pendingDraft, pendingDraftId, setPendingDraftId, draftWarnings,
+    drafts, pendingDraft, pendingDraftId, setPendingDraftId, draftWarnings, isProcessingDraft,
     refreshDrafts, submitDraft, handleApplyDraft, handleDiscardDraft
   } = useDrafts({
     activeProjectId,
@@ -858,6 +858,7 @@ function App() {
           isMobile={isMobile}
           project={activeProject ?? undefined}
           tasks={activeTasks}
+          isProcessingDraft={isProcessingDraft}
         />
       </div>
 

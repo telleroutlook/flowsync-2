@@ -2,13 +2,13 @@ import type { ApiResponse, AuditLog, Draft, DraftAction, Project, Task, User, Wo
 import { sleep, getRetryDelay } from '../src/utils/retry';
 import { storageGet } from '../src/utils/storage';
 import { buildAuthHeaders } from './aiService';
-import { ApiError, TimeoutError, NetworkError, getErrorMessage } from '../src/utils/error';
+import { ApiError, TimeoutError, NetworkError, getErrorMessage, isAppError } from '../src/utils/error';
 
 const MAX_FETCH_RETRIES = 2;
 const DEFAULT_TIMEOUT_MS = 30000;
+const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 
-const shouldRetryStatus = (status: number) =>
-  status === 408 || status === 429 || (status >= 500 && status <= 599);
+const shouldRetryStatus = (status: number) => RETRYABLE_STATUS_CODES.has(status);
 
 const isIdempotentMethod = (method?: string) => {
   const normalized = (method || 'GET').toUpperCase();
@@ -105,6 +105,7 @@ const buildHeaders = (headers?: HeadersInit) => {
 const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> => {
   let response: Response | null = null;
   let text = '';
+  const url = typeof input === 'string' ? input : input.url;
 
   try {
     response = await fetchWithRetry(input, { ...init, headers: buildHeaders(init?.headers) });
@@ -112,11 +113,12 @@ const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> 
   } catch (error) {
     // Enhance error messages for better UX
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      throw new NetworkError(getErrorMessage(error, 'Failed to connect to server'), {
-        url: typeof input === 'string' ? input : input.url
-      });
+      throw new NetworkError(getErrorMessage(error, 'Failed to connect to server'), { url });
     }
-    throw error;
+    if (isAppError(error)) {
+      throw error;
+    }
+    throw new NetworkError(getErrorMessage(error, 'Network request failed'), { url });
   }
 
   let payload: ApiResponse<T> | null = null;
@@ -125,7 +127,11 @@ const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> 
       payload = JSON.parse(text) as ApiResponse<T>;
     } catch {
       const snippet = text.slice(0, 160).replace(/\s+/g, ' ').trim();
-      throw new ApiError(`Invalid JSON response. ${snippet || 'Empty body.'}`, response?.status, 'INVALID_JSON');
+      throw new ApiError(
+        `Invalid JSON response from server. ${snippet ? `Response: ${snippet}` : 'Empty response body.'}`,
+        response?.status,
+        'INVALID_JSON'
+      );
     }
   }
 
@@ -134,7 +140,7 @@ const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> 
   }
 
   if (!response.ok || !payload.success || payload.data === undefined) {
-    const message = payload.error?.message || `Request failed (${response.status}).`;
+    const message = payload.error?.message || `Request failed with status ${response.status}`;
     throw new ApiError(message, response.status, payload.error?.code);
   }
 

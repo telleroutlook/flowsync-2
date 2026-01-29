@@ -212,6 +212,7 @@ interface ChatInterfaceProps {
   isMobile?: boolean;
   project?: Project;
   tasks?: Task[];
+  isProcessingDraft?: boolean;
 }
 
 export const ChatInterface = memo<ChatInterfaceProps>(({
@@ -238,6 +239,7 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   isMobile = false,
   project,
   tasks,
+  isProcessingDraft = false,
 }) => {
   const { t } = useI18n();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -269,6 +271,9 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
     },
     [onDiscardDraft]
   );
+
+  // Use external processing state if provided, otherwise use local state
+  const effectiveDraftProcessingState = isProcessingDraft ? 'applying' : draftProcessingState;
 
   // Smart scrolling logic
   const scrollToBottom = useCallback(
@@ -437,7 +442,7 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
           <DraftNotification
             pendingDraft={pendingDraft}
             draftWarnings={draftWarnings}
-            draftProcessingState={draftProcessingState}
+            draftProcessingState={effectiveDraftProcessingState}
             onApplyDraft={handleApplyDraft}
             onDiscardDraft={handleDiscardDraft}
             t={t}
