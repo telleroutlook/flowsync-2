@@ -81,7 +81,7 @@ npm run db:studio
 ## Data Export & Import
 
 ### Export
-- Formats: CSV, TSV, JSON, Markdown, PDF
+- Formats: CSV, TSV, JSON, Markdown
 - Scope: Active project or All projects
 
 ### Import

@@ -4,7 +4,7 @@ import './src/index.css';
 import App from './App';
 import { I18nProvider } from './src/i18n';
 
-const flowsyncExport = (format?: 'csv' | 'pdf' | 'json' | 'markdown') => {
+const flowsyncExport = (format?: 'csv' | 'json' | 'markdown') => {
   window.dispatchEvent(new CustomEvent('flowsync:export', { detail: { format } }));
 };
 

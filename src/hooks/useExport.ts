@@ -26,7 +26,7 @@ import {
 } from '../utils';
 import { useI18n } from '../i18n';
 
-export type ExportFormat = 'csv' | 'tsv' | 'json' | 'markdown' | 'pdf';
+export type ExportFormat = 'csv' | 'tsv' | 'json' | 'markdown';
 export type ImportStrategy = 'append' | 'merge';
 
 interface UseExportProps {
@@ -54,7 +54,7 @@ export const useExport = ({
   useEffect(() => {
     const storedFormat = storageGet('exportFormat');
     const storedImportStrategy = storageGet('importStrategy');
-    if (storedFormat === 'csv' || storedFormat === 'tsv' || storedFormat === 'json' || storedFormat === 'markdown' || storedFormat === 'pdf') {
+    if (storedFormat === 'csv' || storedFormat === 'tsv' || storedFormat === 'json' || storedFormat === 'markdown') {
       setLastExportFormat(storedFormat);
     }
     if (storedImportStrategy === 'append' || storedImportStrategy === 'merge') {
@@ -104,61 +104,6 @@ export const useExport = ({
         return;
       }
 
-      if (format === 'pdf') {
-          // Dynamically import jspdf
-        const [{ jsPDF }, autoTableModule] = await Promise.all([
-          import('jspdf'),
-          import('jspdf-autotable'),
-        ]);
-        const autoTable = autoTableModule.default;
-        const doc = new jsPDF({ orientation: 'landscape', unit: 'pt' });
-        const headers = [...DISPLAY_HEADERS].slice(0, 12);
-        const body = displayRows.map(row => ([
-          row.project,
-          row.id,
-          row.title,
-          row.status,
-          row.priority,
-          row.assignee,
-          row.wbs,
-          row.startDate,
-          row.dueDate,
-          String(row.completion),
-          row.isMilestone,
-          row.predecessors,
-        ]));
-        doc.setFontSize(12);
-        doc.text(t('export.pdf.title_project', { project: activeProject.name }), 40, 32);
-        doc.setFontSize(9);
-        doc.text(t('export.exported_at', { date: exportDate.toISOString() }), 40, 48);
-        autoTable(doc, {
-          head: [headers],
-          body,
-          startY: 64,
-          styles: { fontSize: 8, cellPadding: 3 },
-          headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255] },
-          alternateRowStyles: { fillColor: [248, 250, 252] },
-          columnStyles: {
-            0: { cellWidth: 90 },
-            1: { cellWidth: 60 },
-            2: { cellWidth: 150 },
-            3: { cellWidth: 70 },
-            4: { cellWidth: 70 },
-            5: { cellWidth: 80 },
-            6: { cellWidth: 50 },
-            7: { cellWidth: 60 },
-            8: { cellWidth: 60 },
-            9: { cellWidth: 70 },
-            10: { cellWidth: 70 },
-            11: { cellWidth: 100 },
-          },
-          margin: { left: 40, right: 40 },
-        });
-        const pdfBlob = doc.output('blob');
-        triggerDownload(pdfBlob, `${baseName}.pdf`);
-        recordExportPreference(format);
-        return;
-      }
 
       if (format === 'markdown') {
         const payload = {

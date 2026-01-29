@@ -279,7 +279,7 @@ const en = {
   'project.none': 'No Project',
 
   'export.format.csv_desc': 'Spreadsheet compatible',
-  'export.format.pdf_desc': 'Document view',
+
   'export.format.json_desc': 'Raw data',
   'export.format.markdown_desc': 'Documentation',
   'export.format.image': 'Image (PNG)',
@@ -287,8 +287,7 @@ const en = {
   'export.format.chat_txt_desc': 'AI conversation transcript',
   'export.download_fallback': 'If the download did not start automatically, click the link to save the export file.',
   'export.download_fallback_action': 'Download file',
-  'export.pdf.title_all': 'All Projects - Task Export',
-  'export.pdf.title_project': '{project} - Task Export',
+
   'export.exported_at': 'Exported: {date}',
   'export.markdown.title_all': '# All Projects Tasks',
   'export.markdown.title_project': '# {project} Tasks',
@@ -600,7 +599,7 @@ const zh: Record<keyof typeof en, string> = {
   'project.none': '暂无项目',
 
   'export.format.csv_desc': '适配表格',
-  'export.format.pdf_desc': '文档视图',
+
   'export.format.json_desc': '原始数据',
   'export.format.markdown_desc': '文档格式',
   'export.format.image': '图片 (PNG)',
@@ -608,8 +607,7 @@ const zh: Record<keyof typeof en, string> = {
   'export.format.chat_txt_desc': 'AI 对话记录',
   'export.download_fallback': '若未自动下载，请点击链接保存导出文件。',
   'export.download_fallback_action': '下载文件',
-  'export.pdf.title_all': '全部项目 - 任务导出',
-  'export.pdf.title_project': '{project} - 任务导出',
+
   'export.exported_at': '导出时间：{date}',
   'export.markdown.title_all': '# 全部项目任务',
   'export.markdown.title_project': '# {project} 任务',

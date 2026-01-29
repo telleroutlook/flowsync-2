@@ -311,7 +311,7 @@ function App() {
         void handleExportTasks(lastExportFormat);
       }
     };
-    window.flowsyncExport = (format?: 'csv' | 'pdf' | 'json' | 'markdown') => {
+    window.flowsyncExport = (format?: 'csv' | 'json' | 'markdown') => {
       void handleExportTasks(format ?? lastExportFormat);
     };
     window.addEventListener('keydown', handler);
@@ -327,7 +327,7 @@ function App() {
     const target = event.target as HTMLElement | null;
     const button = target?.closest<HTMLButtonElement>('[data-export-format]');
     if (!button) return;
-    const format = button.dataset.exportFormat as 'csv' | 'pdf' | 'json' | 'markdown' | 'image' | undefined;
+    const format = button.dataset.exportFormat as 'csv' | 'json' | 'markdown' | 'image' | undefined;
     if (!format) return;
     
     event.preventDefault();
@@ -742,7 +742,6 @@ function App() {
                      {([
                        { id: 'image', label: t('export.format.image') || 'Image (PNG)', desc: t('export.format.image_desc') || 'Export view as image', icon: ImageIcon },
                        { id: 'csv', label: 'CSV', desc: t('export.format.csv_desc'), icon: FileText },
-                       { id: 'pdf', label: 'PDF', desc: t('export.format.pdf_desc'), icon: FileText },
                        { id: 'json', label: 'JSON', desc: t('export.format.json_desc'), icon: FileText },
                        { id: 'markdown', label: 'Markdown', desc: t('export.format.markdown_desc'), icon: FileText },
                      ] as const).map(item => (

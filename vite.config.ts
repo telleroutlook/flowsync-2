@@ -26,9 +26,7 @@ export default defineConfig(() => {
           output: {
             manualChunks: (id) => {
               if (!id.includes('node_modules')) return undefined;
-              if (id.includes('jspdf-autotable')) return 'jspdf-autotable';
-              if (id.includes('jspdf')) return 'jspdf';
-              if (id.includes('html2canvas')) return 'html2canvas';
+                            if (id.includes('html2canvas')) return 'html2canvas';
               if (id.includes('react-markdown') || id.includes('remark-gfm') || id.includes('purify')) {
                 return 'markdown';
               }

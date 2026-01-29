@@ -25,8 +25,6 @@
     "framer-motion": "^12.29.0",
     "hono": "^4.6.9",
     "html2canvas": "^1.4.1",
-    "jspdf": "^4.0.0",
-    "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.563.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

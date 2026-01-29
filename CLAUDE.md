@@ -123,7 +123,7 @@ Error handling is centralized in `worker/app.ts` middleware.
 ## Import/Export System
 
 ### Export Formats
-CSV, TSV, JSON, Markdown, PDF - scope: active project or all projects
+CSV, TSV, JSON, Markdown - scope: active project or all projects
 
 ### Import Formats
 JSON, CSV, TSV - strategies: Append or Merge by ID
