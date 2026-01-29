@@ -51,7 +51,9 @@ export const exportChatToHtml = (
     `;
   }
 
-  const messagesHtml = messages.map(msg => {
+  const messagesHtml = messages
+    .filter(msg => msg.id !== 'welcome')
+    .map(msg => {
     const isUser = msg.role === 'user';
     const isSystem = msg.role === 'system';
     
