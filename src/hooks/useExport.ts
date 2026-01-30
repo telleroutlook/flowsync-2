@@ -294,6 +294,12 @@ export const useExport = ({
         fetchAllTasks
       );
 
+      // If no actions were generated, show info message and return
+      if (projectActions.length === 0 && taskActions.length === 0) {
+        showMessage(t('import.no_changes_needed') || 'No changes needed - all projects and tasks are already up to date.');
+        return;
+      }
+
       if (projectActions.length > 0) {
         await submitDraft(projectActions, { createdBy: 'user', autoApply: true, reason: 'Import projects', silent: true });
       }

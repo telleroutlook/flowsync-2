@@ -262,10 +262,14 @@ export async function processImportActions(
         const shouldUpdateName = project.name && project.name !== existingById.name;
         const shouldUpdateDescription = project.description !== undefined && project.description !== existingById.description;
         const shouldUpdateIcon = project.icon !== undefined && project.icon !== existingById.icon;
-        if (shouldUpdateName || shouldUpdateDescription || shouldUpdateIcon) {
+        const shouldUpdateCreatedAt = project.createdAt !== undefined && project.createdAt !== existingById.createdAt;
+        const shouldUpdateUpdatedAt = project.updatedAt !== undefined && project.updatedAt !== existingById.updatedAt;
+        if (shouldUpdateName || shouldUpdateDescription || shouldUpdateIcon || shouldUpdateCreatedAt || shouldUpdateUpdatedAt) {
           const after: Record<string, unknown> = { name: project.name };
           if (project.description !== undefined) after.description = project.description;
           if (project.icon !== undefined) after.icon = project.icon;
+          if (project.createdAt !== undefined) after.createdAt = project.createdAt;
+          if (project.updatedAt !== undefined) after.updatedAt = project.updatedAt;
           projectUpdateActions.push({
             id: generateId(),
             entityType: 'project',
@@ -351,6 +355,12 @@ export async function processImportActions(
 
     // Create task actions
     taskActions = resolvedTasks.map((task) => {
+      // Validate projectId
+      if (!task.projectId) {
+        console.error('[Import] Task missing projectId after resolution:', task);
+        throw new Error(`Task "${task.title}" (id: ${task.id}) is missing a valid projectId. Cannot import.`);
+      }
+
       const shouldUpdate = importStrategy === 'merge' && existingTaskIds.has(task.id);
       const afterPayload: Record<string, unknown> = {
         projectId: task.projectId,

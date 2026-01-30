@@ -84,7 +84,7 @@ export const createProject = async (
 export const updateProject = async (
   db: ReturnType<typeof import('../db').getDb>,
   id: string,
-  data: { name?: string; description?: string; icon?: string },
+  data: { name?: string; description?: string; icon?: string; createdAt?: number; updatedAt?: number },
   workspaceId: string
 ): Promise<ProjectRecord | null> => {
   const existingRows = await db
@@ -99,7 +99,8 @@ export const updateProject = async (
     name: data.name ?? existing.name,
     description: data.description ?? existing.description,
     icon: data.icon ?? existing.icon,
-    updatedAt: now(),
+    createdAt: data.createdAt ?? existing.createdAt,
+    updatedAt: data.updatedAt ?? now(),
   };
 
   await db.update(projects).set(next).where(eq(projects.id, id));

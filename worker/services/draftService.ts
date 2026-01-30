@@ -819,6 +819,8 @@ const rollbackOperation = async (
             name: entry.before.project.name,
             description: entry.before.project.description ?? undefined,
             icon: entry.before.project.icon ?? undefined,
+            createdAt: entry.before.project.createdAt,
+            updatedAt: entry.before.project.updatedAt,
           }, workspaceId);
         }
         break;
@@ -995,6 +997,8 @@ export const applyDraft = async (
             name: (action.after?.name as string) ?? undefined,
             description: (action.after?.description as string) ?? undefined,
             icon: (action.after?.icon as string) ?? undefined,
+            createdAt: (action.after?.createdAt as number) ?? undefined,
+            updatedAt: (action.after?.updatedAt as number) ?? undefined,
           }, workspaceId);
 
           if (updated) {
