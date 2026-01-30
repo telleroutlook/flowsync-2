@@ -9,6 +9,7 @@
  * defined declaratively rather than hardcoded throughout the codebase.
  */
 
+import type { DrizzleDB } from '../types';
 import type { JsonSchema } from './aiToolRegistry';
 
 // ============================================================================
@@ -217,7 +218,7 @@ export interface ConstraintContext {
   currentState: Map<string, Record<string, unknown>[]>;
 
   /** Database instance for queries */
-  db: any;
+  db: DrizzleDB;
 }
 
 /**

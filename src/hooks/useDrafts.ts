@@ -118,9 +118,9 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     if (draftOperationRef.current.has(draftId)) {
       return;
     }
+    draftOperationRef.current.add(draftId);
 
     try {
-      draftOperationRef.current.add(draftId);
       setIsProcessingDraft(true);
 
       const pendingDrafts = drafts.filter(draft => draft.status === 'pending');

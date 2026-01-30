@@ -970,20 +970,24 @@ export const applyDraft = async (
             timestamp: now(),
           }) - 1;
 
-          await recordAudit(db, {
-            workspaceId,
-            entityType: 'project',
-            entityId: created.id,
-            action: 'create',
-            before: null,
-            after: created,
-            actor,
-            reason: draft.reason ?? null,
-            projectId: created.id,
-            taskId: null,
-            draftId: draft.id,
-          });
-          transactionLog[logIndex]!.auditRecorded = true;
+          try {
+            await recordAudit(db, {
+              workspaceId,
+              entityType: 'project',
+              entityId: created.id,
+              action: 'create',
+              before: null,
+              after: created,
+              actor,
+              reason: draft.reason ?? null,
+              projectId: created.id,
+              taskId: null,
+              draftId: draft.id,
+            });
+            transactionLog[logIndex]!.auditRecorded = true;
+          } catch (auditError) {
+            console.error('Audit logging failed', { error: auditError });
+          }
 
         } else if (action.action === 'update' && action.entityId) {
           const before = await getProjectById(db, action.entityId, workspaceId);
@@ -1006,20 +1010,24 @@ export const applyDraft = async (
               timestamp: now(),
             }) - 1;
 
-            await recordAudit(db, {
-              workspaceId,
-              entityType: 'project',
-              entityId: updated.id,
-              action: 'update',
-              before: before ?? null,
-              after: updated,
-              actor,
-              reason: draft.reason ?? null,
-              projectId: updated.id,
-              taskId: null,
-              draftId: draft.id,
-            });
-            transactionLog[logIndex]!.auditRecorded = true;
+            try {
+              await recordAudit(db, {
+                workspaceId,
+                entityType: 'project',
+                entityId: updated.id,
+                action: 'update',
+                before: before ?? null,
+                after: updated,
+                actor,
+                reason: draft.reason ?? null,
+                projectId: updated.id,
+                taskId: null,
+                draftId: draft.id,
+              });
+              transactionLog[logIndex]!.auditRecorded = true;
+            } catch (auditError) {
+              console.error('Audit logging failed', { error: auditError });
+            }
           }
 
         } else if (action.action === 'delete' && action.entityId) {
@@ -1043,20 +1051,24 @@ export const applyDraft = async (
               timestamp: now(),
             }) - 1;
 
-            await recordAudit(db, {
-              workspaceId,
-              entityType: 'project',
-              entityId: deleted.project.id,
-              action: 'delete',
-              before: { project: before ?? deleted.project, tasks: tasksBefore },
-              after: null,
-              actor,
-              reason: draft.reason ?? null,
-              projectId: deleted.project.id,
-              taskId: null,
-              draftId: draft.id,
-            });
-            transactionLog[logIndex]!.auditRecorded = true;
+            try {
+              await recordAudit(db, {
+                workspaceId,
+                entityType: 'project',
+                entityId: deleted.project.id,
+                action: 'delete',
+                before: { project: before ?? deleted.project, tasks: tasksBefore },
+                after: null,
+                actor,
+                reason: draft.reason ?? null,
+                projectId: deleted.project.id,
+                taskId: null,
+                draftId: draft.id,
+              });
+              transactionLog[logIndex]!.auditRecorded = true;
+            } catch (auditError) {
+              console.error('Audit logging failed', { error: auditError });
+            }
           }
         }
         continue;
@@ -1109,20 +1121,24 @@ export const applyDraft = async (
             timestamp: now(),
           }) - 1;
 
-          await recordAudit(db, {
-            workspaceId,
-            entityType: 'task',
-            entityId: created.id,
-            action: 'create',
-            before: null,
-            after: created,
-            actor,
-            reason: draft.reason ?? null,
-            projectId: created.projectId,
-            taskId: created.id,
-            draftId: draft.id,
-          });
-          transactionLog[logIndex]!.auditRecorded = true;
+          try {
+            await recordAudit(db, {
+              workspaceId,
+              entityType: 'task',
+              entityId: created.id,
+              action: 'create',
+              before: null,
+              after: created,
+              actor,
+              reason: draft.reason ?? null,
+              projectId: created.projectId,
+              taskId: created.id,
+              draftId: draft.id,
+            });
+            transactionLog[logIndex]!.auditRecorded = true;
+          } catch (auditError) {
+            console.error('Audit logging failed', { error: auditError });
+          }
 
         } else if (action.action === 'update' && action.entityId) {
           const before = await getTaskById(db, action.entityId, workspaceId);
@@ -1171,20 +1187,24 @@ export const applyDraft = async (
               timestamp: now(),
             }) - 1;
 
-            await recordAudit(db, {
-              workspaceId,
-              entityType: 'task',
-              entityId: updated.id,
-              action: 'update',
-              before: before ?? null,
-              after: updated,
-              actor,
-              reason: draft.reason ?? null,
-              projectId: updated.projectId,
-              taskId: updated.id,
-              draftId: draft.id,
-            });
-            transactionLog[logIndex]!.auditRecorded = true;
+            try {
+              await recordAudit(db, {
+                workspaceId,
+                entityType: 'task',
+                entityId: updated.id,
+                action: 'update',
+                before: before ?? null,
+                after: updated,
+                actor,
+                reason: draft.reason ?? null,
+                projectId: updated.projectId,
+                taskId: updated.id,
+                draftId: draft.id,
+              });
+              transactionLog[logIndex]!.auditRecorded = true;
+            } catch (auditError) {
+              console.error('Audit logging failed', { error: auditError });
+            }
           }
 
         } else if (action.action === 'delete' && action.entityId) {
@@ -1213,20 +1233,24 @@ export const applyDraft = async (
               timestamp: now(),
             }) - 1;
 
-            await recordAudit(db, {
-              workspaceId,
-              entityType: 'task',
-              entityId: deleted.id,
-              action: 'delete',
-              before: before ?? null,
-              after: null,
-              actor,
-              reason: draft.reason ?? null,
-              projectId: deleted.projectId,
-              taskId: deleted.id,
-              draftId: draft.id,
-            });
-            transactionLog[logIndex]!.auditRecorded = true;
+            try {
+              await recordAudit(db, {
+                workspaceId,
+                entityType: 'task',
+                entityId: deleted.id,
+                action: 'delete',
+                before: before ?? null,
+                after: null,
+                actor,
+                reason: draft.reason ?? null,
+                projectId: deleted.projectId,
+                taskId: deleted.id,
+                draftId: draft.id,
+              });
+              transactionLog[logIndex]!.auditRecorded = true;
+            } catch (auditError) {
+              console.error('Audit logging failed', { error: auditError });
+            }
           }
         }
       }

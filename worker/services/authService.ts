@@ -207,6 +207,7 @@ export const revokeSession = async (
 export const parseAuthHeader = (value: string | undefined | null) => {
   if (!value) return null;
   const parts = value.split(' ');
+  if (parts.length !== 2) return null;
   const type = parts[0]?.toLowerCase();
   const token = parts[1];
   if (!token || type !== 'bearer') return null;

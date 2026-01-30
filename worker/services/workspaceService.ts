@@ -4,14 +4,6 @@ import { generateId, now } from './utils';
 import type { WorkspaceMembershipRecord, WorkspaceRecord } from './types';
 
 export const PUBLIC_WORKSPACE_ID = 'public';
-const PUBLIC_WORKSPACE_FALLBACK: WorkspaceRecord = {
-  id: PUBLIC_WORKSPACE_ID,
-  name: 'Public Workspace',
-  description: 'Default workspace for guests',
-  createdAt: 0,
-  createdBy: null,
-  isPublic: true,
-};
 const PUBLIC_CACHE_TTL_MS = 60_000;
 let cachedPublicWorkspace: WorkspaceRecord | null = null;
 let cachedPublicWorkspaceAt = 0;
@@ -95,10 +87,6 @@ export const getWorkspaceById = async (
       console.warn('workspace_cache_fallback', { id });
       return [cachedPublicWorkspace];
     }
-    if (id === PUBLIC_WORKSPACE_ID) {
-      console.warn('workspace_static_fallback', { id });
-      return [PUBLIC_WORKSPACE_FALLBACK];
-    }
     throw error;
   });
 
@@ -132,13 +120,12 @@ export const listPublicWorkspaces = async (
       .from(workspaces)
       .where(eq(workspaces.isPublic, true))
       .orderBy(workspaces.createdAt)
-  ).catch(() => {
+  ).catch((error) => {
     if (cachedPublicList) {
       console.warn('workspace_list_cache_fallback', {});
       return cachedPublicList;
     }
-    console.warn('workspace_list_static_fallback', {});
-    return [PUBLIC_WORKSPACE_FALLBACK];
+    throw error;
   });
 
   const list = rows.map((row) => ({

@@ -639,17 +639,18 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
       },
       category: 'write',
       handler: async ({ args }) => {
+        const id = typeof args.id === 'string' ? args.id : String(args.id);
         const actions = [{
           entityType: 'project' as const,
           action: 'update' as const,
-          entityId: args.id as string,
+          entityId: id,
           after: {
             name: args.name,
             description: args.description,
             icon: args.icon,
           },
         }];
-        const summary = actions.map(a => `${a.action} ${a.entityType}(${args.id})`).join(', ');
+        const summary = actions.map(a => `${a.action} ${a.entityType}(${id})`).join(', ');
         return JSON.stringify({
           success: true,
           message: `Draft created with ${actions.length} action(s): ${summary}. Awaiting user approval.`,
@@ -670,12 +671,13 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
       },
       category: 'write',
       handler: async ({ args }) => {
+        const id = typeof args.id === 'string' ? args.id : String(args.id);
         const actions = [{
           entityType: 'project' as const,
           action: 'delete' as const,
-          entityId: args.id as string,
+          entityId: id,
         }];
-        const summary = actions.map(a => `${a.action} ${a.entityType}(${args.id})`).join(', ');
+        const summary = actions.map(a => `${a.action} ${a.entityType}(${id})`).join(', ');
         return JSON.stringify({
           success: true,
           message: `Draft created with ${actions.length} action(s): ${summary}. Awaiting user approval.`,
@@ -742,10 +744,11 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
       },
       category: 'write',
       handler: async ({ args }) => {
+        const id = typeof args.id === 'string' ? args.id : String(args.id);
         const actions = [{
           entityType: 'task' as const,
           action: 'update' as const,
-          entityId: args.id as string,
+          entityId: id,
           after: {
             title: args.title,
             description: args.description,
@@ -760,7 +763,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
             predecessors: args.predecessors,
           },
         }];
-        const summary = actions.map(a => `${a.action} ${a.entityType}(${args.id})`).join(', ');
+        const summary = actions.map(a => `${a.action} ${a.entityType}(${id})`).join(', ');
         return JSON.stringify({
           success: true,
           message: `Draft created with ${actions.length} action(s): ${summary}. Awaiting user approval.`,
@@ -781,12 +784,13 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
       },
       category: 'write',
       handler: async ({ args }) => {
+        const id = typeof args.id === 'string' ? args.id : String(args.id);
         const actions = [{
           entityType: 'task' as const,
           action: 'delete' as const,
-          entityId: args.id as string,
+          entityId: id,
         }];
-        const summary = actions.map(a => `${a.action} ${a.entityType}(${args.id})`).join(', ');
+        const summary = actions.map(a => `${a.action} ${a.entityType}(${id})`).join(', ');
         return JSON.stringify({
           success: true,
           message: `Draft created with ${actions.length} action(s): ${summary}. Awaiting user approval.`,

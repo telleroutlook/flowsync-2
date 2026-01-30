@@ -23,10 +23,7 @@ const REQUEST_TIMEOUT_MS = 60000;
 const MAX_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 500;
 
-const generateRequestId = () =>
-  (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2, 11);
+const generateRequestId = () => crypto.randomUUID();
 
 const sleep = (ms: number) =>
   new Promise((resolve) => {
