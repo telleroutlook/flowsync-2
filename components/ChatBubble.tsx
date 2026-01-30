@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from 'react';
-import { ChatMessage, ChatAttachment } from '../types';
+import { ChatMessage, ChatAttachment, ActionableSuggestion } from '../types';
 import { Paperclip, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -45,7 +45,7 @@ interface ChatBubbleProps {
   message: ChatMessage;
   onRetry?: () => void;
   isProcessing?: boolean;
-  onSuggestionClick?: (suggestion: string) => void;
+  onSuggestionClick?: (suggestion: ActionableSuggestion) => void;
   hideSuggestions?: boolean;
 }
 
@@ -265,16 +265,25 @@ export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessin
 
       {suggestions.length > 0 && !isUser && !hideSuggestions && (
         <div className="flex flex-wrap gap-2 mt-2 ml-1 max-w-[92%]">
-          {suggestions.map((suggestion, index) => (
-            <button
-              key={index}
-              onClick={() => onSuggestionClick?.(suggestion)}
-              disabled={isProcessing}
-              className="text-xs bg-surface border border-primary/20 hover:border-primary/50 text-primary px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-            >
-              {suggestion}
-            </button>
-          ))}
+          {suggestions.map((suggestion, index) => {
+            const hasAction = suggestion.action && suggestion.action.length > 0;
+            return (
+              <button
+                key={index}
+                onClick={() => onSuggestionClick?.(suggestion)}
+                disabled={isProcessing}
+                className={cn(
+                  "text-xs px-3 py-1.5 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm",
+                  hasAction
+                    ? "bg-primary/10 border border-primary/30 hover:border-primary/60 text-primary font-medium"
+                    : "bg-surface border border-primary/20 hover:border-primary/50 text-primary"
+                )}
+              >
+                {hasAction && <span className="mr-1">⚡</span>}
+                {suggestion.text}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

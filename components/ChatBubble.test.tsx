@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { ChatBubble } from './ChatBubble';
-import { ChatMessage } from '../types';
+import { ChatMessage, ActionableSuggestion } from '../types';
 import { describe, it, expect, vi } from 'vitest';
 import { I18nProvider } from '../src/i18n';
 
@@ -88,12 +88,17 @@ describe('ChatBubble', () => {
   });
 
   it('hides suggestions when hideSuggestions is true', () => {
+    const suggestionsList: ActionableSuggestion[] = [
+      { text: 'Suggestion 1' },
+      { text: 'Suggestion 2' }
+    ];
+
     const messageWithSuggestions: ChatMessage = {
       id: 'm3',
       role: 'model',
       text: 'Here is a suggestion',
       timestamp: Date.now(),
-      suggestions: ['Suggestion 1', 'Suggestion 2']
+      suggestions: suggestionsList
     };
 
     const { rerender } = render(

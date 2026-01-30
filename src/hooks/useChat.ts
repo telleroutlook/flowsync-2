@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { aiService } from '../../services/aiService';
 import { apiService } from '../../services/apiService';
-import { ChatMessage, ChatAttachment, DraftAction, Project, Task, Draft } from '../../types';
+import { ChatMessage, ChatAttachment, DraftAction, Project, Task, Draft, ActionableSuggestion } from '../../types';
 import { generateId } from '../utils';
 import { processToolCalls, type ApiClient, type ProcessingStep } from './ai';
 import { useI18n } from '../i18n';
@@ -53,27 +53,52 @@ function isRetryableOpenAIError(text: string): boolean {
 }
 
 // Helper: Parse suggestions from AI response text
-function parseSuggestionsFromResponse(text: string): string[] {
-  const suggestions: string[] = [];
+function parseSuggestionsFromResponse(text: string): ActionableSuggestion[] {
+  const suggestions: ActionableSuggestion[] = [];
 
-  // Try to match ```suggestions["s1", "s2", "s3"]```
-  const jsonMatch = text.match(/```suggestions\s*\[([^\]]+)\]/);
-  if (jsonMatch) {
+  // Try to match structured suggestions: ```suggestions[{"text":..., "action":..., "params":...}]```
+  const structuredMatch = text.match(/```suggestions\s*(\[.*?\])\s*```/s);
+  if (structuredMatch && structuredMatch[1]) {
     try {
-      const parsed = JSON.parse(`[${jsonMatch[1]}]`);
+      const parsed = JSON.parse(structuredMatch[1]);
+      if (Array.isArray(parsed)) {
+        return parsed.slice(0, 3).map((s: unknown) => {
+          if (typeof s === 'string') {
+            return { text: s };
+          }
+          if (s && typeof s === 'object' && 'text' in s) {
+            return {
+              text: String((s as { text: string }).text),
+              action: (s as { action?: string })?.action,
+              params: (s as { params?: Record<string, unknown> })?.params,
+            };
+          }
+          return { text: String(s) };
+        });
+      }
+    } catch (e) {
+      console.warn('[AI] Failed to parse structured suggestions:', e);
+    }
+  }
+
+  // Fallback: try simple array format ```suggestions["s1", "s2", "s3"]```
+  const simpleMatch = text.match(/```suggestions\s*\[([^\]]+)\]/);
+  if (simpleMatch) {
+    try {
+      const parsed = JSON.parse(`[${simpleMatch[1]}]`);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.slice(0, 3).map(s => String(s).trim());
+        return parsed.slice(0, 3).map((s) => ({ text: String(s).trim() }));
       }
     } catch {
       // JSON parse failed, try alternative methods
     }
   }
 
-  // Fallback: try to extract quoted suggestions from text
+  // Final fallback: try to extract quoted suggestions from text
   const quotedMatches = text.matchAll(/"([^"]{5,50})"/g);
   for (const match of quotedMatches) {
     if (match[1]) {
-      suggestions.push(match[1].trim());
+      suggestions.push({ text: match[1].trim() });
       if (suggestions.length >= 3) break;
     }
   }
@@ -83,7 +108,7 @@ function parseSuggestionsFromResponse(text: string): string[] {
 
 // Helper: Clean suggestions from response text
 function cleanResponseText(text: string): string {
-  return text.replace(/```suggestions\s*\[[^\]]+\]\s*```/g, '').trim();
+  return text.replace(/```suggestions\s*(\[.*?\])\s*```/gs, '').trim();
 }
 
 // Create API client for tool handlers
@@ -283,7 +308,7 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
         );
 
         let finalText = response.text;
-        let suggestions: string[] = [];
+        let suggestions: ActionableSuggestion[] = [];
         let hasToolOutputs = false;
 
         // Parse suggestions from AI response text
@@ -308,8 +333,8 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
           );
 
           // Only use tool-generated suggestions if AI didn't provide any
-          if (suggestions.length === 0) {
-            suggestions = result.suggestions ?? [];
+          if (suggestions.length === 0 && result.suggestions) {
+            suggestions = result.suggestions.map((text: string) => ({ text }));
           }
 
           if (result.shouldRetry && attempt < MAX_RETRIES) {

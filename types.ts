@@ -42,6 +42,12 @@ export interface Task {
   predecessors?: string[]; // IDs or WBS codes of previous tasks
 }
 
+export interface ActionableSuggestion {
+  text: string;
+  action?: string;
+  params?: Record<string, unknown>;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'model' | 'system';
@@ -53,7 +59,7 @@ export interface ChatMessage {
     steps?: { label: string; elapsedMs?: number }[];
   };
   attachments?: ChatAttachment[];
-  suggestions?: string[];
+  suggestions?: ActionableSuggestion[];
 }
 
 export interface ChatAttachment {

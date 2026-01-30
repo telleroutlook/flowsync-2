@@ -279,12 +279,18 @@ CRITICAL WORKFLOW RULES - FOLLOW THESE IN ORDER
 - Use planChanges for batch operations (multiple changes at once)
 - Explain what will change - users need to understand the draft
 
-💡 STEP 4 - PROVIDE SMART SUGGESTIONS (Always Last):
-- At the END of your response, provide 3 actionable next-step suggestions
-- Format as JSON array: \`\`\`suggestions["suggestion 1", "suggestion 2", "suggestion 3"]\`\`\`
+💡 STEP 4 - PROVIDE ACTIONABLE SUGGESTIONS (Always Last):
+- At the END of your response, provide 3 actionable suggestions with structure
+- Format as JSON array of objects:
+  \`\`\`suggestions[
+    {"text": "显示文本", "action": "操作类型", "params": {参数}},
+    {"text": "另一个建议", "action": "另一操作", "params": {}},
+    {"text": "纯文本建议（无操作）"}
+  ]\`\`\`
+- Action types: "create_task", "update_task", "view_tasks", "set_status", "reschedule", "view_kanban", "view_gantt", "view_list"
 - Suggestions MUST be in the SAME LANGUAGE as the user's question
-- Make them context-aware based on project state and conversation
-- Keep them concise and actionable (max 10 words each)
+- Include specific params when possible (taskName, status, dates, etc.)
+- Omit "action" field for plain text suggestions (will just send text back)
 - This is MANDATORY for every response
 
 ═══════════════════════════════════════════════════════════════

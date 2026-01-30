@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useRef, useState } from 'react';
 import { ChatBubble } from './ChatBubble';
-import { ChatMessage, ChatAttachment, Draft, DraftAction, Project, Task } from '../types';
+import { ChatMessage, ChatAttachment, Draft, DraftAction, Project, Task, ActionableSuggestion } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, RotateCcw, X, Paperclip, Send, File, XCircle, AlertTriangle, Download } from 'lucide-react';
 import { useI18n } from '../src/i18n';
@@ -342,8 +342,49 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   );
 
   const handleSuggestionClick = useCallback(
-    (suggestion: string) => {
-      onSendMessage(undefined, suggestion);
+    (suggestion: ActionableSuggestion) => {
+      const { action, params, text } = suggestion;
+
+      // If no action specified, send the text directly
+      if (!action) {
+        onSendMessage(undefined, text);
+        return;
+      }
+
+      // Generate intelligent prompts based on action type
+      const promptMap: Record<string, () => string> = {
+        view_kanban: () => `切换到看板视图`,
+        view_gantt: () => `切换到甘特图视图`,
+        view_list: () => `切换到列表视图`,
+        create_task: () => `创建一个新任务`,
+        update_task: () => {
+          const taskName = params?.taskName || params?.title || '任务';
+          return `帮我更新任务"${taskName}"的信息`;
+        },
+        set_status: () => {
+          const taskName = params?.taskName || params?.title || '任务';
+          const status = params?.status || '进行中';
+          return `将任务"${taskName}"的状态设置为${status}`;
+        },
+        reschedule: () => {
+          const taskName = params?.taskName || params?.title || '任务';
+          const daysToAdd = params?.daysToAdd || 3;
+          return `将任务"${taskName}"的日期延后${daysToAdd}天`;
+        },
+        view_tasks: () => {
+          const filter = params?.filter || params?.status || '全部';
+          return `查看${filter}任务`;
+        },
+      };
+
+      // Generate prompt for action
+      const promptGenerator = promptMap[action];
+      if (promptGenerator) {
+        onSendMessage(undefined, promptGenerator());
+      } else {
+        // Unknown action, send the original text
+        onSendMessage(undefined, text);
+      }
     },
     [onSendMessage]
   );
