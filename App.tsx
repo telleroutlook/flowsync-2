@@ -3,7 +3,7 @@ import { ProjectSidebar } from './components/ProjectSidebar';
 import { WorkspacePanel } from './components/WorkspacePanel';
 import { Button } from './components/ui/Button';
 import { cn } from './src/utils/cn';
-import { Menu, Grid, List as ListIcon, Calendar, Upload, Download, History, MessageSquare, FileText, Check, Minus, Plus, RotateCcw } from 'lucide-react';
+import { Menu, Grid, List as ListIcon, Calendar, Upload, Download, History, MessageSquare, FileText, Check, Minus, Plus } from 'lucide-react';
 import { LoginModal } from './components/LoginModal';
 import WorkspaceModal from './components/WorkspaceModal';
 import { UserProfileModal } from './components/UserProfileModal';
@@ -509,7 +509,12 @@ function App() {
           </Button>
 
           <div className="flex flex-col justify-center min-w-0">
-            <h2 className="text-sm font-bold text-text-primary leading-tight truncate">{activeProject.name}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-text-primary leading-tight truncate">{activeProject.name}</h2>
+              <span className="shrink-0 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-primary/10 text-primary rounded-full border border-primary/20">
+                {t('app.view.' + viewMode.toLowerCase())}
+              </span>
+            </div>
             {activeProject.description && (
                <p className="text-[10px] font-medium text-text-secondary truncate">{activeProject.description}</p>
             )}
@@ -517,7 +522,7 @@ function App() {
 
           {/* View Switcher */}
           <Button
-            variant={viewMode === 'BOARD' ? 'outline' : 'ghost'}
+            variant={viewMode === 'BOARD' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => setViewMode('BOARD')}
             className="h-7 px-2 md:h-8 md:px-3 text-xs"
@@ -526,7 +531,7 @@ function App() {
             <span className="hidden md:inline">{t('app.view.board')}</span>
           </Button>
           <Button
-            variant={viewMode === 'LIST' ? 'outline' : 'ghost'}
+            variant={viewMode === 'LIST' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => setViewMode('LIST')}
             className="h-7 px-2 md:h-8 md:px-3 text-xs"
@@ -535,7 +540,7 @@ function App() {
             <span className="hidden md:inline">{t('app.view.list')}</span>
           </Button>
           <Button
-            variant={viewMode === 'GANTT' ? 'outline' : 'ghost'}
+            variant={viewMode === 'GANTT' ? 'secondary' : 'ghost'}
             size="sm"
             onClick={() => setViewMode('GANTT')}
             className="h-7 px-2 md:h-8 md:px-3 text-xs"
@@ -567,17 +572,6 @@ function App() {
               title={t('app.zoom.in')}
             >
               <Plus className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => updateZoom(viewMode, 1)}
-              disabled={currentZoom === 1}
-              className="h-8 px-2 text-[10px] uppercase tracking-wider ml-1"
-              title={t('app.zoom.reset')}
-            >
-              <RotateCcw className="w-3 h-3 mr-1" />
-              {t('app.zoom.reset')}
             </Button>
           </div>
 
