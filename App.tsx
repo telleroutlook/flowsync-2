@@ -446,9 +446,8 @@ function App() {
   }, [viewZoom]);
 
   return (
-    <div 
+    <div
       className="flex h-screen h-[100dvh] w-full bg-background overflow-hidden text-text-primary font-sans selection:bg-primary/20 selection:text-primary flex-col md:flex-row"
-      style={{ zoom: currentZoom } as React.CSSProperties}
     >
       
       {/* 1. Project Sidebar (Left) */}
@@ -493,11 +492,13 @@ function App() {
         "flex-1 flex flex-col bg-background relative overflow-hidden min-w-0",
         (isMobile && mobileTab !== 'workspace') ? "hidden" : "flex"
       )}>
-        {/* Header */}
-        <div className={cn(
-          "min-h-[3.5rem] py-2 border-b border-border-subtle flex items-center flex-wrap gap-2 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0",
-          isMobile ? "px-2" : "px-4"
-        )}>
+        {/* Zoom wrapper - applies zoom only to workspace content, not mobile nav bar */}
+        <div style={{ zoom: currentZoom } as React.CSSProperties} className="flex-1 flex flex-col min-w-0">
+          {/* Header */}
+          <div className={cn(
+            "min-h-[3.5rem] py-2 border-b border-border-subtle flex items-center flex-wrap gap-2 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0",
+            isMobile ? "px-2" : "px-4"
+          )}>
           <Button
             variant="ghost"
             size="icon"
@@ -814,7 +815,8 @@ function App() {
             </>
           )}
         </div>
-        
+
+        </div>
       </div>
 
       {/* 3. Chat Interface (Right) */}
