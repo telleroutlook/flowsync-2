@@ -5,6 +5,7 @@ import { useI18n } from '../src/i18n';
 import { getPriorityLabel, getStatusLabel } from '../src/i18n/labels';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
+import { Textarea } from './ui/Textarea';
 import { cn } from '../src/utils/cn';
 import { X, AlertTriangle, Check, Trash2, Calendar } from 'lucide-react';
 
@@ -124,6 +125,18 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
             className="font-semibold text-sm h-9 px-3"
             value={selectedTask.title}
             onChange={(event) => handleUpdate('title', event.target.value)}
+          />
+        </div>
+
+        {/* Description */}
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider" htmlFor="task-description">{t('task.description')}</label>
+          <Textarea
+            id="task-description"
+            className="text-xs min-h-[80px] resize-y"
+            placeholder={t('task.add_description')}
+            value={selectedTask.description || ''}
+            onChange={(event) => handleUpdate('description', event.target.value || undefined)}
           />
         </div>
 
