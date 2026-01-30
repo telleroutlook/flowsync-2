@@ -3,7 +3,7 @@ import { Modal } from './Modal';
 import { useI18n } from '../src/i18n';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
-import { User, Lock, AlertCircle, LogIn, UserPlus } from 'lucide-react';
+import { User, Lock, AlertCircle, LogIn, UserPlus, Check } from 'lucide-react';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -120,6 +120,27 @@ export const LoginModal = memo<LoginModalProps>(({
                 required
               />
             </div>
+            {mode === 'register' && (
+              <div className="mt-2 space-y-1.5">
+                <p className="text-xs text-text-secondary font-medium">Password requirements:</p>
+                <ul className="space-y-0.5">
+                  <PasswordRequirement text="At least 6 characters" met={password.length >= 6} />
+                  <PasswordRequirement
+                    text={`Character types (${getCharacterTypeCount(password)}/4):`}
+                    met={getCharacterTypeCount(password) >= 2}
+                    subtext="Need at least 2 of: uppercase, lowercase, number, special"
+                  />
+                </ul>
+                {getCharacterTypeCount(password) > 0 && (
+                  <div className="flex gap-2 mt-1.5 flex-wrap">
+                    <CharTypeBadge type="Upper" has={/[A-Z]/.test(password)} />
+                    <CharTypeBadge type="Lower" has={/[a-z]/.test(password)} />
+                    <CharTypeBadge type="Number" has={/[0-9]/.test(password)} />
+                    <CharTypeBadge type="Special" has={/[^A-Za-z0-9]/.test(password)} />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -156,3 +177,54 @@ export const LoginModal = memo<LoginModalProps>(({
   );
 });
 LoginModal.displayName = 'LoginModal';
+
+// Helper function to count character types in password
+function getCharacterTypeCount(password: string): number {
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+  return [hasUpper, hasLower, hasNumber, hasSpecial].filter(Boolean).length;
+}
+
+// Password requirement indicator component with check icon
+interface PasswordRequirementProps {
+  text: string;
+  met: boolean;
+  subtext?: string;
+}
+
+const PasswordRequirement = memo<PasswordRequirementProps>(({ text, met, subtext }) => (
+  <li className="flex items-start gap-1.5 text-xs">
+    <div className={`flex-shrink-0 w-3.5 h-3.5 rounded-full flex items-center justify-center mt-0.5 ${met ? 'bg-positive/20' : 'bg-text-secondary/10'}`}>
+      {met ? <Check className="w-2.5 h-2.5 text-positive" strokeWidth={3} /> : <div className="w-1.5 h-1.5 rounded-full bg-text-secondary/40" />}
+    </div>
+    <div className="flex-1">
+      <span className={met ? 'text-text-primary' : 'text-text-secondary'}>{text}</span>
+      {subtext && <p className="text-[10px] text-text-secondary/70 mt-0.5">{subtext}</p>}
+    </div>
+  </li>
+));
+PasswordRequirement.displayName = 'PasswordRequirement';
+
+// Character type badge component
+interface CharTypeBadgeProps {
+  type: 'Upper' | 'Lower' | 'Number' | 'Special';
+  has: boolean;
+}
+
+const CharTypeBadge = memo<CharTypeBadgeProps>(({ type, has }) => {
+  const labels = {
+    Upper: 'A-Z',
+    Lower: 'a-z',
+    Number: '0-9',
+    Special: '!@#',
+  };
+
+  return (
+    <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${has ? 'bg-primary/15 text-primary ring-1 ring-primary/30' : 'bg-text-secondary/10 text-text-secondary/50'}`}>
+      {labels[type]}
+    </span>
+  );
+});
+CharTypeBadge.displayName = 'CharTypeBadge';

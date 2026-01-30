@@ -8,18 +8,59 @@ import type { Variables } from '../types';
 
 export const authRoute = new Hono<{ Variables: Variables }>();
 
+/**
+ * Custom Zod validator wrapper that returns our standard error format.
+ *
+ * @hono/zod-validator returns a non-standard error format on validation failure.
+ * This wrapper intercepts ZodError and returns our standard API format:
+ * { success: false, error: { code: "VALIDATION_ERROR", message: "..." } }
+ */
+const validatedJson = <T extends z.ZodTypeAny>(schema: T) => {
+  return zValidator('json', schema, async (result, c) => {
+    if (!result.success) {
+      const firstError = result.error.issues[0];
+      const message = firstError?.message || 'Validation failed';
+      return c.json(
+        {
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message,
+          },
+        },
+        400
+      );
+    }
+  });
+};
+
+/**
+ * Custom password validation that checks length and character variety.
+ * Requires at least 6 characters and at least 2 of: uppercase, lowercase, number, special
+ */
+const passwordSchema = z.string()
+  .min(6, 'Password must be at least 6 characters long')
+  .max(128, 'Password must be at most 128 characters long')
+  .refine(
+    (pwd) => {
+      const hasUpper = /[A-Z]/.test(pwd);
+      const hasLower = /[a-z]/.test(pwd);
+      const hasNumber = /[0-9]/.test(pwd);
+      const hasSpecial = /[^A-Za-z0-9]/.test(pwd);
+      const typeCount = [hasUpper, hasLower, hasNumber, hasSpecial].filter(Boolean).length;
+      return typeCount >= 2;
+    },
+    {
+      message: 'Password must contain at least 2 of: uppercase letter, lowercase letter, number, or special character',
+    }
+  );
+
 const credentialsSchema = z.object({
   username: z.string().min(2),
-  password: z.string()
-    .min(12, 'Password must be at least 12 characters long')
-    .max(128, 'Password must be at most 128 characters long')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number')
-    .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
+  password: passwordSchema,
 });
 
-authRoute.post('/register', zValidator('json', credentialsSchema), async (c) => {
+authRoute.post('/register', validatedJson(credentialsSchema), async (c) => {
   // Rate limiting check
   const clientIp = getClientIp(c.req.raw);
   const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AUTH');
@@ -41,7 +82,7 @@ authRoute.post('/register', zValidator('json', credentialsSchema), async (c) => 
   return jsonOk(c, { user, token: session.token, expiresAt: session.expiresAt }, 201);
 });
 
-authRoute.post('/login', zValidator('json', credentialsSchema), async (c) => {
+authRoute.post('/login', validatedJson(credentialsSchema), async (c) => {
   // Rate limiting check
   const clientIp = getClientIp(c.req.raw);
   const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AUTH');
