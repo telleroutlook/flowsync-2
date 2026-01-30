@@ -586,9 +586,9 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
                          ) : (
                            /* Standard Bar */
                            <>
-                             <div 
+                             <div
                                className={cn(
-                                 "w-full h-full rounded shadow-sm opacity-90 hover:opacity-100 flex items-center px-2 cursor-pointer transition-all",
+                                 "w-full h-full rounded shadow-sm flex items-center px-2 cursor-pointer transition-all hover:brightness-110",
                                  colorClass,
                                  isSelected && "ring-2 ring-primary ring-offset-1"
                                )}
