@@ -453,7 +453,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
           return daysUntilDue >= 0 && daysUntilDue <= 7;
         });
 
-        if (upcomingDeadlines.length > 0 && !suggestions.includes(t('solutions.view_upcoming_deadlines'))) {
+        if (upcomingDeadlines.length > 0 && !suggestions.includes(t('suggestions.view_upcoming_deadlines'))) {
           suggestions.splice(1, 0, t('suggestions.view_upcoming_deadlines', { count: upcomingDeadlines.length }));
         }
       }

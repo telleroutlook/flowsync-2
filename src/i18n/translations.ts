@@ -182,7 +182,7 @@ const en = {
   'suggestions.view_kanban': 'View Kanban board',
   'suggestions.create_task': 'Create new task',
   'suggestions.analyze_timeline': 'Analyze project timeline',
-  'solutions.view_upcoming_deadlines': 'Review {count} upcoming deadlines',
+  'suggestions.view_upcoming_deadlines': 'Review {count} upcoming deadlines',
   'suggestions.list_projects': 'List all projects',
 
   'draft.warnings': 'Draft warnings: {warnings}',
@@ -524,7 +524,7 @@ const zh: Record<keyof typeof en, string> = {
   'suggestions.view_kanban': '查看看板',
   'suggestions.create_task': '创建新任务',
   'suggestions.analyze_timeline': '分析项目时间线',
-  'solutions.view_upcoming_deadlines': '查看 {count} 个即将到期任务',
+  'suggestions.view_upcoming_deadlines': '查看 {count} 个即将到期任务',
   'suggestions.list_projects': '列出所有项目',
 
   'draft.warnings': '草案警告：{warnings}',
