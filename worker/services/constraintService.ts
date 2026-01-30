@@ -32,11 +32,19 @@ export const resolveDependencyConflicts = (task: TaskRecord, allTasks: TaskRecor
   if (!task.predecessors.length) return { task, warnings: [], changed: false };
   const start = getTaskStart(task);
   const end = getTaskEnd(task);
+
+  // Build a Map for O(1) lookups by both id and wbs
+  const taskMap = new Map<string, TaskRecord>();
+  for (const t of allTasks) {
+    if (t.projectId === task.projectId) {
+      taskMap.set(t.id, t);
+      if (t.wbs) taskMap.set(t.wbs, t);
+    }
+  }
+
   let maxEnd = start;
   for (const ref of task.predecessors) {
-    const match = allTasks.find(
-      (candidate) => candidate.projectId === task.projectId && (candidate.id === ref || candidate.wbs === ref)
-    );
+    const match = taskMap.get(ref);
     if (match) {
       maxEnd = Math.max(maxEnd, getTaskEnd(match));
     }

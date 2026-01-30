@@ -33,7 +33,7 @@ const parseDraftRow = (row: {
   workspaceId: string;
   projectId: string | null;
   status: string;
-  actions: any[];
+  actions: unknown;
   createdAt: number;
   createdBy: string;
   reason: string | null;
@@ -112,6 +112,10 @@ interface ActionHandlerContext {
   projectState: ProjectRecord[];
   /** Current task state - handlers can modify this */
   taskState: TaskRecord[];
+  /** Project lookup map for O(1) access */
+  projectStateMap: Map<string, ProjectRecord>;
+  /** Task lookup map for O(1) access */
+  taskStateMap: Map<string, TaskRecord>;
   /** Collected warnings across all actions */
   warnings: string[];
   /** The workspace ID */
@@ -197,8 +201,25 @@ const handleProjectCreate: ActionHandler = (action, context) => {
  * @returns Action result with updated state and planned action
  */
 const handleProjectUpdate: ActionHandler = (action, context) => {
-  const { projectState, workspaceId, warnings } = context;
-  const existing = projectState.find((item) => item.id === action.entityId);
+  const { projectState, projectStateMap, workspaceId, warnings } = context;
+  const entityId = action.entityId;
+  if (!entityId) {
+    const warningMessage = 'Project update missing entityId.';
+    warnings.push(warningMessage);
+
+    return {
+      plannedAction: {
+        ...action,
+        id: action.id || generateId(),
+        before: null,
+        after: null,
+        warnings: [warningMessage],
+      },
+      continueProcessing: false,
+    };
+  }
+
+  const existing = projectStateMap.get(entityId);
 
   if (!existing) {
     const warningMessage = 'Project not found for update.';
@@ -217,6 +238,9 @@ const handleProjectUpdate: ActionHandler = (action, context) => {
   }
 
   const updated = normalizeProjectInput(action.after ?? {}, existing, workspaceId);
+
+  // Update both the array and the map
+  projectStateMap.set(updated.id, updated);
 
   return {
     projectState: projectState.map((item) => (item.id === existing.id ? updated : item)),
@@ -238,8 +262,25 @@ const handleProjectUpdate: ActionHandler = (action, context) => {
  * @returns Action result with updated state and planned action
  */
 const handleProjectDelete: ActionHandler = (action, context) => {
-  const { projectState, taskState, warnings } = context;
-  const existing = projectState.find((item) => item.id === action.entityId);
+  const { projectState, taskState, projectStateMap, taskStateMap, warnings } = context;
+  const entityId = action.entityId;
+  if (!entityId) {
+    const warningMessage = 'Project delete missing entityId.';
+    warnings.push(warningMessage);
+
+    return {
+      plannedAction: {
+        ...action,
+        id: action.id || generateId(),
+        before: null,
+        after: null,
+        warnings: [warningMessage],
+      },
+      continueProcessing: false,
+    };
+  }
+
+  const existing = projectStateMap.get(entityId);
 
   if (!existing) {
     const warningMessage = 'Project not found for delete.';
@@ -257,9 +298,16 @@ const handleProjectDelete: ActionHandler = (action, context) => {
     };
   }
 
+  // Remove from map
+  projectStateMap.delete(existing.id);
+
   return {
     projectState: projectState.filter((item) => item.id !== existing.id),
-    taskState: taskState.filter((task) => task.projectId !== existing.id),
+    taskState: taskState.filter((task) => {
+      if (task.projectId !== existing.id) return true;
+      taskStateMap.delete(task.id);
+      return false;
+    }),
     plannedAction: {
       ...action,
       id: action.id || generateId(),
@@ -314,8 +362,25 @@ const handleTaskCreate: ActionHandler = (action, context) => {
  * @returns Action result with updated state and planned action
  */
 const handleTaskUpdate: ActionHandler = (action, context) => {
-  const { taskState, warnings } = context;
-  const existing = taskState.find((item) => item.id === action.entityId);
+  const { taskState, taskStateMap, warnings } = context;
+  const entityId = action.entityId;
+  if (!entityId) {
+    const warningMessage = 'Task update missing entityId.';
+    warnings.push(warningMessage);
+
+    return {
+      plannedAction: {
+        ...action,
+        id: action.id || generateId(),
+        before: null,
+        after: null,
+        warnings: [warningMessage],
+      },
+      continueProcessing: false,
+    };
+  }
+
+  const existing = taskStateMap.get(entityId);
 
   if (!existing) {
     const warningMessage = 'Task not found.';
@@ -393,6 +458,9 @@ const handleTaskUpdate: ActionHandler = (action, context) => {
     warnings.push(...actionWarnings);
   }
 
+  // Update map with the constrained task
+  taskStateMap.set(constraintResult.task.id, constraintResult.task);
+
   return {
     taskState: taskState.map((item) => (item.id === existing.id ? constraintResult.task : item)),
     plannedAction: {
@@ -414,12 +482,11 @@ const handleTaskUpdate: ActionHandler = (action, context) => {
  * @returns Action result with updated state and planned action
  */
 const handleTaskDelete: ActionHandler = (action, context) => {
-  const { taskState } = context;
-  const existing = taskState.find((item) => item.id === action.entityId);
-
-  if (!existing) {
-    const warningMessage = 'Task not found.';
-    context.warnings.push(warningMessage);
+  const { taskState, taskStateMap, warnings } = context;
+  const entityId = action.entityId;
+  if (!entityId) {
+    const warningMessage = 'Task delete missing entityId.';
+    warnings.push(warningMessage);
 
     return {
       plannedAction: {
@@ -432,6 +499,27 @@ const handleTaskDelete: ActionHandler = (action, context) => {
       continueProcessing: false,
     };
   }
+
+  const existing = taskStateMap.get(entityId);
+
+  if (!existing) {
+    const warningMessage = 'Task not found.';
+    warnings.push(warningMessage);
+
+    return {
+      plannedAction: {
+        ...action,
+        id: action.id || generateId(),
+        before: null,
+        after: null,
+        warnings: [warningMessage],
+      },
+      continueProcessing: false,
+    };
+  }
+
+  // Remove from map
+  taskStateMap.delete(existing.id);
 
   return {
     taskState: taskState.filter((item) => item.id !== existing.id),
@@ -584,10 +672,16 @@ const planActions = async (
     taskState = taskRows.map((row) => toTaskRecord(row.tasks));
   }
 
-  // Initialize handler context
+  // Build Maps for O(1) lookups in handlers
+  const projectStateMap = new Map(projectState.map(p => [p.id, p]));
+  const taskStateMap = new Map(taskState.map(t => [t.id, t]));
+
+  // Initialize handler context with Maps for efficient lookups
   const context: ActionHandlerContext = {
     projectState,
     taskState,
+    projectStateMap,
+    taskStateMap,
     warnings,
     workspaceId,
     planned,
@@ -606,7 +700,7 @@ const planActions = async (
 
     const result = await handler(action, context);
 
-    // Update context with result
+    // Update context with result (handlers keep Maps in sync internally)
     if (result.projectState !== undefined) {
       context.projectState = result.projectState;
     }
@@ -617,7 +711,7 @@ const planActions = async (
     // Add the planned action
     context.planned.push(result.plannedAction);
 
-    // Stop processing this action if the handler indicates to continue
+    // Stop processing this action if the handler indicates to stop
     if (!result.continueProcessing) {
       continue;
     }

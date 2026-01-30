@@ -54,99 +54,74 @@ function isRetryableOpenAIError(text: string): boolean {
 
 // Helper: Parse suggestions from AI response text
 function parseSuggestionsFromResponse(text: string): ActionableSuggestion[] {
-  const suggestions: ActionableSuggestion[] = [];
+  // Helper to normalize a suggestion item to ActionableSuggestion format
+  const normalizeSuggestion = (s: unknown): ActionableSuggestion | null => {
+    if (typeof s === 'string') {
+      return s.length > 0 ? { text: s } : null;
+    }
+    if (s && typeof s === 'object' && 'text' in s) {
+      const text = String((s as { text: string }).text);
+      if (text.length === 0) return null;
+      return {
+        text,
+        action: (s as { action?: string })?.action,
+        params: (s as { params?: Record<string, unknown> })?.params,
+      };
+    }
+    return null;
+  };
 
-  // 1. Try to match structured suggestions with backticks: ```suggestions[{"text":..., "action":..., "params":...}]```
+  // Helper to parse and map JSON array, limiting to 4 suggestions
+  const parseAndMapSuggestions = (jsonStr: string, limit = 4): ActionableSuggestion[] | null => {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (!Array.isArray(parsed)) return null;
+      const mapped = parsed.map(normalizeSuggestion).filter((s): s is ActionableSuggestion => s !== null);
+      return mapped.length > 0 ? mapped.slice(0, limit) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Strategy 1: Structured block with backticks: ```suggestions[...]```
   const structuredMatch = text.match(/```(?:suggestions)?\s*(\[[\s\S]*?\])\s*```/i);
-  if (structuredMatch && structuredMatch[1]) {
-    try {
-      const parsed = JSON.parse(structuredMatch[1]);
-      if (Array.isArray(parsed)) {
-        return parsed.slice(0, 4).map((s: unknown) => {
-          if (typeof s === 'string') return { text: s };
-          if (s && typeof s === 'object' && 'text' in s) {
-            return {
-              text: String((s as { text: string }).text),
-              action: (s as { action?: string })?.action,
-              params: (s as { params?: Record<string, unknown> })?.params,
-            };
-          }
-          return { text: String(s) };
-        });
-      }
-    } catch (e) {
-      console.warn('[AI] Failed to parse structured suggestions (backticks):', e);
-    }
+  if (structuredMatch?.[1]) {
+    const result = parseAndMapSuggestions(structuredMatch[1]);
+    if (result) return result;
   }
 
-  // 2. Try to match "suggestions [ ... ]" without backticks
+  // Strategy 2: Keyword format without backticks: suggestions [...]
   const keywordMatch = text.match(/suggestions\s*[:\-\s]*(\[[\s\S]*?\])/i);
-  if (keywordMatch && keywordMatch[1]) {
-    try {
-      const parsed = JSON.parse(keywordMatch[1]);
-      if (Array.isArray(parsed)) {
-        return parsed.slice(0, 4).map((s: unknown) => {
-          if (typeof s === 'string') return { text: s };
-          if (s && typeof s === 'object' && 'text' in s) {
-            return {
-              text: String((s as { text: string }).text),
-              action: (s as { action?: string })?.action,
-              params: (s as { params?: Record<string, unknown> })?.params,
-            };
-          }
-          return { text: String(s) };
-        });
-      }
-    } catch (e) {
-      // If direct JSON parse fails, it might be due to unquoted keys or other issues, 
-      // but usually AI provides valid JSON.
-    }
+  if (keywordMatch?.[1]) {
+    const result = parseAndMapSuggestions(keywordMatch[1]);
+    if (result) return result;
   }
 
-  // 3. Last resort: try to parse a trailing JSON array of suggestions
+  // Strategy 3: Trailing JSON array (length check for safety)
   const trailingArrayMatch = text.match(/(\[[\s\S]*\])\s*$/);
-  if (trailingArrayMatch && trailingArrayMatch[1]) {
+  if (trailingArrayMatch?.[1]) {
     try {
       const parsed = JSON.parse(trailingArrayMatch[1]);
       if (Array.isArray(parsed) && parsed.length > 0 && parsed.length <= 6) {
-        const mapped = parsed.map((s: unknown) => {
-          if (typeof s === 'string') return { text: s };
-          if (s && typeof s === 'object' && 'text' in s) {
-            return {
-              text: String((s as { text: string }).text),
-              action: (s as { action?: string })?.action,
-              params: (s as { params?: Record<string, unknown> })?.params,
-            };
-          }
-          return null;
-        }).filter((s): s is ActionableSuggestion => !!s && s.text.length > 0);
-
-        if (mapped.length > 0) {
-          return mapped.slice(0, 4);
-        }
+        const result = parseAndMapSuggestions(trailingArrayMatch[1]);
+        if (result) return result;
       }
     } catch {
       // Ignore invalid JSON
     }
   }
 
-  // 4. Fallback: try simple array format ```suggestions["s1", "s2", "s3"]```
+  // Strategy 4: Simple string array format: ```suggestions["s1", "s2"]```
   const simpleMatch = text.match(/```(?:suggestions)?\s*\[([^\]]+)\]/i);
-  if (simpleMatch && simpleMatch[1]) {
+  if (simpleMatch?.[1]) {
     const content = simpleMatch[1];
-    try {
-      // Try to parse it as JSON by adding back the brackets
-      const parsed = JSON.parse(`[${content}]`);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.slice(0, 4).map((s) => ({ text: String(s).trim() }));
-      }
-    } catch {
-      // Fallback to splitting by comma if not valid JSON
-      return content.split(',').map(s => ({ text: s.replace(/"/g, '').trim() })).slice(0, 4);
-    }
+    const parsed = parseAndMapSuggestions(`[${content}]`);
+    if (parsed) return parsed;
+    // Fallback: comma-separated strings
+    return content.split(',').map(s => ({ text: s.replace(/"/g, '').trim() })).filter(s => s.text.length > 0).slice(0, 4);
   }
 
-  return suggestions.slice(0, 4);
+  return [];
 }
 
 // Helper: Clean suggestions from response text

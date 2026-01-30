@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context, Next } from 'hono';
 import type { Variables, Bindings, DrizzleDB } from './types';
 import { projectsRoute } from './routes/projects';
 import { tasksRoute } from './routes/tasks';
@@ -13,7 +14,7 @@ import { systemRoute } from './routes/system';
 export { Variables, Bindings };
 
 // Custom CORS middleware compatible with Cloudflare Workers
-const corsMiddleware = async (c: any, next: any) => {
+const corsMiddleware = async (c: Context<{ Bindings: Bindings; Variables: Variables }>, next: Next) => {
   // Allowed origins
   const allowedOrigins = [
     'http://localhost:5173',
