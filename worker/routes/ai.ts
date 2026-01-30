@@ -28,14 +28,23 @@ const generateRequestId = () => crypto.randomUUID();
 
 // Rate limiting middleware for AI endpoints
 const checkAIRateLimit = async (c: Context<{ Bindings: Bindings; Variables: Variables }>) => {
-  const clientIp = getClientIp(c.req.raw);
-  const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AI');
-  if (!rateLimitResult.allowed) {
-    throw new ApiError(
-      'RATE_LIMIT_EXCEEDED',
-      `Too many AI requests. Please try again after ${rateLimitResult.retryAfter} seconds.`,
-      429
-    );
+  try {
+    const clientIp = getClientIp(c.req.raw);
+    const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AI');
+    if (!rateLimitResult.allowed) {
+      throw new ApiError(
+        'RATE_LIMIT_EXCEEDED',
+        `Too many AI requests. Please try again after ${rateLimitResult.retryAfter} seconds.`,
+        429
+      );
+    }
+  } catch (error) {
+    // If it's already an ApiError (rate limit exceeded), rethrow it
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    // Log the error but allow the request to proceed (fail-open for reliability)
+    console.error('[AI] Rate limit check failed, allowing request', { error });
   }
 };
 
@@ -809,8 +818,6 @@ aiRoute.post('/api/ai/stream', zValidator('json', requestSchema), async (c) => {
       } catch (error) {
         if (error instanceof ApiError) {
           send('error', { code: error.code, message: error.message, status: error.status });
-        } else {
-          send('error', { code: 'RATE_LIMIT_ERROR', message: 'Rate limit check failed.', status: 500 });
         }
         controller.close();
         return;
