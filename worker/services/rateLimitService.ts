@@ -1,4 +1,4 @@
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and, gt, lt } from 'drizzle-orm';
 import { rateLimits } from '../db/schema';
 import type { DrizzleDB } from '../types';
 import { now as getCurrentTime } from './utils';
@@ -13,6 +13,7 @@ import { now as getCurrentTime } from './utils';
 export const RATE_LIMITS = {
   AUTH: { maxAttempts: 5, windowMs: 15 * 60 * 1000 }, // 15 minutes
   GENERAL: { maxAttempts: 100, windowMs: 60 * 1000 }, // 1 minute
+  AI: { maxAttempts: 20, windowMs: 60 * 1000 }, // 1 minute - cost protection
 } as const;
 
 export type RateLimitType = keyof typeof RATE_LIMITS;
@@ -34,7 +35,20 @@ export async function checkRateLimit(
   const currentTime = getCurrentTime();
   const windowStart = currentTime - config.windowMs;
 
-  // Clean up old entries and count recent attempts
+  // Clean up old entries before counting (prevent unbounded growth)
+  // Check if delete method exists (may not in test environments)
+  if (typeof db.delete === 'function') {
+    try {
+      await db
+        .delete(rateLimits)
+        .where(and(eq(rateLimits.identifier, identifier), eq(rateLimits.type, type), lt(rateLimits.timestamp, windowStart)));
+    } catch (error) {
+      // Log but don't fail on cleanup errors
+      console.error('[rateLimit] cleanup failed', { error, identifier, type });
+    }
+  }
+
+  // Count recent attempts
   const recentAttempts = await db
     .select()
     .from(rateLimits)

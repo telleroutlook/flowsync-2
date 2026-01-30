@@ -20,7 +20,15 @@ vi.mock('./middleware', () => ({
 
 import { recordLog } from '../services/logService';
 
-const mockDb = {};
+// Mock database with rate limit methods
+const mockDb = {
+  select: vi.fn(() => mockDb),
+  from: vi.fn(() => mockDb),
+  where: vi.fn(() => []),
+  insert: vi.fn(() => mockDb),
+  values: vi.fn(() => Promise.resolve()),
+  delete: vi.fn(() => mockDb),
+};
 
 const buildApp = () => {
   const app = new Hono<{ Variables: Variables }>();

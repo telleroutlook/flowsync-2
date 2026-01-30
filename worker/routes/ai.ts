@@ -6,6 +6,7 @@ import { workspaceMiddleware } from './middleware';
 import { recordLog } from '../services/logService';
 import { getAuthorizationHeader } from '../utils/bigmodelAuth';
 import { createToolRegistry } from '../services/aiToolRegistry';
+import { checkRateLimit, getClientIp } from '../services/rateLimitService';
 import type { Bindings, Variables } from '../types';
 import type { Context } from 'hono';
 import { MAX_HISTORY_PART_CHARS } from '../../shared/aiLimits';
@@ -24,6 +25,19 @@ const MAX_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 500;
 
 const generateRequestId = () => crypto.randomUUID();
+
+// Rate limiting middleware for AI endpoints
+const checkAIRateLimit = async (c: Context<{ Bindings: Bindings; Variables: Variables }>) => {
+  const clientIp = getClientIp(c.req.raw);
+  const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AI');
+  if (!rateLimitResult.allowed) {
+    throw new ApiError(
+      'RATE_LIMIT_EXCEEDED',
+      `Too many AI requests. Please try again after ${rateLimitResult.retryAfter} seconds.`,
+      429
+    );
+  }
+};
 
 const sleep = (ms: number) =>
   new Promise((resolve) => {
@@ -725,6 +739,9 @@ aiRoute.post('/api/ai', zValidator('json', requestSchema), async (c) => {
   const input = c.req.valid('json');
 
   try {
+    // Check rate limit before processing
+    await checkAIRateLimit(c);
+
     const result = await runAIRequest(c, input, requestId);
     return jsonOk(c, result);
   } catch (error) {
@@ -756,7 +773,7 @@ aiRoute.post('/api/ai/stream', zValidator('json', requestSchema), async (c) => {
   let sending = false;
 
   const stream = new ReadableStream({
-    start(controller) {
+    async start(controller) {
       const flushQueue = () => {
         if (sending) return;
         sending = true;
@@ -785,6 +802,19 @@ aiRoute.post('/api/ai/stream', zValidator('json', requestSchema), async (c) => {
         sendQueue.push({ event, data });
         flushQueue();
       };
+
+      // Check rate limit before processing
+      try {
+        await checkAIRateLimit(c);
+      } catch (error) {
+        if (error instanceof ApiError) {
+          send('error', { code: error.code, message: error.message, status: error.status });
+        } else {
+          send('error', { code: 'RATE_LIMIT_ERROR', message: 'Rate limit check failed.', status: 500 });
+        }
+        controller.close();
+        return;
+      }
 
       // Wrap the emit callback to prevent errors from propagating
       const safeEmit: ProgressEmitter = (event, data) => {
