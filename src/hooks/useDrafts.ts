@@ -126,8 +126,13 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
   }, [activeProjectId, refreshData, refreshAuditLogs, appendSystemMessage, onProjectModified, t]);
 
   const handleApplyDraft = useCallback(async (draftId: string) => {
+    console.log('[handleApplyDraft] Called with draftId:', draftId);
+    console.log('[handleApplyDraft] pendingDraft:', pendingDraft);
+    console.log('[handleApplyDraft] All drafts:', drafts.map(d => ({ id: d.id, status: d.status })));
+
     // Prevent duplicate operations
     if (draftOperationRef.current.has(draftId)) {
+      console.log('[handleApplyDraft] Skipping - already processing');
       return;
     }
     draftOperationRef.current.add(draftId);
@@ -135,16 +140,26 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     try {
       setIsProcessingDraft(true);
 
-      const pendingDrafts = drafts.filter(draft => draft.status === 'pending');
-      const targetIds = pendingDrafts.length > 0
-        ? pendingDrafts.map(draft => draft.id)
-        : [draftId];
-      const uniqueIds = Array.from(new Set(targetIds));
+      // FIX: Only apply the specific draft that was clicked, not all pending drafts
+      // This is the correct behavior - apply only what the user approved
+      const targetIds = [draftId];
       let projectModified = false;
 
-      for (const id of uniqueIds) {
+      for (const id of targetIds) {
+        console.log('[handleApplyDraft] Applying draft', {
+          draftId: id,
+          workspaceId: drafts.find(d => d.id === id)?.workspaceId,
+        });
+
         const draft = drafts.find(d => d.id === id);
         const result = await apiService.applyDraft(id, 'user', draft?.workspaceId);
+
+        console.log('[handleApplyDraft] Draft applied successfully', {
+          draftId: id,
+          resultStatus: result.draft.status,
+          resultsCount: result.results?.length,
+        });
+
         setDrafts(prev => {
           const exists = prev.some(draft => draft.id === result.draft.id);
           if (!exists) return [...prev, result.draft];
@@ -164,6 +179,10 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
       await refreshDrafts();
       await refreshAuditLogs(activeProjectId);
     } catch (error) {
+      console.error('[handleApplyDraft] Draft apply failed', {
+        error: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+      });
       appendSystemMessage(t('draft.apply_failed', { error: getErrorMessage(error, t('common.na')) }));
     } finally {
       draftOperationRef.current.delete(draftId);

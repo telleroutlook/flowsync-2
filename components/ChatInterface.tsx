@@ -104,6 +104,13 @@ const DraftNotification = memo<DraftNotificationProps>(({
     ? draftWarnings.slice(0, MAX_WARNINGS_SHOWN)
     : draftWarnings;
 
+  // Debug logging
+  console.log('[DraftNotification] Rendering', {
+    pendingDraftId: pendingDraft.id,
+    status: pendingDraft.status,
+    actionCount: pendingDraft.actions.length,
+  });
+
   return (
   <motion.div
     initial={{ height: 0, opacity: 0 }}
@@ -155,7 +162,10 @@ const DraftNotification = memo<DraftNotificationProps>(({
       <Button
         variant="default"
         size="sm"
-        onClick={() => onApplyDraft(pendingDraft.id)}
+        onClick={() => {
+          console.log('[Accept Button] Clicked, calling onApplyDraft with draftId:', pendingDraft.id);
+          onApplyDraft(pendingDraft.id);
+        }}
         isLoading={draftProcessingState === 'applying'}
         disabled={draftProcessingState !== null}
         className="flex-1 h-8 bg-success hover:bg-success/90 text-success-foreground"

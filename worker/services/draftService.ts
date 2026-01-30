@@ -959,45 +959,65 @@ export const applyDraft = async (
     for (const action of draft.actions) {
       if (action.entityType === 'project') {
         if (action.action === 'create' && action.after) {
-          const beforeSnapshot = await getProjectById(db, (action.after.id as string) ?? '', workspaceId);
-          const created = await createProject(db, {
-            id: (action.after.id as string) ?? undefined,
-            name: (action.after.name as string) ?? 'Untitled Project',
-            description: (action.after.description as string) ?? undefined,
-            icon: (action.after.icon as string) ?? undefined,
-            createdAt: (action.after.createdAt as number) ?? undefined,
-            updatedAt: (action.after.updatedAt as number) ?? undefined,
+          console.log('[Draft Apply] Processing project.create', {
+            projectId: action.after.id,
+            projectName: action.after.name,
             workspaceId,
           });
-          results.push({ ...action, entityId: created.id, after: created });
-
-          // Log operation for potential rollback
-          const logIndex = transactionLog.push({
-            sequence: sequence++,
-            actionType: 'project.create',
-            entityId: created.id,
-            before: { project: beforeSnapshot ?? undefined },
-            auditRecorded: false,
-            timestamp: now(),
-          }) - 1;
 
           try {
-            await recordAudit(db, {
+            const beforeSnapshot = await getProjectById(db, (action.after.id as string) ?? '', workspaceId);
+            const created = await createProject(db, {
+              id: (action.after.id as string) ?? undefined,
+              name: (action.after.name as string) ?? 'Untitled Project',
+              description: (action.after.description as string) ?? undefined,
+              icon: (action.after.icon as string) ?? undefined,
+              createdAt: (action.after.createdAt as number) ?? undefined,
+              updatedAt: (action.after.updatedAt as number) ?? undefined,
               workspaceId,
-              entityType: 'project',
-              entityId: created.id,
-              action: 'create',
-              before: null,
-              after: created,
-              actor,
-              reason: draft.reason ?? null,
-              projectId: created.id,
-              taskId: null,
-              draftId: draft.id,
             });
-            transactionLog[logIndex]!.auditRecorded = true;
-          } catch (auditError) {
-            console.error('Audit logging failed', { error: auditError });
+
+            console.log('[Draft Apply] Project created successfully', {
+              projectId: created.id,
+              projectName: created.name,
+            });
+
+            results.push({ ...action, entityId: created.id, after: created });
+
+            // Log operation for potential rollback
+            const logIndex = transactionLog.push({
+              sequence: sequence++,
+              actionType: 'project.create',
+              entityId: created.id,
+              before: { project: beforeSnapshot ?? undefined },
+              auditRecorded: false,
+              timestamp: now(),
+            }) - 1;
+
+            try {
+              await recordAudit(db, {
+                workspaceId,
+                entityType: 'project',
+                entityId: created.id,
+                action: 'create',
+                before: null,
+                after: created,
+                actor,
+                reason: draft.reason ?? null,
+                projectId: created.id,
+                taskId: null,
+                draftId: draft.id,
+              });
+              transactionLog[logIndex]!.auditRecorded = true;
+            } catch (auditError) {
+              console.error('Audit logging failed', { error: auditError });
+            }
+          } catch (createError) {
+            console.error('[Draft Apply] Project creation failed', {
+              error: createError instanceof Error ? createError.message : String(createError),
+              action: action.after,
+            });
+            throw createError;
           }
 
         } else if (action.action === 'update' && action.entityId) {
