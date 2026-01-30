@@ -73,6 +73,9 @@ const en = {
   'profile.open': 'Profile',
   'profile.title': 'User Profile',
   'profile.guest_hint': 'Guest preferences are saved on this device.',
+  'profile.thinking.label': 'Enable Thinking',
+  'profile.thinking.description': 'Allow AI to show thinking process',
+  'profile.thinking.warning': 'Thinking takes longer. Not recommended for normal tasks.',
 
   'auth.login': 'Login',
   'auth.login_welcome': 'Welcome back',
@@ -417,6 +420,9 @@ const zh: Record<keyof typeof en, string> = {
   'profile.open': '用户资料',
   'profile.title': '用户资料',
   'profile.guest_hint': '访客设置将保存在当前设备。',
+  'profile.thinking.label': '启用思考过程',
+  'profile.thinking.description': '允许 AI 显示思考过程',
+  'profile.thinking.warning': '思考过程耗时较长，正常任务不建议启用。',
 
   'auth.login': '登录',
   'auth.login_welcome': '欢迎回来',

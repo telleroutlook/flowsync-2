@@ -87,9 +87,15 @@ export const UserProfileModal = memo<UserProfileModalProps>(({ isOpen, onClose, 
           <div className="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-surface">
             <div className="space-y-0.5">
               <label htmlFor="allow-thinking" className="block text-sm font-medium text-text-primary">
-                Enable Thinking
+                {t('profile.thinking.label')}
               </label>
-              <p className="text-xs text-text-secondary">Allow AI to show thinking process</p>
+              <p className="text-xs text-text-secondary">{t('profile.thinking.description')}</p>
+              {allowThinking && (
+                <p className="text-xs text-warning mt-1 flex items-center gap-1">
+                  <span>⚠️</span>
+                  <span>{t('profile.thinking.warning')}</span>
+                </p>
+              )}
             </div>
             <label className={cn("relative inline-flex items-center", isUpdating ? "cursor-not-allowed opacity-70" : "cursor-pointer")} htmlFor="allow-thinking">
               <input
