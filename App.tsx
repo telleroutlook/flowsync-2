@@ -59,7 +59,9 @@ function App() {
   }, []);
 
   // UI State
-  const [viewMode, setViewMode] = useState<ViewMode>('LIST');
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    (storageGet('viewMode') as ViewMode) || 'LIST'
+  );
   const [viewZoom, setViewZoom] = useState<ZoomState>(() =>
     storageGetJSON('viewZoom', DEFAULT_ZOOM_STATE)
   );
@@ -429,6 +431,10 @@ function App() {
     },
     [updateZoom, viewMode, zoomIndex, zoomLevels]
   );
+
+  useEffect(() => {
+    storageSet('viewMode', viewMode);
+  }, [viewMode]);
 
   useEffect(() => {
     storageSetJSON('viewZoom', viewZoom);
