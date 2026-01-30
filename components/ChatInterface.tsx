@@ -343,59 +343,9 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
 
   const handleSuggestionClick = useCallback(
     (suggestion: ActionableSuggestion) => {
-      const { action, params, text } = suggestion;
-
-      // If no action specified, send the text directly
-      if (!action) {
-        onSendMessage(undefined, text);
-        return;
-      }
-
-      // Generate intelligent prompts based on action type
-      const promptMap: Record<string, () => string> = {
-        view_kanban: () => `切换到看板视图`,
-        view_gantt: () => `切换到甘特图视图`,
-        view_list: () => `切换到列表视图`,
-        create_task: () => {
-          const name = params?.taskName || params?.title;
-          if (name) return `创建一个名为 "${name}" 的新任务`;
-          return `创建一个新任务`;
-        },
-        update_task: () => {
-          const taskName = params?.taskName || params?.title || params?.taskId || '任务';
-          const updates = Object.entries(params || {})
-            .filter(([k]) => !['taskName', 'title', 'taskId'].includes(k))
-            .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
-            .join(', ');
-          return `更新任务 "${taskName}"${updates ? ` (${updates})` : ''}`;
-        },
-        set_status: () => {
-          const taskName = params?.taskName || params?.title || params?.taskId || '任务';
-          const status = params?.status || '进行中';
-          return `将任务 "${taskName}" 的状态设置为 ${status}`;
-        },
-        reschedule: () => {
-          const taskName = params?.taskName || params?.title || params?.taskId || '任务';
-          if (params?.newDueDate || params?.dueDate) {
-            return `将任务 "${taskName}" 的截止日期调整为 ${params.newDueDate || params.dueDate}`;
-          }
-          const daysToAdd = params?.daysToAdd || 3;
-          return `将任务 "${taskName}" 的日期延后 ${daysToAdd} 天`;
-        },
-        view_tasks: () => {
-          const filter = params?.filter || params?.status || '全部';
-          return `查看 ${filter} 任务`;
-        },
-      };
-
-      // Generate prompt for action
-      const promptGenerator = promptMap[action];
-      if (promptGenerator) {
-        onSendMessage(undefined, promptGenerator());
-      } else {
-        // Unknown action, send the original text
-        onSendMessage(undefined, text);
-      }
+      // Always send the suggestion.text directly to ensure consistency
+      // between what the user sees and what gets executed
+      onSendMessage(undefined, suggestion.text);
     },
     [onSendMessage]
   );

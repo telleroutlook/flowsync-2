@@ -280,15 +280,16 @@ CRITICAL WORKFLOW RULES - FOLLOW THESE IN ORDER
 - At the VERY END of your response, add a code block with 3 suggestions
 - CRITICAL: Use EXACT format below (no variations):
   \`\`\`suggestions
-[
-  {"text": "显示文本", "action": "操作类型", "params": {参数}},
-  {"text": "另一个建议", "action": "另一操作", "params": {}}
-]
+["显示文本1", "显示文本2", "显示文本3"]
 \`\`\`
-- Action types: "create_task", "update_task", "view_tasks", "set_status", "reschedule", "view_kanban", "view_gantt", "view_list"
+- Suggestions MUST be plain text that represents meaningful follow-up actions
+- Focus on INSIGHTFUL suggestions that:
+  * Reveal patterns or trends in the project data
+  * Propose optimizations or improvements
+  * Suggest analysis or reviews
+  * Offer concrete next steps for project management
+- AVOID trivial UI operations like "切换视图" (users can click tabs themselves)
 - Suggestions MUST be in the SAME LANGUAGE as the user's question
-- Include specific params when possible (taskName, taskId, status, dates, etc.)
-- Omit "action" field for plain text suggestions (will just send text back)
 - The code block markers (\`\`\`) are MANDATORY - don't skip them
 - This MUST be at the END - nothing after it
 
