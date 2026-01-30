@@ -100,3 +100,10 @@ export const observabilityLogs = sqliteTable('observability_logs', {
   payload: text('payload', { mode: 'json' }).notNull().$type<Record<string, unknown>>(),
   createdAt: integer('created_at', { mode: 'number' }).notNull(),
 });
+
+export const rateLimits = sqliteTable('rate_limits', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull(),
+  type: text('type').notNull(),
+  timestamp: integer('timestamp', { mode: 'number' }).notNull(),
+});

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { jsonError, jsonOk } from './helpers';
 import { createSession, createUser, getUserByUsername, parseAuthHeader, revokeSession, verifyPassword } from '../services/authService';
+import { checkRateLimit, getClientIp } from '../services/rateLimitService';
 import type { Variables } from '../types';
 
 export const authRoute = new Hono<{ Variables: Variables }>();
@@ -11,6 +12,7 @@ const credentialsSchema = z.object({
   username: z.string().min(2),
   password: z.string()
     .min(12, 'Password must be at least 12 characters long')
+    .max(128, 'Password must be at most 128 characters long')
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number')
@@ -18,6 +20,19 @@ const credentialsSchema = z.object({
 });
 
 authRoute.post('/register', zValidator('json', credentialsSchema), async (c) => {
+  // Rate limiting check
+  const clientIp = getClientIp(c.req.raw);
+  const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AUTH');
+
+  if (!rateLimitResult.allowed) {
+    return jsonError(
+      c,
+      'RATE_LIMIT_EXCEEDED',
+      `Too many registration attempts. Please try again in ${rateLimitResult.retryAfter} seconds.`,
+      429
+    );
+  }
+
   const data = c.req.valid('json');
   const existing = await getUserByUsername(c.get('db'), data.username);
   if (existing) return jsonError(c, 'USER_EXISTS', 'Username already exists.', 409);
@@ -27,6 +42,19 @@ authRoute.post('/register', zValidator('json', credentialsSchema), async (c) => 
 });
 
 authRoute.post('/login', zValidator('json', credentialsSchema), async (c) => {
+  // Rate limiting check
+  const clientIp = getClientIp(c.req.raw);
+  const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AUTH');
+
+  if (!rateLimitResult.allowed) {
+    return jsonError(
+      c,
+      'RATE_LIMIT_EXCEEDED',
+      `Too many login attempts. Please try again in ${rateLimitResult.retryAfter} seconds.`,
+      429
+    );
+  }
+
   const data = c.req.valid('json');
   const existing = await getUserByUsername(c.get('db'), data.username);
   if (!existing) return jsonError(c, 'INVALID_CREDENTIALS', 'Invalid username or password.', 401);

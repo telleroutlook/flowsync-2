@@ -106,26 +106,23 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
   app.use('*', async (c, next) => {
     const isReadOperation = c.req.method === 'GET' || c.req.method === 'HEAD' || c.req.method === 'OPTIONS';
 
-    if (isReadOperation) {
-      // For GET requests, generate and set CSRF token in cookie
-      // NOT HttpOnly - JavaScript must read this cookie and send it in X-CSRF-Token header
-      const token = crypto.randomUUID();
-      c.header('set-cookie', `csrf_token=${token}; Secure; SameSite=Strict; Path=/; Max-Age=3600`);
-    } else {
-      // For state-changing operations (POST/PATCH/DELETE), validate CSRF token
+    // For state-changing operations (POST/PATCH/DELETE), validate CSRF token BEFORE processing
+    if (!isReadOperation) {
       const cookieToken = c.req.header('cookie')?.match(/csrf_token=([^;]+)/)?.[1];
       const headerToken = c.req.header('x-csrf-token');
 
       // Validate CSRF token for API routes
       const isApiRoute = c.req.path.startsWith('/api/');
 
-      if (isApiRoute && (!cookieToken || !headerToken || cookieToken !== headerToken)) {
+      // Use timing-safe comparison to prevent timing attacks
+      const tokensMatch = cookieToken && headerToken && timingSafeEqual(cookieToken, headerToken);
+
+      if (isApiRoute && !tokensMatch) {
         console.warn('CSRF validation failed', {
           path: c.req.path,
           method: c.req.method,
           hasCookieToken: !!cookieToken,
           hasHeaderToken: !!headerToken,
-          tokensMatch: cookieToken === headerToken,
         });
         return c.json(
           {
@@ -140,8 +137,26 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
       }
     }
 
+    // Process the request
     await next();
+
+    // After processing, set CSRF token cookie for GET requests (on response)
+    if (isReadOperation) {
+      // NOT HttpOnly - JavaScript must read this cookie and send it in X-CSRF-Token header
+      const token = crypto.randomUUID();
+      c.header('set-cookie', `csrf_token=${token}; Secure; SameSite=Strict; Path=/; Max-Age=3600`);
+    }
   });
+
+  // Timing-safe string comparison to prevent timing attacks on CSRF tokens
+  function timingSafeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+      result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return result === 0;
+  }
 
   // Middleware to inject db and optional env bindings - must be before routes
   app.use('*', async (c, next) => {

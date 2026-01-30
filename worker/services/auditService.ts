@@ -69,7 +69,9 @@ export const listAuditLogs = async (
   if (filters.from) clauses.push(gte(auditLogs.timestamp, filters.from));
   if (filters.to) clauses.push(lte(auditLogs.timestamp, filters.to));
   if (filters.q) {
-    const q = `%${filters.q}%`;
+    // Escape SQL LIKE wildcards to prevent user-supplied wildcards from working
+    const escapedQuery = filters.q.replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const q = `%${escapedQuery}%`;
     clauses.push(or(like(auditLogs.entityId, q), like(auditLogs.reason, q)));
   }
   clauses.push(eq(auditLogs.workspaceId, filters.workspaceId));
