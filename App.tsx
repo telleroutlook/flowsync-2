@@ -59,9 +59,14 @@ function App() {
   }, []);
 
   // UI State
-  const [viewMode, setViewMode] = useState<ViewMode>(() =>
-    (storageGet('viewMode') as ViewMode) || 'LIST'
-  );
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const stored = storageGet('viewMode');
+    // Validate the stored value is a valid ViewMode
+    if (stored === 'BOARD' || stored === 'LIST' || stored === 'GANTT') {
+      return stored;
+    }
+    return 'LIST';
+  });
   const [viewZoom, setViewZoom] = useState<ZoomState>(() =>
     storageGetJSON('viewZoom', DEFAULT_ZOOM_STATE)
   );
