@@ -495,207 +495,198 @@ function App() {
       )}>
         {/* Header */}
         <div className={cn(
-          "min-h-[3.5rem] py-2 border-b border-border-subtle flex items-center justify-between flex-wrap gap-x-4 gap-y-2 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0",
+          "min-h-[3.5rem] py-2 border-b border-border-subtle flex items-center flex-wrap gap-2 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0",
           isMobile ? "px-2" : "px-4"
         )}>
-          <div className="flex items-center flex-wrap gap-3 flex-1 min-w-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsSidebarOpen(prev => !prev)}
-              title={isSidebarOpen ? t('app.sidebar.close') : t('app.sidebar.open')}
-              className={cn("h-8 w-8 text-text-secondary hover:text-primary", isMobile && "hidden")}
-            >
-              <Menu className="w-4 h-4" />
-            </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsSidebarOpen(prev => !prev)}
+            title={isSidebarOpen ? t('app.sidebar.close') : t('app.sidebar.open')}
+            className={cn("h-8 w-8 text-text-secondary hover:text-primary", isMobile && "hidden")}
+          >
+            <Menu className="w-4 h-4" />
+          </Button>
 
-            <div className="flex flex-col justify-center min-w-0">
-              <h2 className="text-sm font-bold text-text-primary leading-tight truncate">{activeProject.name}</h2>
-              {activeProject.description && (
-                 <p className="text-[10px] font-medium text-text-secondary truncate">{activeProject.description}</p>
-              )}
-            </div>
-            
-            <div className="h-5 w-px bg-border-subtle mx-1 hidden sm:block"></div>
-
-            {/* View Switcher */}
-            <div className="flex flex-wrap p-1 bg-surface/50 rounded-lg border border-border-subtle gap-1 shadow-sm">
-               <Button
-                 variant={viewMode === 'BOARD' ? 'secondary' : 'ghost'}
-                 size="sm"
-                 onClick={() => setViewMode('BOARD')}
-                 className="h-7 px-2 md:h-8 md:px-3 text-xs"
-               >
-                 <Grid className="w-4 h-4 md:mr-2" />
-                 <span className="hidden md:inline">{t('app.view.board')}</span>
-               </Button>
-               <Button
-                 variant={viewMode === 'LIST' ? 'secondary' : 'ghost'}
-                 size="sm"
-                 onClick={() => setViewMode('LIST')}
-                 className="h-7 px-2 md:h-8 md:px-3 text-xs"
-               >
-                 <ListIcon className="w-4 h-4 md:mr-2" />
-                 <span className="hidden md:inline">{t('app.view.list')}</span>
-               </Button>
-               <Button
-                 variant={viewMode === 'GANTT' ? 'secondary' : 'ghost'}
-                 size="sm"
-                 onClick={() => setViewMode('GANTT')}
-                 className="h-7 px-2 md:h-8 md:px-3 text-xs"
-               >
-                 <Calendar className="w-4 h-4 md:mr-2" />
-                 <span className="hidden md:inline">{t('app.view.gantt')}</span>
-               </Button>
-            </div>
+          <div className="flex flex-col justify-center min-w-0">
+            <h2 className="text-sm font-bold text-text-primary leading-tight truncate">{activeProject.name}</h2>
+            {activeProject.description && (
+               <p className="text-[10px] font-medium text-text-secondary truncate">{activeProject.description}</p>
+            )}
           </div>
 
-          {/* Desktop Tools */}
-          <div className={cn("items-center flex-wrap gap-2", isMobile ? "hidden" : "flex")}>
-             {/* Zoom Panel */}
-             <div className="flex items-center flex-wrap gap-1 bg-background/50 rounded-lg border border-border-subtle px-2 py-1">
-               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary/70 mr-1">{t('app.zoom')}</span>
-               <Button
-                 variant="ghost"
-                 size="sm"
-                 onClick={() => handleZoomStep(-1)}
-                 disabled={zoomIndex === 0}
-                 className="h-8 w-8 p-0"
-                 title={t('app.zoom.out')}
-               >
-                 <Minus className="w-4 h-4" />
-               </Button>
-               <span className="text-xs font-mono text-text-secondary min-w-[40px] text-center">{Math.round(currentZoom * 100)}%</span>
-               <Button
-                 variant="ghost"
-                 size="sm"
-                 onClick={() => handleZoomStep(1)}
-                 disabled={zoomIndex === zoomLevels.length - 1}
-                 className="h-8 w-8 p-0"
-                 title={t('app.zoom.in')}
-               >
-                 <Plus className="w-4 h-4" />
-               </Button>
-               <Button
-                 variant="ghost"
-                 size="sm"
-                 onClick={() => updateZoom(viewMode, 1)}
-                 disabled={currentZoom === 1}
-                 className="h-8 px-2 text-[10px] uppercase tracking-wider ml-1"
-                 title={t('app.zoom.reset')}
-               >
-                 <RotateCcw className="w-3 h-3 mr-1" />
-                 {t('app.zoom.reset')}
-               </Button>
-             </div>
-
-             {/* Import Group */}
-             <div className="flex items-center gap-1 bg-surface p-1 rounded-lg border border-border-subtle shadow-sm">
-               <input
-                 ref={importInputRef}
-                 type="file"
-                 accept=".json,.csv,.tsv"
-                 className="hidden"
-                 onChange={(event) => {
-                   const file = event.target.files?.[0];
-                   if (file) handleImportFile(file);
-                   event.currentTarget.value = '';
-                 }}
-               />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => importInputRef.current?.click()}
-                className="h-8 px-3 text-xs"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                {t('app.header.import')}
-              </Button>
-             </div>
-
-             {/* Audit Button */}
-             <div className="relative">
-              <Button
-                variant={isAuditOpen ? 'secondary' : 'outline'}
-                size="sm"
-                onClick={() => setIsAuditOpen(prev => !prev)}
-                className="h-8 px-3 text-xs gap-2"
-                aria-label={`${t('app.header.audit')} (${auditLogs.length})`}
-              >
-                <History className="w-4 h-4" />
-                <span>{t('app.header.audit')}</span>
-                <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary min-w-[18px] text-center">
-                  {auditLogs.length}
-                </span>
-              </Button>
-            </div>
-
-             {/* Export Button */}
-             <div className="relative">
-              <Button
-                 variant="outline"
-                 size="sm"
-                 onClick={(event) => {
-                  event.stopPropagation();
-                  setIsExportOpen(prev => !prev);
-                 }}
-                 ref={exportButtonRef}
-                 className="h-8 px-3 text-xs gap-2"
-               >
-                 <span>{t('app.header.export')}</span>
-                 <Download className="w-4 h-4" />
-               </Button>
-               {isExportOpen && (
-                 <div
-                   onClick={(event) => event.stopPropagation()}
-                   onPointerDown={handleExportMenuPointerDown}
-                   ref={exportMenuRef}
-                   className="absolute right-0 mt-2 w-64 rounded-xl border border-border-subtle bg-surface shadow-xl z-50 p-2 animate-fade-in"
-                   role="menu"
-                 >
-                   <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-text-secondary/50">{t('app.header.format')}</div>
-                   <div className="grid grid-cols-1 gap-1">
-                     {([
-                       { id: 'image', label: t('export.format.image') || 'Image (PNG)', desc: t('export.format.image_desc') || 'Export view as image', icon: ImageIcon },
-                       { id: 'csv', label: 'CSV', desc: t('export.format.csv_desc'), icon: FileText },
-                       { id: 'json', label: 'JSON', desc: t('export.format.json_desc'), icon: FileText },
-                       { id: 'markdown', label: 'Markdown', desc: t('export.format.markdown_desc'), icon: FileText },
-                     ] as const).map(item => (
-                       <button
-                         key={item.id}
-                         type="button"
-                         data-export-format={item.id}
-                         className={cn(
-                           "group flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors",
-                           lastExportFormat === item.id ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-background' 
-                         )}
-                       >
-                         <div className="flex items-center gap-3">
-                            <item.icon className="w-4 h-4 opacity-70" />
-                            <div className="flex flex-col items-start">
-                              <span className="font-semibold">{item.label}</span>
-                              <span className="text-[9px] opacity-70 group-hover:opacity-100">{item.desc}</span>
-                            </div>
-                         </div>
-                         {lastExportFormat === item.id && <Check className="w-3 h-3 text-primary" />}
-                       </button>
-                     ))}
-                   </div>
-
-                 </div>
-               )}
-             </div>
-
-             <Button 
-                variant={isChatOpen ? 'secondary' : 'ghost'}
-                size="icon"
-                onClick={() => setIsChatOpen(prev => !prev)}
-                title={t('app.header.toggle_chat')}
-                className={cn("h-8 w-8", isMobile && "hidden")}
+          {/* View Switcher */}
+          <div className="flex flex-wrap p-1 bg-surface/50 rounded-lg border border-border-subtle gap-1 shadow-sm">
+             <Button
+               variant={viewMode === 'BOARD' ? 'secondary' : 'ghost'}
+               size="sm"
+               onClick={() => setViewMode('BOARD')}
+               className="h-7 px-2 md:h-8 md:px-3 text-xs"
              >
-                <MessageSquare className="w-4 h-4" />
+               <Grid className="w-4 h-4 md:mr-2" />
+               <span className="hidden md:inline">{t('app.view.board')}</span>
+             </Button>
+             <Button
+               variant={viewMode === 'LIST' ? 'secondary' : 'ghost'}
+               size="sm"
+               onClick={() => setViewMode('LIST')}
+               className="h-7 px-2 md:h-8 md:px-3 text-xs"
+             >
+               <ListIcon className="w-4 h-4 md:mr-2" />
+               <span className="hidden md:inline">{t('app.view.list')}</span>
+             </Button>
+             <Button
+               variant={viewMode === 'GANTT' ? 'secondary' : 'ghost'}
+               size="sm"
+               onClick={() => setViewMode('GANTT')}
+               className="h-7 px-2 md:h-8 md:px-3 text-xs"
+             >
+               <Calendar className="w-4 h-4 md:mr-2" />
+               <span className="hidden md:inline">{t('app.view.gantt')}</span>
              </Button>
           </div>
+
+          {/* Zoom Panel */}
+          <div className="flex items-center flex-wrap gap-1 bg-background/50 rounded-lg border border-border-subtle px-2 py-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary/70 mr-1">{t('app.zoom')}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleZoomStep(-1)}
+              disabled={zoomIndex === 0}
+              className="h-8 w-8 p-0"
+              title={t('app.zoom.out')}
+            >
+              <Minus className="w-4 h-4" />
+            </Button>
+            <span className="text-xs font-mono text-text-secondary min-w-[40px] text-center">{Math.round(currentZoom * 100)}%</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleZoomStep(1)}
+              disabled={zoomIndex === zoomLevels.length - 1}
+              className="h-8 w-8 p-0"
+              title={t('app.zoom.in')}
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => updateZoom(viewMode, 1)}
+              disabled={currentZoom === 1}
+              className="h-8 px-2 text-[10px] uppercase tracking-wider ml-1"
+              title={t('app.zoom.reset')}
+            >
+              <RotateCcw className="w-3 h-3 mr-1" />
+              {t('app.zoom.reset')}
+            </Button>
+          </div>
+
+          {/* Import */}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".json,.csv,.tsv"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) handleImportFile(file);
+              event.currentTarget.value = '';
+            }}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => importInputRef.current?.click()}
+            className="h-8 px-3 text-xs"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            {t('app.header.import')}
+          </Button>
+
+          {/* Audit Button */}
+          <div className="relative">
+            <Button
+              variant={isAuditOpen ? 'secondary' : 'outline'}
+              size="sm"
+              onClick={() => setIsAuditOpen(prev => !prev)}
+              className="h-8 px-3 text-xs gap-2"
+              aria-label={`${t('app.header.audit')} (${auditLogs.length})`}
+            >
+              <History className="w-4 h-4" />
+              <span>{t('app.header.audit')}</span>
+              <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary min-w-[18px] text-center">
+                {auditLogs.length}
+              </span>
+            </Button>
+          </div>
+
+          {/* Export Button */}
+          <div className="relative">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsExportOpen(prev => !prev);
+              }}
+              ref={exportButtonRef}
+              className="h-8 px-3 text-xs gap-2"
+            >
+              <span>{t('app.header.export')}</span>
+              <Download className="w-4 h-4" />
+            </Button>
+            {isExportOpen && (
+              <div
+                onClick={(event) => event.stopPropagation()}
+                onPointerDown={handleExportMenuPointerDown}
+                ref={exportMenuRef}
+                className="absolute right-0 mt-2 w-64 rounded-xl border border-border-subtle bg-surface shadow-xl z-50 p-2 animate-fade-in"
+                role="menu"
+              >
+                <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-text-secondary/50">{t('app.header.format')}</div>
+                <div className="grid grid-cols-1 gap-1">
+                  {([
+                    { id: 'image', label: t('export.format.image') || 'Image (PNG)', desc: t('export.format.image_desc') || 'Export view as image', icon: ImageIcon },
+                    { id: 'csv', label: 'CSV', desc: t('export.format.csv_desc'), icon: FileText },
+                    { id: 'json', label: 'JSON', desc: t('export.format.json_desc'), icon: FileText },
+                    { id: 'markdown', label: 'Markdown', desc: t('export.format.markdown_desc'), icon: FileText },
+                  ] as const).map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      data-export-format={item.id}
+                      className={cn(
+                        "group flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors",
+                        lastExportFormat === item.id ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-background'
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <item.icon className="w-4 h-4 opacity-70" />
+                        <div className="flex flex-col items-start">
+                          <span className="font-semibold">{item.label}</span>
+                          <span className="text-[9px] opacity-70 group-hover:opacity-100">{item.desc}</span>
+                        </div>
+                      </div>
+                      {lastExportFormat === item.id && <Check className="w-3 h-3 text-primary" />}
+                    </button>
+                  ))}
+                </div>
+
+              </div>
+            )}
+          </div>
+
+          <Button
+            variant={isChatOpen ? 'secondary' : 'ghost'}
+            size="icon"
+            onClick={() => setIsChatOpen(prev => !prev)}
+            title={t('app.header.toggle_chat')}
+            className={cn("h-8 w-8", isMobile && "hidden")}
+          >
+            <MessageSquare className="w-4 h-4" />
+          </Button>
         </div>
 
         {dataError && (
