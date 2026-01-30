@@ -567,14 +567,51 @@ const planActions = async (
   const planned: DraftAction[] = [];
   const warnings: string[] = [];
 
+  // SMART PROJECT ID ASSIGNMENT: First pass - collect new project IDs being created
+  const newProjectIds = new Set<string>();
+  let firstNewProjectId: string | null = null;
+
+  for (const action of actions) {
+    if (action.entityType === 'project' && action.action === 'create' && action.after) {
+      const createdId = (action.after.id as string | undefined) ?? undefined;
+      if (createdId) {
+        newProjectIds.add(createdId);
+        if (!firstNewProjectId) {
+          firstNewProjectId = createdId;
+        }
+      }
+    }
+  }
+
+  // SMART PROJECT ID ASSIGNMENT: Second pass - assign projectId to tasks without one
+  // This creates a NEW array with modified actions to avoid mutating the input
+  const adjustedActions = actions.map(action => {
+    if (action.entityType === 'task' && action.action === 'create' && action.after) {
+      const after = action.after as Record<string, unknown>;
+      const currentProjectId = after.projectId as string | undefined;
+
+      if (!currentProjectId && firstNewProjectId) {
+        // Task has no projectId - assign it to the first new project being created
+        return {
+          ...action,
+          after: {
+            ...after,
+            projectId: firstNewProjectId,
+          },
+        };
+      }
+    }
+    return action;
+  });
+
   // Extract IDs that we need to fetch using Sets for O(1) lookups
   const projectIdsToFetch = new Set<string>();
   const taskIdsToFetch = new Set<string>();
   const projectIdsReferenced = new Set<string>();
   const taskPredecessorIds = new Set<string>();
 
-  // Single pass to collect all IDs we need
-  for (const action of actions) {
+  // Single pass to collect all IDs we need (using adjustedActions)
+  for (const action of adjustedActions) {
     if (action.entityType === 'project') {
       if (action.action !== 'create') {
         const id = action.entityId;
@@ -687,8 +724,8 @@ const planActions = async (
     planned,
   };
 
-  // Process each action using the strategy pattern
-  for (const action of actions) {
+  // Process each action using the strategy pattern (using adjustedActions)
+  for (const action of adjustedActions) {
     const handlerKey = `${action.entityType}.${action.action}`;
     const handler = ACTION_HANDLERS[handlerKey];
 
