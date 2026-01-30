@@ -550,8 +550,8 @@ function App() {
             <span className="hidden md:inline">{t('app.view.gantt')}</span>
           </Button>
 
-          {/* Zoom Panel */}
-          <div className="flex items-center flex-wrap gap-1 bg-background/50 rounded-lg border border-border-subtle px-2 py-1">
+          {/* Zoom Panel - desktop only */}
+          <div className="hidden md:flex items-center flex-wrap gap-1 bg-background/50 rounded-lg border border-border-subtle px-2 py-1">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary/70 mr-1">{t('app.zoom')}</span>
             <Button
               variant="ghost"
