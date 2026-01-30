@@ -3,7 +3,7 @@ import html2canvas from 'html2canvas';
 import { makeSafeFileName, triggerDownload } from '../utils/export';
 
 interface UseImageExportProps {
-  viewContainerRef: React.RefObject<HTMLElement>;
+  viewContainerRef: React.RefObject<HTMLElement | null>;
   viewMode: string;
   projectId: string;
   projectName: string;

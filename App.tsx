@@ -11,7 +11,7 @@ import { ChatInterface } from './components/ChatInterface';
 import { AuditPanel } from './components/AuditPanel';
 import { TaskDetailPanel } from './components/TaskDetailPanel';
 import { CreateProjectModal } from './components/CreateProjectModal';
-import { Task, ChatMessage, TaskStatus } from './types';
+import { Task, ChatMessage } from './types';
 import { useProjectData } from './src/hooks/useProjectData';
 import { useAuth } from './src/hooks/useAuth';
 import { useWorkspaces } from './src/hooks/useWorkspaces';
@@ -20,10 +20,9 @@ import { useAuditLogs } from './src/hooks/useAuditLogs';
 import { useChat } from './src/hooks/useChat';
 import { useExport } from './src/hooks/useExport';
 import { useImageExport } from './src/hooks/useImageExport';
-import { generateId, storageGet, storageSet, storageGetJSON, storageSetJSON, computeGanttTimelineRange, pickZoomLevel, findZoomIndex, isMajorZoomChange, computeZoomSignature, DEFAULT_ZOOM_STATE, DEFAULT_ZOOM_META, type ZoomState, type ZoomMetaState, type ViewMode } from './src/utils';
+import { generateId, storageGet, storageSet, storageGetJSON, storageSetJSON, findZoomIndex, DEFAULT_ZOOM_STATE, type ZoomState, type ViewMode } from './src/utils';
 import { MobileNavBar, MobileTab } from './components/MobileNavBar';
 import { useI18n } from './src/i18n';
-import { DAY_MS, GANTT_PX_PER_DAY, type GanttViewMode } from './src/constants/gantt';
 import { Image as ImageIcon } from 'lucide-react';
 
 // Lazy Load View Components
@@ -64,7 +63,6 @@ function App() {
   const [viewZoom, setViewZoom] = useState<ZoomState>(() =>
     storageGetJSON('viewZoom', DEFAULT_ZOOM_STATE)
   );
-  const [ganttViewMode, setGanttViewMode] = useState<GanttViewMode>('Month');
   const viewContainerRef = useRef<HTMLDivElement>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(true);
@@ -793,7 +791,6 @@ function App() {
                         tasks={activeTasks}
                         projectId={activeProjectId}
                         zoom={1}
-                        onViewModeChange={setGanttViewMode}
                         selectedTaskId={selectedTaskId}
                         onSelectTask={handleSelectTask}
                         onUpdateTaskDates={(id, startDate, dueDate) => {

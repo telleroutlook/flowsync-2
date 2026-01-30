@@ -13,7 +13,6 @@ export const exportChatToHtml = (
   let statsHtml = '';
   if (tasks) {
     const total = tasks.length;
-    const todo = tasks.filter(t => t.status === TaskStatus.TODO).length;
     const inProgress = tasks.filter(t => t.status === TaskStatus.IN_PROGRESS).length;
     const done = tasks.filter(t => t.status === TaskStatus.DONE).length;
     const completion = total > 0 ? Math.round((done / total) * 100) : 0;

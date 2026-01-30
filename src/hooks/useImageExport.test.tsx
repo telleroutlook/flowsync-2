@@ -13,7 +13,7 @@ vi.mock('html2canvas', () => ({
 vi.spyOn(exportUtils, 'triggerDownload').mockImplementation(() => {});
 
 describe('useImageExport', () => {
-  const mockRef = { current: document.createElement('div') };
+  const mockRef: React.RefObject<HTMLDivElement> = { current: document.createElement('div') };
   const viewMode = 'BOARD';
   const projectId = 'proj-12345678';
   const projectName = 'Test Project';
@@ -49,11 +49,13 @@ describe('useImageExport', () => {
 
     expect(html2canvas).toHaveBeenCalled();
     expect(exportUtils.triggerDownload).toHaveBeenCalled();
-    
+
     // Check filename in download call
     const downloadCall = vi.mocked(exportUtils.triggerDownload).mock.calls[0];
-    expect(downloadCall[1]).toContain('proj-123-test-project-board-');
-    expect(downloadCall[1]).toContain('.png');
+    if (downloadCall) {
+      expect(downloadCall[1]).toContain('proj-123-test-project-board-');
+      expect(downloadCall[1]).toContain('.png');
+    }
   });
 
   it('should handle null ref', async () => {

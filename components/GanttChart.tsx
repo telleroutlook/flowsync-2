@@ -323,10 +323,9 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
     }
   }, []);
 
-  if (tasks.length === 0) return <div className="p-8 text-center text-text-secondary">{t('gantt.no_tasks')}</div>;
-
   // Compute task coordinates with drag state applied - memoized for performance
   const taskCoords = useMemo(() => {
+    if (tasks.length === 0) return [];
     return taskEntries.map((task, i) => {
       let s = task.startMs;
       let e = task.endMs;
@@ -402,6 +401,11 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
     const y = event.clientY - rect.top + body.scrollTop;
     setDependencyTooltip({ text, x, y });
   }, []);
+
+  // Early return for empty tasks - after all hooks are called
+  if (tasks.length === 0) {
+    return <div className="p-8 text-center text-text-secondary">{t('gantt.no_tasks')}</div>;
+  }
 
   return (
     <div className="flex flex-col h-full bg-surface border border-border-subtle rounded-xl overflow-hidden relative shadow-sm">
@@ -596,7 +600,7 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
                                }}
                                onClick={() => onSelectTask?.(t.id)}
                              >
-                                <span className="text-[10px] font-bold text-primary-foreground truncate drop-shadow-md">{t.original.title}</span>
+                                <span className="text-[10px] font-bold text-white truncate drop-shadow-md">{t.original.title}</span>
                              </div>
                              
                              {/* Resize Handles */}
