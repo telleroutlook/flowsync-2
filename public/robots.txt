@@ -1,0 +1,14 @@
+# robots.txt for FlowSync AI Studio
+# https://workchatly.com
+
+User-agent: *
+Allow: /
+
+# Disallow API endpoints
+Disallow: /api/
+
+# Sitemap
+Sitemap: https://workchatly.com/sitemap.xml
+
+# Crawl-delay (prevents server overload)
+Crawl-delay: 1
