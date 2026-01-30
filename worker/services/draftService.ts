@@ -933,11 +933,20 @@ export const applyDraft = async (
 ): Promise<{ draft: DraftRecord; results: DraftAction[] }> => {
   const draft = await getDraftById(db, id, workspaceId);
   if (!draft) {
+    console.error('[Draft Apply] Draft not found', { id, workspaceId });
     throw new Error('Draft not found.');
   }
   if (draft.status !== 'pending') {
+    console.log('[Draft Apply] Draft already processed', { id, status: draft.status });
     return { draft, results: draft.actions };
   }
+
+  console.log('[Draft Apply] Starting draft application', {
+    draftId: id,
+    workspaceId,
+    actionCount: draft.actions.length,
+    actions: draft.actions.map(a => ({ type: `${a.entityType}.${a.action}`, id: a.entityId }))
+  });
 
   const results: DraftAction[] = [];
   const draftProjectId = draft.projectId ?? null;

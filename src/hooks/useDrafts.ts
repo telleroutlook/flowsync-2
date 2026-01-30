@@ -71,19 +71,31 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     options: { reason?: string; createdBy: Draft['createdBy']; autoApply?: boolean; silent?: boolean }
   ): Promise<Draft> => {
     try {
+      console.log('[submitDraft] Creating draft', {
+        actionCount: actions.length,
+        actions: actions.map(a => ({ type: `${a.entityType}.${a.action}`, id: a.entityId }))
+      });
+
       const result = await apiService.createDraft({
         projectId: activeProjectId || undefined,
         createdBy: options.createdBy,
         reason: options.reason,
         actions,
       });
-      
+
+      console.log('[submitDraft] Draft created', {
+        draftId: result.draft.id,
+        workspaceId: result.draft.workspaceId,
+        actionCount: result.draft.actions.length,
+        warnings: result.warnings
+      });
+
       setDraftWarnings(result.warnings);
-      
+
       if (result.warnings.length > 0 && !options.silent) {
         appendSystemMessage(t('draft.warnings', { warnings: result.warnings.join(' | ') }));
       }
-      
+
       setDrafts(prev => [...prev, result.draft]);
       
       if (options.autoApply) {

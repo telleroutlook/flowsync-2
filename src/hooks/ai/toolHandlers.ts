@@ -301,17 +301,25 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       after?: Record<string, unknown>;
     };
 
+    // First pass: collect all new project IDs being created
     const newProjectIds = new Set<string>();
+    let firstNewProjectId: string | null = null;
     for (const action of args.actions) {
       if (action && typeof action === 'object') {
         const rawAction = action as RawAction;
         if (rawAction.entityType === 'project' && rawAction.action === 'create') {
           const createdId = (rawAction.after?.id as string | undefined) ?? undefined;
-          if (createdId) newProjectIds.add(createdId);
+          if (createdId) {
+            newProjectIds.add(createdId);
+            if (!firstNewProjectId) {
+              firstNewProjectId = createdId;
+            }
+          }
         }
       }
     }
 
+    // Allowed project IDs for task assignment
     const allowedProjectIds = new Set<string>();
     if (activeProjectId) allowedProjectIds.add(activeProjectId);
     for (const projectId of newProjectIds) allowedProjectIds.add(projectId);
@@ -325,14 +333,25 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         const rawAction = action as RawAction;
 
         const processedAfter = { ...(rawAction.after || {}) };
-        if (rawAction.entityType === 'task' && rawAction.action === 'create' && !processedAfter.projectId) {
-          processedAfter.projectId = activeProjectId;
-        }
-        if (rawAction.entityType === 'task' && rawAction.action === 'create' && processedAfter.projectId) {
-          const projectId = processedAfter.projectId as string;
-          if (allowedProjectIds.size > 0 && !allowedProjectIds.has(projectId)) {
-            processedAfter.projectId = activeProjectId;
-            correctedProjectCount += 1;
+
+        // Smart projectId assignment for tasks
+        if (rawAction.entityType === 'task' && rawAction.action === 'create') {
+          if (!processedAfter.projectId) {
+            // No projectId specified - use the first new project being created, or active project
+            if (firstNewProjectId) {
+              processedAfter.projectId = firstNewProjectId;
+            } else if (activeProjectId) {
+              processedAfter.projectId = activeProjectId;
+            }
+            // If still no projectId, it will be caught as a warning during planActions
+          } else {
+            // projectId was specified - validate it
+            const projectId = processedAfter.projectId as string;
+            if (allowedProjectIds.size > 0 && !allowedProjectIds.has(projectId)) {
+              // Project ID not allowed - use first new project or active project
+              processedAfter.projectId = firstNewProjectId ?? activeProjectId;
+              correctedProjectCount += 1;
+            }
           }
         }
 

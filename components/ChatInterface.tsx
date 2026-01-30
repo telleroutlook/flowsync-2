@@ -96,7 +96,15 @@ const DraftNotification = memo<DraftNotificationProps>(({
   onApplyDraft,
   onDiscardDraft,
   t,
-}) => (
+}) => {
+  const [showAllWarnings, setShowAllWarnings] = useState(false);
+  const MAX_WARNINGS_SHOWN = 3;
+  const hasManyWarnings = draftWarnings.length > MAX_WARNINGS_SHOWN;
+  const displayedWarnings = hasManyWarnings && !showAllWarnings
+    ? draftWarnings.slice(0, MAX_WARNINGS_SHOWN)
+    : draftWarnings;
+
+  return (
   <motion.div
     initial={{ height: 0, opacity: 0 }}
     animate={{ height: 'auto', opacity: 1 }}
@@ -124,11 +132,23 @@ const DraftNotification = memo<DraftNotificationProps>(({
     </div>
     {draftWarnings.length > 0 && (
       <div className="space-y-1 pl-5 mb-3">
-        {draftWarnings.map((warning, index) => (
+        {displayedWarnings.map((warning, index) => (
           <div key={index} className="text-xs text-critical break-words">
             {warning}
           </div>
         ))}
+        {hasManyWarnings && (
+          <button
+            type="button"
+            onClick={() => setShowAllWarnings(!showAllWarnings)}
+            className="text-xs text-critical italic hover:underline focus:outline-none"
+          >
+            {showAllWarnings
+              ? t('common.show_less')
+              : t('chat.pending.more_warnings', { count: draftWarnings.length - MAX_WARNINGS_SHOWN })
+            }
+          </button>
+        )}
       </div>
     )}
     <div className="flex gap-2 pl-5">
@@ -154,7 +174,8 @@ const DraftNotification = memo<DraftNotificationProps>(({
       </Button>
     </div>
   </motion.div>
-));
+);
+});
 DraftNotification.displayName = 'DraftNotification';
 
 interface AttachmentPreviewProps {
