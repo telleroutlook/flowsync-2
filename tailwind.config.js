@@ -7,6 +7,17 @@ export default {
     "./components/**/*.{js,ts,jsx,tsx}",
     "./shared/**/*.{js,ts,jsx,tsx}",
   ],
+  safelist: [
+    // Gantt chart task bar colors - must be explicitly safelisted
+    'bg-success',
+    'bg-warning',
+    'bg-negative',
+    'bg-primary',
+    'border-success-dark',
+    'border-warning-dark',
+    'border-negative-dark',
+    'border-primary-hover',
+  ],
   theme: {
     extend: {
       colors: {

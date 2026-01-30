@@ -43,5 +43,6 @@ export const TASK_COLOR_CLASSES: Record<Priority, string> = {
 // Helper function to get task color class for Gantt chart
 export function getTaskColorClass(priority: Priority, isMilestone?: boolean): string {
   if (isMilestone) return 'border-accent bg-surface';
-  return (TASK_COLOR_CLASSES[priority] || 'bg-primary border-primary-hover') + ' border bg-opacity-100';
+  const colorClass = TASK_COLOR_CLASSES[priority] || 'bg-primary border-primary-hover';
+  return colorClass + ' border bg-opacity-100';
 }
