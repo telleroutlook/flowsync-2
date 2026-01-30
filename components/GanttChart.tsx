@@ -600,7 +600,10 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
                                }}
                                onClick={() => onSelectTask?.(t.id)}
                              >
-                                <span className="text-[10px] font-bold text-white truncate drop-shadow-md">{t.original.title}</span>
+                                <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none rounded" />
+                                <span className="text-[10px] font-extrabold text-white truncate drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)] relative z-10">
+                                  {t.original.title}
+                                </span>
                              </div>
                              
                              {/* Resize Handles */}

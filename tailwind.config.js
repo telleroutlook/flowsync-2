@@ -41,18 +41,22 @@ export default {
         },
         success: {
           DEFAULT: '#256F3A',
+          dark: '#1b502a',
           foreground: '#FFFFFF',
         },
         warning: {
           DEFAULT: '#E76500',
+          dark: '#b54f00',
           foreground: '#FFFFFF',
         },
         critical: {
-          DEFAULT: '#D93025', // More standard error red
+          DEFAULT: '#D93025',
+          dark: '#a1231b',
           foreground: '#FFFFFF',
         },
         negative: {
           DEFAULT: '#D93025',
+          dark: '#a1231b',
           foreground: '#FFFFFF',
         },
         error: {

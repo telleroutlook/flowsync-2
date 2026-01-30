@@ -33,15 +33,15 @@ export const STATUS_INDICATOR_COLORS: Record<TaskStatus, string> = {
   [TaskStatus.DONE]: 'bg-success shadow-sm shadow-success/30',
 } as const;
 
-// Task color classes for Gantt chart bars
+// Task color classes for Gantt chart bars - using solid, high-contrast colors
 export const TASK_COLOR_CLASSES: Record<Priority, string> = {
-  [Priority.LOW]: 'bg-success',
-  [Priority.MEDIUM]: 'bg-warning',
-  [Priority.HIGH]: 'bg-negative',
+  [Priority.LOW]: 'bg-success border-success-dark',
+  [Priority.MEDIUM]: 'bg-warning border-warning-dark',
+  [Priority.HIGH]: 'bg-negative border-negative-dark',
 } as const;
 
 // Helper function to get task color class for Gantt chart
 export function getTaskColorClass(priority: Priority, isMilestone?: boolean): string {
-  if (isMilestone) return 'border-accent';
-  return TASK_COLOR_CLASSES[priority] || 'bg-primary';
+  if (isMilestone) return 'border-accent bg-surface';
+  return (TASK_COLOR_CLASSES[priority] || 'bg-primary border-primary-hover') + ' border bg-opacity-100';
 }
