@@ -356,24 +356,35 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
         view_kanban: () => `切换到看板视图`,
         view_gantt: () => `切换到甘特图视图`,
         view_list: () => `切换到列表视图`,
-        create_task: () => `创建一个新任务`,
+        create_task: () => {
+          const name = params?.taskName || params?.title;
+          if (name) return `创建一个名为 "${name}" 的新任务`;
+          return `创建一个新任务`;
+        },
         update_task: () => {
-          const taskName = params?.taskName || params?.title || '任务';
-          return `帮我更新任务"${taskName}"的信息`;
+          const taskName = params?.taskName || params?.title || params?.taskId || '任务';
+          const updates = Object.entries(params || {})
+            .filter(([k]) => !['taskName', 'title', 'taskId'].includes(k))
+            .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+            .join(', ');
+          return `更新任务 "${taskName}"${updates ? ` (${updates})` : ''}`;
         },
         set_status: () => {
-          const taskName = params?.taskName || params?.title || '任务';
+          const taskName = params?.taskName || params?.title || params?.taskId || '任务';
           const status = params?.status || '进行中';
-          return `将任务"${taskName}"的状态设置为${status}`;
+          return `将任务 "${taskName}" 的状态设置为 ${status}`;
         },
         reschedule: () => {
-          const taskName = params?.taskName || params?.title || '任务';
+          const taskName = params?.taskName || params?.title || params?.taskId || '任务';
+          if (params?.newDueDate || params?.dueDate) {
+            return `将任务 "${taskName}" 的截止日期调整为 ${params.newDueDate || params.dueDate}`;
+          }
           const daysToAdd = params?.daysToAdd || 3;
-          return `将任务"${taskName}"的日期延后${daysToAdd}天`;
+          return `将任务 "${taskName}" 的日期延后 ${daysToAdd} 天`;
         },
         view_tasks: () => {
           const filter = params?.filter || params?.status || '全部';
-          return `查看${filter}任务`;
+          return `查看 ${filter} 任务`;
         },
       };
 

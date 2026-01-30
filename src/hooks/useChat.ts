@@ -56,16 +56,14 @@ function isRetryableOpenAIError(text: string): boolean {
 function parseSuggestionsFromResponse(text: string): ActionableSuggestion[] {
   const suggestions: ActionableSuggestion[] = [];
 
-  // Try to match structured suggestions: ```suggestions[{"text":..., "action":..., "params":...}]```
-  const structuredMatch = text.match(/```suggestions\s*(\[.*?\])\s*```/s);
+  // 1. Try to match structured suggestions with backticks: ```suggestions[{"text":..., "action":..., "params":...}]```
+  const structuredMatch = text.match(/```(?:suggestions)?\s*(\[[\s\S]*?\])\s*```/i);
   if (structuredMatch && structuredMatch[1]) {
     try {
       const parsed = JSON.parse(structuredMatch[1]);
       if (Array.isArray(parsed)) {
-        return parsed.slice(0, 3).map((s: unknown) => {
-          if (typeof s === 'string') {
-            return { text: s };
-          }
+        return parsed.slice(0, 4).map((s: unknown) => {
+          if (typeof s === 'string') return { text: s };
           if (s && typeof s === 'object' && 'text' in s) {
             return {
               text: String((s as { text: string }).text),
@@ -77,33 +75,35 @@ function parseSuggestionsFromResponse(text: string): ActionableSuggestion[] {
         });
       }
     } catch (e) {
-      console.warn('[AI] Failed to parse structured suggestions:', e);
+      console.warn('[AI] Failed to parse structured suggestions (backticks):', e);
     }
   }
 
-  // Fallback: try simple array format ```suggestions["s1", "s2", "s3"]```
-  const simpleMatch = text.match(/```suggestions\s*\[([^\]]+)\]/);
-  if (simpleMatch) {
+  // 2. Try to match "suggestions [ ... ]" without backticks
+  const keywordMatch = text.match(/suggestions\s*[:\-\s]*(\[[\s\S]*?\])/i);
+  if (keywordMatch && keywordMatch[1]) {
     try {
-      const parsed = JSON.parse(`[${simpleMatch[1]}]`);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.slice(0, 3).map((s) => ({ text: String(s).trim() }));
+      const parsed = JSON.parse(keywordMatch[1]);
+      if (Array.isArray(parsed)) {
+        return parsed.slice(0, 4).map((s: unknown) => {
+          if (typeof s === 'string') return { text: s };
+          if (s && typeof s === 'object' && 'text' in s) {
+            return {
+              text: String((s as { text: string }).text),
+              action: (s as { action?: string })?.action,
+              params: (s as { params?: Record<string, unknown> })?.params,
+            };
+          }
+          return { text: String(s) };
+        });
       }
-    } catch {
-      // JSON parse failed, try alternative methods
+    } catch (e) {
+      // If direct JSON parse fails, it might be due to unquoted keys or other issues, 
+      // but usually AI provides valid JSON.
     }
   }
 
-  // Final fallback: try to extract quoted suggestions from text
-  const quotedMatches = text.matchAll(/"([^"]{5,50})"/g);
-  for (const match of quotedMatches) {
-    if (match[1]) {
-      suggestions.push({ text: match[1].trim() });
-      if (suggestions.length >= 3) break;
-    }
-  }
-
-  // Last resort: try to parse a trailing JSON array of suggestions
+  // 3. Last resort: try to parse a trailing JSON array of suggestions
   const trailingArrayMatch = text.match(/(\[[\s\S]*\])\s*$/);
   if (trailingArrayMatch && trailingArrayMatch[1]) {
     try {
@@ -121,8 +121,8 @@ function parseSuggestionsFromResponse(text: string): ActionableSuggestion[] {
           return null;
         }).filter((s): s is ActionableSuggestion => !!s && s.text.length > 0);
 
-        if (mapped.length > 0 && mapped.length === parsed.length) {
-          return mapped.slice(0, 3);
+        if (mapped.length > 0) {
+          return mapped.slice(0, 4);
         }
       }
     } catch {
@@ -130,34 +130,40 @@ function parseSuggestionsFromResponse(text: string): ActionableSuggestion[] {
     }
   }
 
-  return suggestions.slice(0, 3);
+  // 4. Fallback: try simple array format ```suggestions["s1", "s2", "s3"]```
+  const simpleMatch = text.match(/```(?:suggestions)?\s*\[([^\]]+)\]/i);
+  if (simpleMatch && simpleMatch[1]) {
+    const content = simpleMatch[1];
+    try {
+      // Try to parse it as JSON by adding back the brackets
+      const parsed = JSON.parse(`[${content}]`);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.slice(0, 4).map((s) => ({ text: String(s).trim() }));
+      }
+    } catch {
+      // Fallback to splitting by comma if not valid JSON
+      return content.split(',').map(s => ({ text: s.replace(/"/g, '').trim() })).slice(0, 4);
+    }
+  }
+
+  return suggestions.slice(0, 4);
 }
 
 // Helper: Clean suggestions from response text
 function cleanResponseText(text: string): string {
   let cleaned = text;
 
-  // Remove code block format: ```suggestions[...]```
-  cleaned = cleaned.replace(/```suggestions\s*(\[.*?\])\s*```/gs, '');
+  // 1. Remove code block format: ```suggestions[...]``` or ```[...]``` if it's suggestions
+  cleaned = cleaned.replace(/```(?:suggestions)?\s*\[[\s\S]*?\]\s*```/gi, '');
 
-  // Remove plain format: suggestions\n{...} or suggestions: {...}
-  cleaned = cleaned.replace(/suggestions\s*[:\n]*\s*(\[[\s\S]*?\])/g, '');
+  // 2. Remove keyword format: suggestions [ ... ] or suggestions: [ ... ]
+  cleaned = cleaned.replace(/suggestions\s*[:\-\s]*\[[\s\S]*?\]/gi, '');
 
-  // Remove any remaining JSON-like suggestions at the end
-  cleaned = cleaned.replace(/[\n]*\{?\s*"text"\s*:/g, (match) => {
-    // Check if this looks like the start of suggestions JSON
-    const index = cleaned.indexOf(match);
-    if (index > cleaned.length - 1000) { // Only if near the end
-      return '\n'; // Replace with newline
-    }
-    return match;
-  });
-
-  // Remove trailing JSON array if it looks like suggestions
+  // 3. Remove trailing JSON array if it looks like suggestions
   cleaned = cleaned.replace(/(\[[\s\S]*\])\s*$/g, (match) => {
     try {
       const parsed = JSON.parse(match);
-      if (!Array.isArray(parsed) || parsed.length === 0 || parsed.length > 6) return match;
+      if (!Array.isArray(parsed) || parsed.length === 0 || parsed.length > 8) return match;
       const allSuggestions = parsed.every((item) => {
         if (typeof item === 'string') return true;
         if (item && typeof item === 'object' && 'text' in item) return true;
@@ -168,6 +174,13 @@ function cleanResponseText(text: string): string {
       return match;
     }
   });
+
+  // 4. Clean up broken suggestions indicators and common prefixes
+  cleaned = cleaned.replace(/(?:以下是一些建议|Here are some suggestions|Suggestions|建议)\s*[:：\-]*\s*$/gi, '');
+  cleaned = cleaned.replace(/suggestions\s*[:\-\s]*$/gi, '');
+
+  // 5. If the message only contains a colon or common separator after cleaning, remove it
+  cleaned = cleaned.replace(/^[:：\s-]+$/, '');
 
   // Clean up multiple newlines
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
