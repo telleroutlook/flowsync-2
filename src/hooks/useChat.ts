@@ -108,7 +108,28 @@ function parseSuggestionsFromResponse(text: string): ActionableSuggestion[] {
 
 // Helper: Clean suggestions from response text
 function cleanResponseText(text: string): string {
-  return text.replace(/```suggestions\s*(\[.*?\])\s*```/gs, '').trim();
+  let cleaned = text;
+
+  // Remove code block format: ```suggestions[...]```
+  cleaned = cleaned.replace(/```suggestions\s*(\[.*?\])\s*```/gs, '');
+
+  // Remove plain format: suggestions\n{...} or suggestions: {...}
+  cleaned = cleaned.replace(/suggestions\s*[:\n]*\s*(\[[\s\S]*?\])/g, '');
+
+  // Remove any remaining JSON-like suggestions at the end
+  cleaned = cleaned.replace(/[\n]*\{?\s*"text"\s*:/g, (match) => {
+    // Check if this looks like the start of suggestions JSON
+    const index = cleaned.indexOf(match);
+    if (index > cleaned.length - 1000) { // Only if near the end
+      return '\n'; // Replace with newline
+    }
+    return match;
+  });
+
+  // Clean up multiple newlines
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+  return cleaned.trim();
 }
 
 // Create API client for tool handlers

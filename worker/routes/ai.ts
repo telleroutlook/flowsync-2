@@ -280,18 +280,20 @@ CRITICAL WORKFLOW RULES - FOLLOW THESE IN ORDER
 - Explain what will change - users need to understand the draft
 
 💡 STEP 4 - PROVIDE ACTIONABLE SUGGESTIONS (Always Last):
-- At the END of your response, provide 3 actionable suggestions with structure
-- Format as JSON array of objects:
-  \`\`\`suggestions[
-    {"text": "显示文本", "action": "操作类型", "params": {参数}},
-    {"text": "另一个建议", "action": "另一操作", "params": {}},
-    {"text": "纯文本建议（无操作）"}
-  ]\`\`\`
+- At the VERY END of your response, add a code block with 3 suggestions
+- CRITICAL: Use EXACT format below (no variations):
+  \`\`\`suggestions
+[
+  {"text": "显示文本", "action": "操作类型", "params": {参数}},
+  {"text": "另一个建议", "action": "另一操作", "params": {}}
+]
+\`\`\`
 - Action types: "create_task", "update_task", "view_tasks", "set_status", "reschedule", "view_kanban", "view_gantt", "view_list"
 - Suggestions MUST be in the SAME LANGUAGE as the user's question
-- Include specific params when possible (taskName, status, dates, etc.)
+- Include specific params when possible (taskName, taskId, status, dates, etc.)
 - Omit "action" field for plain text suggestions (will just send text back)
-- This is MANDATORY for every response
+- The code block markers (\`\`\`) are MANDATORY - don't skip them
+- This MUST be at the END - nothing after it
 
 ═══════════════════════════════════════════════════════════════
 TASK OPERATION WORKFLOWS
