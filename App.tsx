@@ -516,33 +516,35 @@ function App() {
           </div>
 
           {/* View Switcher */}
-          <Button
-            variant={viewMode === 'BOARD' ? 'outline' : 'ghost'}
-            size="sm"
-            onClick={() => setViewMode('BOARD')}
-            className="h-7 px-2 md:h-8 md:px-3 text-xs"
-          >
-            <Grid className="w-4 h-4 md:mr-2" />
-            <span className="hidden md:inline">{t('app.view.board')}</span>
-          </Button>
-          <Button
-            variant={viewMode === 'LIST' ? 'outline' : 'ghost'}
-            size="sm"
-            onClick={() => setViewMode('LIST')}
-            className="h-7 px-2 md:h-8 md:px-3 text-xs"
-          >
-            <ListIcon className="w-4 h-4 md:mr-2" />
-            <span className="hidden md:inline">{t('app.view.list')}</span>
-          </Button>
-          <Button
-            variant={viewMode === 'GANTT' ? 'outline' : 'ghost'}
-            size="sm"
-            onClick={() => setViewMode('GANTT')}
-            className="h-7 px-2 md:h-8 md:px-3 text-xs"
-          >
-            <Calendar className="w-4 h-4 md:mr-2" />
-            <span className="hidden md:inline">{t('app.view.gantt')}</span>
-          </Button>
+          <div className="flex flex-nowrap gap-1">
+            <Button
+              variant={viewMode === 'BOARD' ? 'outline' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('BOARD')}
+              className="h-7 px-2 md:h-8 md:px-3 text-xs"
+            >
+              <Grid className="w-4 h-4 md:mr-2" />
+              <span className="hidden md:inline">{t('app.view.board')}</span>
+            </Button>
+            <Button
+              variant={viewMode === 'LIST' ? 'outline' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('LIST')}
+              className="h-7 px-2 md:h-8 md:px-3 text-xs"
+            >
+              <ListIcon className="w-4 h-4 md:mr-2" />
+              <span className="hidden md:inline">{t('app.view.list')}</span>
+            </Button>
+            <Button
+              variant={viewMode === 'GANTT' ? 'outline' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('GANTT')}
+              className="h-7 px-2 md:h-8 md:px-3 text-xs"
+            >
+              <Calendar className="w-4 h-4 md:mr-2" />
+              <span className="hidden md:inline">{t('app.view.gantt')}</span>
+            </Button>
+          </div>
 
           {/* Zoom Panel */}
           <div className="flex items-center flex-wrap gap-1 bg-background/50 rounded-lg border border-border-subtle px-2 py-1">
