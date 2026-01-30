@@ -354,10 +354,10 @@ class AIToolRegistry {
 function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variables }>): ToolDefinition[] {
   const workspaceId = c.get('workspace')?.id ?? PUBLIC_WORKSPACE_ID;
   return [
-    // Read-only tools
+    // Read-only tools - Always start with these to understand context
     {
       name: 'listProjects',
-      description: 'List all projects with ids, names, and descriptions.',
+      description: 'List ALL available projects to show the user what projects exist. Use this FIRST when the user asks about projects or wants to work with tasks without specifying a project.',
       parameters: { type: 'object', properties: {} },
       category: 'read',
       handler: async ({ db }) => {
@@ -372,7 +372,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     },
     {
       name: 'getProject',
-      description: 'Fetch a single project by id.',
+      description: 'Get detailed information about a SPECIFIC project by its ID. Use this after listProjects when the user wants details about a particular project.',
       parameters: {
         type: 'object',
         properties: { id: commonSchemas.entityId },
@@ -396,7 +396,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     },
     {
       name: 'listTasks',
-      description: 'List tasks with optional filters and pagination.',
+      description: 'List tasks with filters. Use this to show tasks to the user, analyze project state, or understand task distribution. Supports filtering by status, priority, assignee, dates, and keyword search.',
       parameters: {
         type: 'object',
         properties: {
@@ -480,7 +480,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     },
     {
       name: 'searchTasks',
-      description: 'Search tasks by keyword and optional filters.',
+      description: 'Search for EXISTING tasks before creating or updating. CRITICAL: ALWAYS call this FIRST when the user mentions a task by title or keyword to find if it already exists. Supports the same filters as listTasks.',
       parameters: {
         type: 'object',
         properties: {
@@ -489,8 +489,8 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
         },
       },
       category: 'read',
+      // Reuse listTasks handler - they are functionally identical
       handler: async ({ db, args }) => {
-        // searchTasks is an alias to listTasks with different default behavior
         const { tasks, projects } = await import('../db/schema');
         const { and, eq, gte, lte, like, or, sql } = await import('drizzle-orm');
         const { toTaskRecord } = await import('../services/serializers');
@@ -565,7 +565,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     },
     {
       name: 'getTask',
-      description: 'Fetch a single task by id.',
+      description: 'Get COMPLETE details of a SPECIFIC task by its ID. Use this before updating a task to see its current values. ALWAYS call getTask before updateTask to understand what you are changing.',
       parameters: {
         type: 'object',
         properties: { id: commonSchemas.entityId },
@@ -594,10 +594,10 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
       },
     },
 
-    // Write tools (create drafts)
+    // Write tools - These create DRAFTS that require user approval
     {
       name: 'createProject',
-      description: 'Create a new project. Creates a draft that requires user approval.',
+      description: 'Create a NEW project. This creates a DRAFT that requires user approval before taking effect. Only use when the user wants to create an entirely new project.',
       parameters: {
         type: 'object',
         properties: {
@@ -627,7 +627,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     },
     {
       name: 'updateProject',
-      description: 'Update an existing project. Creates a draft that requires user approval.',
+      description: 'Update an EXISTING project. This creates a DRAFT that requires user approval. Use getProject FIRST to see current values before updating.',
       parameters: {
         type: 'object',
         properties: {
@@ -659,7 +659,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     },
     {
       name: 'deleteProject',
-      description: 'Delete a project. Creates a draft that requires user approval.',
+      description: 'Delete a project and ALL its tasks. This creates a DRAFT that requires user approval. WARNING: This is destructive - confirm with the user before using.',
       parameters: {
         type: 'object',
         properties: {
@@ -685,7 +685,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     },
     {
       name: 'createTask',
-      description: 'Create a NEW task. IMPORTANT: Only use this for tasks that DO NOT exist yet. If the user refers to "this task" or wants to modify an existing task, use updateTask instead. You MUST call searchTasks first to verify the task does not exist.',
+      description: 'Create a NEW task that does NOT exist yet. CRITICAL RULE: You MUST call searchTasks FIRST to verify the task does not exist. If the user says "this task" or refers to an existing task, use updateTask instead. Creates a DRAFT requiring approval.',
       parameters: {
         type: 'object',
         properties: {
@@ -729,7 +729,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     },
     {
       name: 'updateTask',
-      description: 'Update an EXISTING task. Use this when the user refers to "this task", "the task", or wants to modify/set attributes of an existing task. Creates a draft that requires user approval.',
+      description: 'Update an EXISTING task. Use when the user says "this task", "the task", or wants to change attributes of a task they mentioned. CRITICAL: ALWAYS call getTask FIRST to see current values. Creates a DRAFT requiring approval.',
       parameters: {
         type: 'object',
         properties: {
@@ -770,7 +770,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     },
     {
       name: 'deleteTask',
-      description: 'Delete a task. Creates a draft that requires user approval.',
+      description: 'Delete a task permanently. Creates a DRAFT that requires user approval. WARNING: Destructive action - use updateTask to set status to DONE instead if appropriate.',
       parameters: {
         type: 'object',
         properties: {
@@ -796,7 +796,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     },
     {
       name: 'planChanges',
-      description: 'Create a draft with multiple related actions at once. Use this for making multiple changes together that should be approved as a group.',
+      description: 'Create MULTIPLE related changes in a SINGLE draft for batch approval. Use this when making several task/project changes together that should be approved as a group. More efficient than multiple individual create/update/delete calls.',
       parameters: {
         type: 'object',
         properties: {
@@ -841,10 +841,10 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
       },
     },
 
-    // Action tools
+    // Action tools - Execute or suggest actions
     {
       name: 'applyChanges',
-      description: 'Apply a previously created draft by draftId.',
+      description: 'Apply a previously created draft by its ID. This executes the draft actions. Only use when the user explicitly approves or says "apply", "approve", "confirm".',
       parameters: {
         type: 'object',
         properties: {
@@ -860,23 +860,16 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     },
     {
       name: 'suggestActions',
-      description: 'Provide a list of suggested next actions for the user. Use this to offer concrete, executable options based on the current context.',
+      description: 'MUST BE CALLED LAST: Always call this tool at the END of every response to provide 3 relevant, actionable next steps. The frontend will analyze project state and generate smart suggestions.',
       parameters: {
         type: 'object',
-        properties: {
-          suggestions: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'List of suggested actions (e.g., "Create a new task", "Update project status")',
-          },
-        },
-        required: ['suggestions'],
+        properties: {},
       },
-      category: 'read', // Using 'read' so it can be called by the AI during the conversation flow
-      handler: async ({ args }) => {
+      category: 'read',
+      handler: async () => {
         return JSON.stringify({
           success: true,
-          data: args.suggestions,
+          message: 'Frontend will generate context-aware suggestions.',
         });
       },
     },
