@@ -517,7 +517,7 @@ function App() {
 
           {/* View Switcher */}
           <Button
-            variant={viewMode === 'BOARD' ? 'secondary' : 'ghost'}
+            variant={viewMode === 'BOARD' ? 'outline' : 'ghost'}
             size="sm"
             onClick={() => setViewMode('BOARD')}
             className="h-7 px-2 md:h-8 md:px-3 text-xs"
@@ -526,7 +526,7 @@ function App() {
             <span className="hidden md:inline">{t('app.view.board')}</span>
           </Button>
           <Button
-            variant={viewMode === 'LIST' ? 'secondary' : 'ghost'}
+            variant={viewMode === 'LIST' ? 'outline' : 'ghost'}
             size="sm"
             onClick={() => setViewMode('LIST')}
             className="h-7 px-2 md:h-8 md:px-3 text-xs"
@@ -535,7 +535,7 @@ function App() {
             <span className="hidden md:inline">{t('app.view.list')}</span>
           </Button>
           <Button
-            variant={viewMode === 'GANTT' ? 'secondary' : 'ghost'}
+            variant={viewMode === 'GANTT' ? 'outline' : 'ghost'}
             size="sm"
             onClick={() => setViewMode('GANTT')}
             className="h-7 px-2 md:h-8 md:px-3 text-xs"
