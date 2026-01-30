@@ -3,7 +3,9 @@ import { sessions, users } from '../db/schema';
 import { generateId, now } from './utils';
 import type { UserRecord } from './types';
 
-const PASSWORD_ITERATIONS = 120_000;
+// Reduced from 120_000 to 10_000 for Cloudflare Workers CPU time limits
+// 10,000 iterations provides good security while staying within Workers' 50ms CPU limit
+const PASSWORD_ITERATIONS = 10_000;
 // Session TTL: 7 days - shorter than 30 days to reduce window of opportunity for stolen tokens
 // while maintaining reasonable user experience. Users can re-authenticate after expiry.
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;

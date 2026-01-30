@@ -116,8 +116,8 @@ const getCsrfToken = (): string | undefined => {
   return csrfCookie?.split('=')[1]?.trim();
 };
 
-const buildHeaders = (headers?: HeadersInit, method?: string) => {
-  const merged = new Headers(buildAuthHeaders());
+const buildHeaders = (headers?: HeadersInit, method?: string, workspaceId?: string) => {
+  const merged = new Headers(buildAuthHeaders(false, workspaceId));
 
   // Add CSRF token header for state-changing operations (POST/PATCH/DELETE)
   // This implements the double-submit cookie pattern for CSRF protection
@@ -136,7 +136,24 @@ const buildHeaders = (headers?: HeadersInit, method?: string) => {
   return merged;
 };
 
-const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> => {
+/**
+ * Initialize CSRF token by fetching from server
+ * Should be called on app startup to ensure CSRF token is available
+ */
+export const initCsrfToken = async (): Promise<void> => {
+  try {
+    await fetchJson<{ token: string }>('/api/auth/csrf-token');
+  } catch (error) {
+    // Log but don't throw - CSRF token will be set on first GET request anyway
+    console.warn('Failed to initialize CSRF token:', error);
+  }
+};
+
+interface FetchInitWithOptions extends RequestInit {
+  workspaceId?: string;
+}
+
+const fetchJson = async <T>(input: RequestInfo, init?: FetchInitWithOptions): Promise<T> => {
   const requestKey = getRequestKey(input, init);
   const url = typeof input === 'string' ? input : input.url;
 
@@ -153,7 +170,7 @@ const fetchJson = async <T>(input: RequestInfo, init?: RequestInit): Promise<T> 
       let text = '';
 
       try {
-        response = await fetchWithRetry(input, { ...init, headers: buildHeaders(init?.headers, init?.method) });
+        response = await fetchWithRetry(input, { ...init, headers: buildHeaders(init?.headers, init?.method, init?.workspaceId) });
         text = await response.text();
       } catch (error) {
         if (error instanceof TypeError && error.message.includes('fetch')) {
@@ -325,11 +342,12 @@ export const apiService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
-  applyDraft: (id: string, actor: Draft['createdBy']) =>
+  applyDraft: (id: string, actor: Draft['createdBy'], workspaceId?: string) =>
     fetchJson<{ draft: Draft; results: DraftAction[] }>(`/api/drafts/${id}/apply`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ actor }),
+      workspaceId,
     }),
   discardDraft: (id: string) =>
     fetchJson<Draft>(`/api/drafts/${id}/discard`, {

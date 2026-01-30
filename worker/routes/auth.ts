@@ -77,6 +77,7 @@ authRoute.post('/register', validatedJson(credentialsSchema), async (c) => {
   const data = c.req.valid('json');
   const existing = await getUserByUsername(c.get('db'), data.username);
   if (existing) return jsonError(c, 'USER_EXISTS', 'Username already exists.', 409);
+
   const user = await createUser(c.get('db'), { username: data.username, password: data.password });
   const session = await createSession(c.get('db'), user.id);
   return jsonOk(c, { user, token: session.token, expiresAt: session.expiresAt }, 201);
@@ -133,4 +134,27 @@ authRoute.post('/logout', async (c) => {
   if (!token) return jsonError(c, 'INVALID_TOKEN', 'Missing auth token.', 400);
   await revokeSession(c.get('db'), token);
   return jsonOk(c, { success: true });
+});
+
+/**
+ * CSRF Token endpoint
+ * Explicitly fetches a CSRF token for state-changing operations.
+ * This endpoint returns a fresh CSRF token and sets it as a cookie.
+ *
+ * Frontend should call this on app initialization to ensure CSRF token is available.
+ */
+authRoute.get('/csrf-token', async (c) => {
+  // Generate a fresh CSRF token
+  const token = crypto.randomUUID();
+
+  // Check if the request is over HTTPS
+  const isSecure = c.req.header('cf-visitor')?.includes('https') ||
+                   c.req.url.startsWith('https://') ||
+                   c.req.raw.url.startsWith('https://');
+
+  // Set the cookie with Secure attribute only for HTTPS
+  const secureFlag = isSecure ? 'Secure; ' : '';
+  c.header('set-cookie', `csrf_token=${token}; ${secureFlag}SameSite=Strict; Path=/; Max-Age=3600`);
+
+  return jsonOk(c, { token });
 });

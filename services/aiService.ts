@@ -7,12 +7,13 @@ const getCsrfToken = (): string | undefined => {
   return csrfCookie?.split('=')[1]?.trim();
 };
 
-export function buildAuthHeaders(includeCsrf = false): Headers {
+export function buildAuthHeaders(includeCsrf = false, workspaceId?: string): Headers {
   const headers = new Headers({ 'Content-Type': 'application/json' });
   const token = storageGet('authToken');
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  const workspaceId = storageGet('activeWorkspaceId');
-  if (workspaceId) headers.set('X-Workspace-Id', workspaceId);
+  // Use provided workspaceId or fall back to localStorage
+  const effectiveWorkspaceId = workspaceId ?? storageGet('activeWorkspaceId');
+  if (effectiveWorkspaceId) headers.set('X-Workspace-Id', effectiveWorkspaceId);
 
   // Add CSRF token header for state-changing operations (POST/PATCH/DELETE)
   if (includeCsrf) {

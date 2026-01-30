@@ -144,7 +144,15 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
     if (isReadOperation) {
       // NOT HttpOnly - JavaScript must read this cookie and send it in X-CSRF-Token header
       const token = crypto.randomUUID();
-      c.header('set-cookie', `csrf_token=${token}; Secure; SameSite=Strict; Path=/; Max-Age=3600`);
+
+      // Check if the request is over HTTPS
+      const isSecure = c.req.header('cf-visitor')?.includes('https') ||
+                       c.req.url.startsWith('https://') ||
+                       c.req.raw.url.startsWith('https://');
+
+      // Set the cookie with Secure attribute only for HTTPS
+      const secureFlag = isSecure ? 'Secure; ' : '';
+      c.header('set-cookie', `csrf_token=${token}; ${secureFlag}SameSite=Strict; Path=/; Max-Age=3600`);
     }
   });
 

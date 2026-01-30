@@ -87,7 +87,7 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
       setDrafts(prev => [...prev, result.draft]);
       
       if (options.autoApply) {
-        const applied = await apiService.applyDraft(result.draft.id, options.createdBy);
+        const applied = await apiService.applyDraft(result.draft.id, options.createdBy, result.draft.workspaceId);
         setDrafts(prev => prev.map(draft => (draft.id === applied.draft.id ? applied.draft : draft)));
         // Invalidate project cache if any project actions were applied
         if (result.draft.actions.some(a => a.entityType === 'project')) {
@@ -131,13 +131,13 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
       let projectModified = false;
 
       for (const id of uniqueIds) {
-        const result = await apiService.applyDraft(id, 'user');
+        const draft = drafts.find(d => d.id === id);
+        const result = await apiService.applyDraft(id, 'user', draft?.workspaceId);
         setDrafts(prev => {
           const exists = prev.some(draft => draft.id === result.draft.id);
           if (!exists) return [...prev, result.draft];
           return prev.map(draft => (draft.id === result.draft.id ? result.draft : draft));
         });
-        const draft = drafts.find(d => d.id === id);
         if (draft?.actions.some(a => a.entityType === 'project')) {
           projectModified = true;
         }
