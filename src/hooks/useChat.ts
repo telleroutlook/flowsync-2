@@ -52,6 +52,40 @@ function isRetryableOpenAIError(text: string): boolean {
   return text.includes('OpenAI request failed.');
 }
 
+// Helper: Parse suggestions from AI response text
+function parseSuggestionsFromResponse(text: string): string[] {
+  const suggestions: string[] = [];
+
+  // Try to match ```suggestions["s1", "s2", "s3"]```
+  const jsonMatch = text.match(/```suggestions\s*\[([^\]]+)\]/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(`[${jsonMatch[1]}]`);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.slice(0, 3).map(s => String(s).trim());
+      }
+    } catch {
+      // JSON parse failed, try alternative methods
+    }
+  }
+
+  // Fallback: try to extract quoted suggestions from text
+  const quotedMatches = text.matchAll(/"([^"]{5,50})"/g);
+  for (const match of quotedMatches) {
+    if (match[1]) {
+      suggestions.push(match[1].trim());
+      if (suggestions.length >= 3) break;
+    }
+  }
+
+  return suggestions.slice(0, 3);
+}
+
+// Helper: Clean suggestions from response text
+function cleanResponseText(text: string): string {
+  return text.replace(/```suggestions\s*\[[^\]]+\]\s*```/g, '').trim();
+}
+
 // Create API client for tool handlers
 function createApiClient(): ApiClient {
   return {
@@ -252,6 +286,13 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
         let suggestions: string[] = [];
         let hasToolOutputs = false;
 
+        // Parse suggestions from AI response text
+        const parsedSuggestions = parseSuggestionsFromResponse(finalText);
+        if (parsedSuggestions.length > 0) {
+          suggestions = parsedSuggestions;
+          finalText = cleanResponseText(finalText);
+        }
+
         if (response.toolCalls && response.toolCalls.length > 0) {
           recordStep(currentT('processing.executing_tool_call'));
 
@@ -266,7 +307,10 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
             }
           );
 
-          suggestions = result.suggestions ?? [];
+          // Only use tool-generated suggestions if AI didn't provide any
+          if (suggestions.length === 0) {
+            suggestions = result.suggestions ?? [];
+          }
 
           if (result.shouldRetry && attempt < MAX_RETRIES) {
             const nextHistory: AiHistoryItem[] = [
@@ -285,7 +329,10 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
 
           if (result.draftActions.length > 0) {
             recordStep(currentT('processing.submitting_draft'));
-            suggestions = [];
+            // Don't clear suggestions if AI already provided them
+            if (parsedSuggestions.length === 0) {
+              suggestions = [];
+            }
 
             try {
               const draft = await currentSubmitDraft(result.draftActions, {

@@ -841,7 +841,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
       },
     },
 
-    // Action tools - Execute or suggest actions
+    // Action tools - Execute drafts
     {
       name: 'applyChanges',
       description: 'Apply a previously created draft by its ID. This executes the draft actions. Only use when the user explicitly approves or says "apply", "approve", "confirm".',
@@ -856,21 +856,6 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
       category: 'action',
       handler: async () => {
         return JSON.stringify({ success: true, message: 'Draft applied successfully.' });
-      },
-    },
-    {
-      name: 'suggestActions',
-      description: 'MUST BE CALLED LAST: Always call this tool at the END of every response to provide 3 relevant, actionable next steps. The frontend will analyze project state and generate smart suggestions.',
-      parameters: {
-        type: 'object',
-        properties: {},
-      },
-      category: 'read',
-      handler: async () => {
-        return JSON.stringify({
-          success: true,
-          message: 'Frontend will generate context-aware suggestions.',
-        });
       },
     },
   ];
