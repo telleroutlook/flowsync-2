@@ -1353,7 +1353,7 @@ export const applyDraft = async (
 
     // Mark draft as failed with details
     await db.update(drafts).set({
-      status: 'pending', // Keep pending so user can retry
+      status: 'failed', // Mark as failed so it can be distinguished from pending drafts
     }).where(eq(drafts.id, draft.id));
 
     // Construct comprehensive error message
@@ -1387,4 +1387,72 @@ export const refreshDraftActions = async (
   const next = { ...draft, actions: planned.actions };
   await db.update(drafts).set({ actions: next.actions }).where(eq(drafts.id, id));
   return next;
+};
+
+/**
+ * Bulk delete drafts by status and optional age criteria
+ * @param db - Database instance
+ * @param workspaceId - Workspace ID for scoping
+ * @param options - Cleanup options
+ * @returns Number of drafts deleted
+ */
+export const cleanupDrafts = async (
+  db: ReturnType<typeof import('../db').getDb>,
+  workspaceId: string,
+  options: {
+    /** Draft statuses to clean up (default: ['failed', 'discarded']) */
+    statuses?: Array<'failed' | 'discarded' | 'pending'>;
+    /** Only delete drafts older than this many milliseconds (default: 7 days) */
+    olderThanMs?: number;
+    /** Maximum number of drafts to delete (default: 100, for safety) */
+    limit?: number;
+  } = {}
+): Promise<{ deletedCount: number; details: Array<{ id: string; status: string; createdAt: number }> }> => {
+  const {
+    statuses = ['failed', 'discarded'],
+    olderThanMs = 7 * 24 * 60 * 60 * 1000, // 7 days
+    limit = 100,
+  } = options;
+
+  const cutoffTime = now() - olderThanMs;
+
+  // Build WHERE clause
+  const { and, inArray, lt } = await import('drizzle-orm');
+  const conditions = [
+    eq(drafts.workspaceId, workspaceId),
+    inArray(drafts.status, statuses),
+    lt(drafts.createdAt, cutoffTime),
+  ];
+
+  const whereClause = and(...conditions);
+
+  // Fetch drafts to be deleted (for logging/details)
+  const draftsToDelete = await db
+    .select()
+    .from(drafts)
+    .where(whereClause)
+    .limit(limit);
+
+  if (draftsToDelete.length === 0) {
+    return { deletedCount: 0, details: [] };
+  }
+
+  // Delete drafts
+  await db.delete(drafts).where(
+    and(
+      inArray(
+        drafts.id,
+        draftsToDelete.map(d => d.id)
+      )
+    )
+  );
+
+  return {
+    deletedCount: draftsToDelete.length,
+    details: draftsToDelete.map(d => ({
+      id: d.id,
+      status: d.status,
+      createdAt: d.createdAt,
+    })),
+  };
 };

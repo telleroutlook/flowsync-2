@@ -84,7 +84,7 @@ export interface Draft {
   id: string;
   workspaceId?: string;
   projectId: string | null;
-  status: 'pending' | 'applied' | 'discarded';
+  status: 'pending' | 'applied' | 'discarded' | 'failed';
   actions: DraftAction[];
   createdAt: number;
   createdBy: 'user' | 'agent' | 'system';

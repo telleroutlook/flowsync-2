@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
 import { jsonError, jsonOk, requireWorkspace } from './helpers';
 import { workspaceMiddleware } from './middleware';
-import { applyDraft, createDraft, discardDraft, getDraftById, listDrafts } from '../services/draftService';
+import { applyDraft, createDraft, discardDraft, getDraftById, listDrafts, cleanupDrafts } from '../services/draftService';
 import { recordLog } from '../services/logService';
 import { generateId } from '../services/utils';
 import type { DraftAction } from '../services/types';
@@ -29,6 +29,12 @@ const createDraftSchema = z.object({
 
 const applySchema = z.object({
   actor: z.enum(['user', 'agent', 'system']).default('user'),
+});
+
+const cleanupSchema = z.object({
+  statuses: z.array(z.enum(['failed', 'discarded', 'pending'])).optional(),
+  olderThanMs: z.number().optional(),
+  limit: z.number().optional(),
 });
 
 draftsRoute.get('/', async (c) => {
@@ -99,4 +105,29 @@ draftsRoute.post('/:id/discard', async (c) => {
   const draft = await discardDraft(c.get('db'), c.req.param('id'), workspace.id);
   if (!draft) return jsonError(c, 'NOT_FOUND', 'Draft not found.', 404);
   return jsonOk(c, draft);
+});
+
+draftsRoute.delete('/cleanup', zValidator('json', cleanupSchema), async (c) => {
+  const error = requireWorkspace(c);
+  if (error) return error;
+  const workspace = c.get('workspace')!;
+  const payload = c.req.valid('json') as z.infer<typeof cleanupSchema>;
+
+  try {
+    const result = await cleanupDrafts(c.get('db'), workspace.id, {
+      statuses: payload.statuses,
+      olderThanMs: payload.olderThanMs,
+      limit: payload.limit,
+    });
+
+    await recordLog(c.get('db'), 'draft_cleanup', {
+      workspaceId: workspace.id,
+      deletedCount: result.deletedCount,
+      details: result.details,
+    });
+
+    return jsonOk(c, result);
+  } catch (error) {
+    return jsonError(c, 'CLEANUP_FAILED', error instanceof Error ? error.message : 'Cleanup failed.', 500);
+  }
 });
