@@ -8,7 +8,7 @@ import { Priority, TaskStatus } from '../../types';
 // Priority color classes for badges and indicators
 export const PRIORITY_COLORS: Record<Priority, string> = {
   [Priority.LOW]: 'text-success bg-success/10 border-success/20',
-  [Priority.MEDIUM]: 'text-critical bg-critical/10 border-critical/20',
+  [Priority.MEDIUM]: 'text-warning bg-warning/10 border-warning/20',
   [Priority.HIGH]: 'text-negative bg-negative/10 border-negative/20',
 } as const;
 

@@ -3,7 +3,7 @@ import { generateId, now } from './utils';
 
 export const recordLog = async (
   db: ReturnType<typeof import('../db').getDb>,
-  kind: 'ai_request' | 'ai_response' | 'tool_execution' | 'error',
+  kind: 'ai_request' | 'ai_response' | 'tool_execution' | 'error' | 'draft_cleanup',
   payload: Record<string, unknown>
 ) => {
   try {
