@@ -103,6 +103,33 @@ function parseSuggestionsFromResponse(text: string): ActionableSuggestion[] {
     }
   }
 
+  // Last resort: try to parse a trailing JSON array of suggestions
+  const trailingArrayMatch = text.match(/(\[[\s\S]*\])\s*$/);
+  if (trailingArrayMatch && trailingArrayMatch[1]) {
+    try {
+      const parsed = JSON.parse(trailingArrayMatch[1]);
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed.length <= 6) {
+        const mapped = parsed.map((s: unknown) => {
+          if (typeof s === 'string') return { text: s };
+          if (s && typeof s === 'object' && 'text' in s) {
+            return {
+              text: String((s as { text: string }).text),
+              action: (s as { action?: string })?.action,
+              params: (s as { params?: Record<string, unknown> })?.params,
+            };
+          }
+          return null;
+        }).filter((s): s is ActionableSuggestion => !!s && s.text.length > 0);
+
+        if (mapped.length > 0 && mapped.length === parsed.length) {
+          return mapped.slice(0, 3);
+        }
+      }
+    } catch {
+      // Ignore invalid JSON
+    }
+  }
+
   return suggestions.slice(0, 3);
 }
 
@@ -124,6 +151,22 @@ function cleanResponseText(text: string): string {
       return '\n'; // Replace with newline
     }
     return match;
+  });
+
+  // Remove trailing JSON array if it looks like suggestions
+  cleaned = cleaned.replace(/(\[[\s\S]*\])\s*$/g, (match) => {
+    try {
+      const parsed = JSON.parse(match);
+      if (!Array.isArray(parsed) || parsed.length === 0 || parsed.length > 6) return match;
+      const allSuggestions = parsed.every((item) => {
+        if (typeof item === 'string') return true;
+        if (item && typeof item === 'object' && 'text' in item) return true;
+        return false;
+      });
+      return allSuggestions ? '' : match;
+    } catch {
+      return match;
+    }
   });
 
   // Clean up multiple newlines
