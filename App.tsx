@@ -239,6 +239,7 @@ function App() {
   // 4. Drafts
   const {
     pendingDraft, draftWarnings, isProcessingDraft,
+    conflictDialog, setConflictDialog,
     submitDraft, handleApplyDraft, handleDiscardDraft
   } = useDrafts({
     activeProjectId,
@@ -248,6 +249,26 @@ function App() {
     appendModelMessage,
     onProjectModified: invalidateCache
   });
+
+  // Conflict resolution handlers
+  const handleConflictAutoFix = useCallback(async () => {
+    if (!conflictDialog) return;
+    console.log('[App] Auto-fixing conflicts', { draftId: conflictDialog.draftId });
+    await handleApplyDraft(conflictDialog.draftId, { autoFix: true });
+    setConflictDialog(null);
+  }, [conflictDialog, handleApplyDraft, setConflictDialog]);
+
+  const handleConflictForce = useCallback(async () => {
+    if (!conflictDialog) return;
+    console.log('[App] Force applying draft', { draftId: conflictDialog.draftId });
+    await handleApplyDraft(conflictDialog.draftId, { force: true });
+    setConflictDialog(null);
+  }, [conflictDialog, handleApplyDraft, setConflictDialog]);
+
+  const handleConflictCancel = useCallback(() => {
+    console.log('[App] Canceling conflict resolution');
+    setConflictDialog(null);
+  }, [setConflictDialog]);
 
   // 5. Chat Logic
   const {
@@ -858,6 +879,10 @@ function App() {
           project={activeProject ?? undefined}
           tasks={activeTasks}
           isProcessingDraft={isProcessingDraft}
+          conflictDialog={conflictDialog}
+          onConflictAutoFix={handleConflictAutoFix}
+          onConflictForce={handleConflictForce}
+          onConflictCancel={handleConflictCancel}
         />
       </div>
 

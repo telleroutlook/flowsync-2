@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiService } from '../../services/apiService';
 import { Draft, DraftAction } from '../../types';
+import type { ConflictInfo } from '../../components/ConflictDialog';
 import { useI18n } from '../i18n';
 import { getErrorMessage } from '../utils/error';
 
@@ -13,6 +14,12 @@ interface UseDraftsProps {
   onProjectModified?: () => void;
 }
 
+interface ConflictDialogState {
+  draftId: string;
+  conflicts: ConflictInfo[];
+  canAutoFix: boolean;
+}
+
 interface UseDraftsResult {
   drafts: Draft[];
   pendingDraft: Draft | null;
@@ -20,12 +27,14 @@ interface UseDraftsResult {
   setPendingDraftId: (id: string | null) => void;
   draftWarnings: string[];
   isProcessingDraft: boolean;
+  conflictDialog: ConflictDialogState | null;
+  setConflictDialog: (state: ConflictDialogState | null) => void;
   refreshDrafts: () => Promise<void>;
   submitDraft: (
     actions: DraftAction[],
     options: { reason?: string; createdBy: Draft['createdBy']; autoApply?: boolean; silent?: boolean }
   ) => Promise<Draft>;
-  handleApplyDraft: (draftId: string) => Promise<void>;
+  handleApplyDraft: (draftId: string, options?: { autoFix?: boolean; force?: boolean }) => Promise<void>;
   handleDiscardDraft: (draftId: string) => Promise<void>;
 }
 
@@ -35,6 +44,7 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
   const [pendingDraftId, setPendingDraftId] = useState<string | null>(null);
   const [draftWarnings, setDraftWarnings] = useState<string[]>([]);
   const [isProcessingDraft, setIsProcessingDraft] = useState(false);
+  const [conflictDialog, setConflictDialog] = useState<ConflictDialogState | null>(null);
 
   // Track draft operations to prevent race conditions
   const draftOperationRef = useRef<Set<string>>(new Set());
@@ -126,8 +136,8 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     }
   }, [activeProjectId, refreshData, refreshAuditLogs, appendSystemMessage, onProjectModified, t]);
 
-  const handleApplyDraft = useCallback(async (draftId: string) => {
-    console.log('[handleApplyDraft] Called with draftId:', draftId);
+  const handleApplyDraft = useCallback(async (draftId: string, options?: { autoFix?: boolean; force?: boolean }) => {
+    console.log('[handleApplyDraft] Called with draftId:', draftId, 'options:', options);
     console.log('[handleApplyDraft] pendingDraft:', pendingDraft);
     console.log('[handleApplyDraft] All drafts:', drafts.map(d => ({ id: d.id, status: d.status })));
 
@@ -153,14 +163,28 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
         });
 
         const draft = drafts.find(d => d.id === id);
-        const result = await apiService.applyDraft(id, 'user', draft?.workspaceId);
+        const result = await apiService.applyDraft(id, 'user', draft?.workspaceId, options);
 
         console.log('[handleApplyDraft] Draft applied with result', {
           draftId: id,
           resultStatus: result.draft.status,
           resultsCount: result.results?.length,
           summary: result.draft.summary,
+          hasConflicts: result.conflicts,
         });
+
+        // Handle conflict response
+        if (result.conflicts && result.conflicts.length > 0) {
+          console.log('[handleApplyDraft] Conflicts detected, showing dialog');
+          const canAutoFix = result.conflicts.every(c => c.canAutoFix);
+          setConflictDialog({
+            draftId: id,
+            conflicts: result.conflicts,
+            canAutoFix,
+          });
+          // Early return - don't continue processing
+          return;
+        }
 
         setDrafts(prev => {
           const exists = prev.some(draft => draft.id === result.draft.id);
@@ -312,6 +336,8 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     setPendingDraftId,
     draftWarnings,
     isProcessingDraft,
+    conflictDialog,
+    setConflictDialog,
     refreshDrafts,
     submitDraft,
     handleApplyDraft,

@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { drafts, projects, tasks } from '../db/schema';
 import { toProjectRecord, toTaskRecord } from './serializers';
 import { applyTaskConstraints } from './constraintService';
@@ -6,7 +6,17 @@ import { recordAudit } from './auditService';
 import { createProject, updateProject, deleteProject, getProjectById } from './projectService';
 import { createTask, updateTask, deleteTask, getTaskById } from './taskService';
 import { generateId, now } from './utils';
-import type { DraftAction, DraftRecord, PlanResult, TaskRecord, ProjectRecord, TaskStatus, Priority, DraftStatus } from './types';
+import type {
+  DraftAction,
+  DraftRecord,
+  PlanResult,
+  TaskRecord,
+  ProjectRecord,
+  TaskStatus,
+  Priority,
+  DraftStatus,
+  ConflictInfo
+} from './types';
 
 const toTaskStatus = (value: unknown, fallback: TaskStatus): TaskStatus => {
   if (value === 'TODO' || value === 'IN_PROGRESS' || value === 'DONE') return value;
@@ -1049,6 +1059,320 @@ const classifyError = (error: Error | unknown): ErrorSeverity => {
 };
 
 /**
+ * Result of constraint validation
+ */
+type ConflictValidationResult = {
+  valid: boolean;
+  conflicts: ConflictInfo[];
+  canAutoFix: boolean;
+};
+
+/**
+ * Fetches current state of tasks from database
+ */
+const fetchCurrentTasks = async (
+  db: ReturnType<typeof import('../db').getDb>,
+  taskIds: string[],
+  workspaceId: string
+): Promise<TaskRecord[]> => {
+  if (taskIds.length === 0) return [];
+
+  const rows = await db
+    .select()
+    .from(tasks)
+    .innerJoin(projects, eq(tasks.projectId, projects.id))
+    .where(and(
+      eq(projects.workspaceId, workspaceId),
+      inArray(tasks.id, taskIds)
+    ));
+
+  return rows.map(row => toTaskRecord(row.tasks));
+};
+
+/**
+ * Checks if a task's predecessor constraints are satisfied
+ * @returns Object indicating satisfaction status, message, and proposed fix if violated
+ */
+const checkPredecessorConstraints = (
+  task: TaskRecord,
+  taskMap: Map<string, TaskRecord>
+): { satisfied: boolean; message?: string; fix?: TaskRecord } => {
+  if (!task.predecessors || task.predecessors.length === 0) {
+    return { satisfied: true };
+  }
+
+  // Check for circular references to prevent infinite loops
+  const visited = new Set<string>();
+  const hasCircularRef = (taskId: string, path: Set<string>): boolean => {
+    if (path.has(taskId)) return true; // Found a cycle
+    if (visited.has(taskId)) return false; // Already checked this branch
+
+    visited.add(taskId);
+    const newpath = new Set(path).add(taskId);
+
+    const currentTask = taskMap.get(taskId);
+    if (currentTask?.predecessors) {
+      for (const predId of currentTask.predecessors) {
+        if (hasCircularRef(predId, newpath)) return true;
+      }
+    }
+    return false;
+  };
+
+  if (hasCircularRef(task.id, new Set())) {
+    return {
+      satisfied: false,
+      message: `Task "${task.title}" has circular predecessor dependencies`,
+    };
+  }
+
+  const taskStart = task.startDate ?? task.createdAt;
+  let maxPredecessorEnd = taskStart;
+  const violatingPredecessors: Array<{ id: string; title: string; endDate: number }> = [];
+
+  for (const predId of task.predecessors) {
+    const pred = taskMap.get(predId);
+    if (!pred) continue; // Predecessor not found - will be caught separately
+
+    const predEnd = pred.dueDate ?? (pred.startDate ?? pred.createdAt);
+    if (predEnd > taskStart) {
+      violatingPredecessors.push({
+        id: pred.id,
+        title: pred.title,
+        endDate: predEnd,
+      });
+      maxPredecessorEnd = Math.max(maxPredecessorEnd, predEnd);
+    }
+  }
+
+  if (violatingPredecessors.length > 0) {
+    // Calculate proposed fix
+    const duration = (task.dueDate ?? taskStart) - taskStart;
+    const fixedStart = maxPredecessorEnd;
+    const fixedEnd = Math.max(fixedStart + 86_400_000, fixedStart + duration);
+
+    return {
+      satisfied: false,
+      message: `Task "${task.title}" start date is before predecessor end dates: ${violatingPredecessors.map(p => `${p.title} (${new Date(p.endDate).toISOString().split('T')[0]})`).join(', ')}`,
+      fix: {
+        ...task,
+        startDate: fixedStart,
+        dueDate: fixedEnd,
+      },
+    };
+  }
+
+  return { satisfied: true };
+};
+
+/**
+ * Checks if a task's date order is valid (end > start)
+ * @returns Object indicating satisfaction status, message, and proposed fix if violated
+ */
+const checkDateOrder = (
+  task: TaskRecord
+): { satisfied: boolean; message?: string; fix?: TaskRecord } => {
+  const start = task.startDate ?? task.createdAt;
+  const end = task.dueDate ?? start;
+
+  if (end <= start) {
+    return {
+      satisfied: false,
+      message: `Task "${task.title}" due date is before or equal to start date`,
+      fix: {
+        ...task,
+        startDate: start,
+        dueDate: start + 86_400_000, // Add 1 day
+      },
+    };
+  }
+
+  return { satisfied: true };
+};
+
+/**
+ * Checks if a task was concurrently modified after draft creation
+ * @returns Object indicating satisfaction status, message, and details if violated
+ */
+const checkConcurrentModifications = (
+  action: DraftAction,
+  current: TaskRecord
+): { satisfied: boolean; message?: string; details?: Record<string, unknown> } => {
+  const actionUpdatedAt = (action.after as Record<string, unknown>)?.updatedAt as number | undefined;
+
+  // Check if the action was planned based on stale data
+  if (actionUpdatedAt && current.updatedAt > actionUpdatedAt) {
+    return {
+      satisfied: false,
+      message: `Task was modified after draft was created`,
+      details: {
+        draftBasedOn: new Date(actionUpdatedAt).toISOString(),
+        currentVersion: new Date(current.updatedAt).toISOString(),
+      },
+    };
+  }
+
+  return { satisfied: true };
+};
+
+/**
+ * Validates draft constraints before applying
+ * Detects conflicts and determines if they can be auto-fixed
+ */
+const validateDraftConstraints = async (
+  db: ReturnType<typeof import('../db').getDb>,
+  draft: DraftRecord,
+  workspaceId: string
+): Promise<ConflictValidationResult> => {
+  const conflicts: ConflictInfo[] = [];
+
+  // Collect all task IDs referenced in the draft
+  const affectedTaskIds = draft.actions
+    .filter(a => a.entityType === 'task')
+    .map(a => a.entityId)
+    .filter((id): id is string => Boolean(id));
+
+  // Fetch current state of affected tasks
+  const currentTasks = await fetchCurrentTasks(db, affectedTaskIds, workspaceId);
+  const currentTaskMap = new Map(currentTasks.map(t => [t.id, t]));
+
+  // Check each task action for conflicts
+  for (const action of draft.actions) {
+    if (action.entityType === 'task') {
+      const proposedAfter = action.after as TaskRecord | undefined;
+
+      // Skip actions without 'after' data
+      if (!proposedAfter) {
+        continue;
+      }
+
+      if (action.action === 'update' && action.entityId) {
+        const current = currentTaskMap.get(action.entityId);
+
+        if (!current) {
+          conflicts.push({
+            type: 'TASK_NOT_FOUND',
+            entityId: action.entityId,
+            message: `Task ${action.entityId} no longer exists`,
+            canAutoFix: false,
+          });
+          continue;
+        }
+
+        // Build the proposed task state (merge current with changes)
+        const proposedTask: TaskRecord = {
+          ...current,
+          ...proposedAfter,
+          id: action.entityId, // Ensure ID is preserved
+          projectId: current.projectId, // Preserve project association
+        };
+
+        // Check predecessor constraints
+        const predecessorCheck = checkPredecessorConstraints(proposedTask, currentTaskMap);
+        if (!predecessorCheck.satisfied) {
+          conflicts.push({
+            type: 'PREDECESSOR_CONFLICT',
+            entityId: action.entityId,
+            message: predecessorCheck.message ?? 'Predecessor constraint violation',
+            canAutoFix: !!predecessorCheck.fix, // Can auto-fix only if fix is provided
+            ...(predecessorCheck.fix && { proposedFix: predecessorCheck.fix }),
+          });
+        }
+
+        // Check date order constraints
+        const dateCheck = checkDateOrder(proposedTask);
+        if (!dateCheck.satisfied && dateCheck.fix) {
+          conflicts.push({
+            type: 'DATE_ORDER_CONFLICT',
+            entityId: action.entityId,
+            message: dateCheck.message ?? 'Date order constraint violation',
+            canAutoFix: true,
+            proposedFix: dateCheck.fix,
+          });
+        }
+
+        // Check for concurrent modifications
+        const concurrentCheck = checkConcurrentModifications(action, current);
+        if (!concurrentCheck.satisfied) {
+          conflicts.push({
+            type: 'CONCURRENT_MODIFICATION',
+            entityId: action.entityId,
+            message: concurrentCheck.message!,
+            canAutoFix: false,
+            details: concurrentCheck.details,
+          });
+        }
+      } else if (action.action === 'create') {
+        // For new tasks, only check date order (predecessors will be checked when applied)
+        const dateCheck = checkDateOrder(proposedAfter as TaskRecord);
+        if (!dateCheck.satisfied) {
+          conflicts.push({
+            type: 'DATE_ORDER_CONFLICT',
+            entityId: proposedAfter.id ?? 'unknown',
+            message: dateCheck.message!,
+            canAutoFix: true,
+            proposedFix: dateCheck.fix,
+          });
+        }
+      }
+    }
+  }
+
+  const canAutoFix = conflicts.length > 0 && conflicts.every(c => c.canAutoFix);
+
+  return {
+    valid: conflicts.length === 0,
+    conflicts,
+    canAutoFix,
+  };
+};
+
+/**
+ * Applies auto-fixes to a draft by updating conflicting actions
+ * Returns the updated draft record
+ */
+const applyAutoFixes = async (
+  db: ReturnType<typeof import('../db').getDb>,
+  draft: DraftRecord,
+  conflicts: ConflictInfo[]
+): Promise<DraftRecord> => {
+  const fixedActions = [...draft.actions];
+
+  for (const conflict of conflicts) {
+    if (!conflict.proposedFix) continue;
+
+    const actionIndex = fixedActions.findIndex(
+      a => a.entityId === conflict.entityId && a.entityType === 'task'
+    );
+
+    if (actionIndex >= 0) {
+      const existingAction = fixedActions[actionIndex];
+      if (existingAction) {
+        // Update the action with the fixed task data
+        fixedActions[actionIndex] = {
+          ...existingAction,
+          after: conflict.proposedFix,
+          warnings: [
+            ...(existingAction.warnings ?? []),
+            `Auto-fixed: ${conflict.message}`,
+          ],
+        };
+      }
+    }
+  }
+
+  // Update the draft in database
+  await db.update(drafts)
+    .set({ actions: fixedActions })
+    .where(eq(drafts.id, draft.id));
+
+  return {
+    ...draft,
+    actions: fixedActions,
+  };
+};
+
+/**
  * Applies a draft with partial success support
  * - FATAL errors trigger full rollback (all-or-nothing)
  * - RECOVERABLE errors are logged but don't stop execution
@@ -1057,8 +1381,9 @@ export const applyDraft = async (
   db: ReturnType<typeof import('../db').getDb>,
   id: string,
   actor: DraftRecord['createdBy'],
-  workspaceId: string
-): Promise<{ draft: DraftRecord; results: DraftAction[] }> => {
+  workspaceId: string,
+  options?: { autoFix?: boolean; force?: boolean }
+): Promise<{ draft: DraftRecord; results: DraftAction[]; conflicts?: ConflictInfo[] }> => {
   const draft = await getDraftById(db, id, workspaceId);
   if (!draft) {
     console.error('[Draft Apply] Draft not found', { id, workspaceId });
@@ -1073,11 +1398,55 @@ export const applyDraft = async (
     draftId: id,
     workspaceId,
     actionCount: draft.actions.length,
-    actions: draft.actions.map(a => ({ type: `${a.entityType}.${a.action}`, id: a.entityId }))
+    actions: draft.actions.map(a => ({ type: `${a.entityType}.${a.action}`, id: a.entityId })),
+    options,
   });
 
+  // Use mutable variable for draft to allow auto-fix updates
+  let currentDraft = draft;
+
+  // Validate constraints before applying (unless force is true)
+  if (!options?.force) {
+    const validation = await validateDraftConstraints(db, currentDraft, workspaceId);
+
+    if (!validation.valid) {
+      console.log('[Draft Apply] Constraint validation failed', {
+        draftId: id,
+        conflictCount: validation.conflicts.length,
+        canAutoFix: validation.canAutoFix,
+      });
+
+      // Return conflicts if not auto-fixing
+      if (options?.autoFix === false || !validation.canAutoFix) {
+        return {
+          draft: {
+            ...currentDraft,
+            status: 'failed',
+          },
+          results: currentDraft.actions,
+          conflicts: validation.conflicts,
+        };
+      }
+
+      // Auto-fix if possible
+      const shouldAutoFix = options?.autoFix ?? true;  // Default to true
+      if (validation.canAutoFix && shouldAutoFix) {
+        console.log('[Draft Apply] Auto-fixing conflicts', {
+          draftId: id,
+          conflicts: validation.conflicts.map(c => ({ type: c.type, entityId: c.entityId })),
+        });
+
+        currentDraft = await applyAutoFixes(db, currentDraft, validation.conflicts);
+      }
+    } else {
+      console.log('[Draft Apply] Constraint validation passed', { draftId: id });
+    }
+  } else {
+    console.log('[Draft Apply] Skipping validation (force mode)', { draftId: id });
+  }
+
   const results: DraftAction[] = [];
-  const draftProjectId = draft.projectId ?? null;
+  const draftProjectId = currentDraft.projectId ?? null;
 
   // Action execution statistics
   const stats = {
@@ -1093,7 +1462,7 @@ export const applyDraft = async (
   let fatalError: Error | null = null;
 
   try {
-    for (const action of draft.actions) {
+    for (const action of currentDraft.actions) {
       if (action.entityType === 'project') {
         if (action.action === 'create' && action.after) {
           console.log('[Draft Apply] Processing project.create', {
@@ -1146,10 +1515,10 @@ export const applyDraft = async (
                 before: null,
                 after: created,
                 actor,
-                reason: draft.reason ?? null,
+                reason: currentDraft.reason ?? null,
                 projectId: created.id,
                 taskId: null,
-                draftId: draft.id,
+                draftId: currentDraft.id,
               });
               transactionLog[logIndex]!.auditRecorded = true;
             } catch (auditError) {
@@ -1379,10 +1748,10 @@ export const applyDraft = async (
                 before: null,
                 after: created,
                 actor,
-                reason: draft.reason ?? null,
+                reason: currentDraft.reason ?? null,
                 projectId: created.projectId,
                 taskId: created.id,
-                draftId: draft.id,
+                draftId: currentDraft.id,
               });
               transactionLog[logIndex]!.auditRecorded = true;
             } catch (auditError) {
@@ -1592,7 +1961,7 @@ export const applyDraft = async (
     // Update draft with final status and summary statistics
     // Include summary for both 'partial' and 'failed' statuses to help users understand what happened
     const updatedDraft: DraftRecord = {
-      ...draft,
+      ...currentDraft,
       status: finalStatus,
       actions: results, // Update actions with execution status
       summary: (finalStatus === 'partial' || finalStatus === 'failed') ? { ...stats } : undefined,
@@ -1601,10 +1970,10 @@ export const applyDraft = async (
     await db.update(drafts).set({
       status: finalStatus,
       actions: results,
-    }).where(eq(drafts.id, draft.id));
+    }).where(eq(drafts.id, currentDraft.id));
 
     console.log('[Draft Apply] Completed with status', {
-      draftId: draft.id,
+      draftId: currentDraft.id,
       finalStatus,
       stats,
     });
@@ -1614,7 +1983,7 @@ export const applyDraft = async (
   } catch (error) {
     // Only FATAL errors reach here - RECOVERABLE errors are handled inline
     console.error('[Draft Apply] Fatal error, initiating compensating rollback', {
-      draftId: draft.id,
+      draftId: currentDraft.id,
       operationsCompleted: transactionLog.length,
       stats,
       error: error instanceof Error ? error.message : String(error),
@@ -1638,7 +2007,7 @@ export const applyDraft = async (
     await db.update(drafts).set({
       status: 'failed',
       actions: results,
-    }).where(eq(drafts.id, draft.id));
+    }).where(eq(drafts.id, currentDraft.id));
 
     // Construct comprehensive error message
     const errorMessage = [
@@ -1651,7 +2020,7 @@ export const applyDraft = async (
     ].filter(Boolean).join('. ');
 
     console.error('[Draft Apply] Compensating rollback completed', {
-      draftId: draft.id,
+      draftId: currentDraft.id,
       operationsAttempted: transactionLog.length,
       rollbackFailures: rollbackErrors.length,
       rollbackErrors,

@@ -29,6 +29,8 @@ const createDraftSchema = z.object({
 
 const applySchema = z.object({
   actor: z.enum(['user', 'agent', 'system']).default('user'),
+  autoFix: z.boolean().default(true),  // Auto-fix conflicts by default
+  force: z.boolean().default(false),   // Force apply despite conflicts
 });
 
 const cleanupSchema = z.object({
@@ -86,7 +88,23 @@ draftsRoute.post('/:id/apply', zValidator('json', applySchema), async (c) => {
   const workspace = c.get('workspace')!;
   const payload = c.req.valid('json');
   try {
-    const result = await applyDraft(c.get('db'), c.req.param('id'), payload.actor, workspace.id);
+    const result = await applyDraft(
+      c.get('db'),
+      c.req.param('id'),
+      payload.actor,
+      workspace.id,
+      { autoFix: payload.autoFix, force: payload.force }
+    );
+
+    // If conflicts detected and not resolved, return 202 to indicate user confirmation needed
+    if (result.conflicts && result.conflicts.length > 0) {
+      console.log('[Draft Apply] Conflicts detected, returning 202', {
+        draftId: result.draft.id,
+        conflictCount: result.conflicts.length,
+      });
+      return jsonOk(c, result, 202);
+    }
+
     await recordLog(c.get('db'), 'tool_execution', {
       tool: 'applyChanges',
       draftId: result.draft.id,

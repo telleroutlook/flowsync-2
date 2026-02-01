@@ -1,4 +1,5 @@
 import type { ApiResponse, AuditLog, Draft, DraftAction, Project, Task, User, Workspace, WorkspaceJoinRequest, WorkspaceMember, WorkspaceMemberActionResult, WorkspaceMembership, WorkspaceWithMembership } from '../types';
+import type { ConflictInfo } from '../components/ConflictDialog';
 import { sleep, getRetryDelay } from '../src/utils/retry';
 import { buildAuthHeaders } from './aiService';
 import { ApiError, TimeoutError, NetworkError, getErrorMessage, isAppError } from '../src/utils/error';
@@ -342,13 +343,21 @@ export const apiService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
-  applyDraft: (id: string, actor: Draft['createdBy'], workspaceId?: string) =>
-    fetchJson<{ draft: Draft; results: DraftAction[] }>(`/api/drafts/${id}/apply`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actor }),
-      workspaceId,
-    }),
+  applyDraft: (
+    id: string,
+    actor: Draft['createdBy'],
+    workspaceId?: string,
+    options?: { autoFix?: boolean; force?: boolean }
+  ) =>
+    fetchJson<{ draft: Draft; results: DraftAction[]; conflicts?: ConflictInfo[] }>(
+      `/api/drafts/${id}/apply`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor, autoFix: options?.autoFix ?? true, force: options?.force ?? false }),
+        workspaceId,
+      }
+    ),
   discardDraft: (id: string) =>
     fetchJson<Draft>(`/api/drafts/${id}/discard`, {
       method: 'POST',

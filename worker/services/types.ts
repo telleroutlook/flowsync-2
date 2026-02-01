@@ -141,3 +141,26 @@ export type PlanResult = {
   draft: DraftRecord;
   warnings: string[];
 };
+
+/**
+ * Conflict types detected when applying a draft
+ */
+export type ConflictType =
+  | 'TASK_NOT_FOUND'           // Task referenced in draft no longer exists
+  | 'PREDECESSOR_CONFLICT'     // Task start date is before predecessor end dates
+  | 'DATE_ORDER_CONFLICT'      // Task due date is before or equal to start date
+  | 'CONCURRENT_MODIFICATION'; // Task was modified after draft was created
+
+/**
+ * Detailed conflict information
+ */
+export type ConflictInfo = {
+  type: ConflictType;
+  entityId: string;
+  message: string;
+  canAutoFix: boolean;
+  /** Proposed fix for auto-fixable conflicts (mainly date adjustments) */
+  proposedFix?: TaskRecord;
+  /** Additional details (e.g., timestamps for concurrent modifications) */
+  details?: Record<string, unknown>;
+};

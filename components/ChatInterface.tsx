@@ -1,6 +1,8 @@
 import React, { memo, useCallback, useRef, useState } from 'react';
 import { ChatBubble } from './ChatBubble';
 import { ChatMessage, ChatAttachment, Draft, DraftAction, Project, Task, ActionableSuggestion } from '../types';
+import type { ConflictInfo } from './ConflictDialog';
+import { ConflictDialog } from './ConflictDialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, RotateCcw, X, Paperclip, Send, File, XCircle, AlertTriangle, Download } from 'lucide-react';
 import { useI18n } from '../src/i18n';
@@ -244,6 +246,15 @@ interface ChatInterfaceProps {
   project?: Project;
   tasks?: Task[];
   isProcessingDraft?: boolean;
+  // Conflict dialog props
+  conflictDialog?: {
+    draftId: string;
+    conflicts: ConflictInfo[];
+    canAutoFix: boolean;
+  } | null;
+  onConflictAutoFix?: () => void;
+  onConflictForce?: () => void;
+  onConflictCancel?: () => void;
 }
 
 export const ChatInterface = memo<ChatInterfaceProps>(({
@@ -271,6 +282,10 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   project,
   tasks,
   isProcessingDraft = false,
+  conflictDialog,
+  onConflictAutoFix,
+  onConflictForce,
+  onConflictCancel,
 }) => {
   const { t } = useI18n();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -386,6 +401,7 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   }, [messages, t, project, tasks]);
 
   return (
+    <>
     <motion.div
       initial={false}
       animate={isMobile ? {
@@ -523,6 +539,20 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
         </form>
       </div>
     </motion.div>
+
+    {/* Conflict Dialog */}
+    {conflictDialog && onConflictAutoFix && onConflictForce && onConflictCancel && (
+      <ConflictDialog
+        draftId={conflictDialog.draftId}
+        conflicts={conflictDialog.conflicts}
+        canAutoFix={conflictDialog.canAutoFix}
+        onAutoFix={onConflictAutoFix}
+        onForce={onConflictForce}
+        onCancel={onConflictCancel}
+        isProcessing={isProcessingDraft ?? false}
+      />
+    )}
+  </>
   );
 });
 ChatInterface.displayName = 'ChatInterface';
