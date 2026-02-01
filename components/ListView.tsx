@@ -33,8 +33,8 @@ const TaskRow = memo(({ task, isSelected, onSelectTask }: TaskRowProps) => {
         isSelected ? "bg-primary/5" : "hover:bg-background"
       )}
     >
-      <td className="py-3 px-4 text-xs font-mono text-text-secondary">{task.wbs || '-'}</td>
-      <td className="py-3 px-4">
+      <td className="py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-mono text-text-secondary">{task.wbs || '-'}</td>
+      <td className="py-2 sm:py-3 px-2 sm:px-4">
          <div className="flex flex-col">
             <span className={cn(
               "text-sm font-medium flex items-center gap-1.5",
@@ -46,11 +46,11 @@ const TaskRow = memo(({ task, isSelected, onSelectTask }: TaskRowProps) => {
                {task.title}
             </span>
             {task.description && (
-               <span className="text-xs text-text-secondary truncate max-w-[200px] mt-0.5">{task.description}</span>
+               <span className="text-xs text-text-secondary truncate max-w-[150px] sm:max-w-[200px] mt-0.5">{task.description}</span>
             )}
          </div>
       </td>
-      <td className="py-3 px-4">
+      <td className="hidden sm:table-cell py-3 px-4">
          {task.assignee ? (
            <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-full bg-secondary/10 text-secondary flex items-center justify-center text-xs font-bold border border-secondary/20">
@@ -62,12 +62,12 @@ const TaskRow = memo(({ task, isSelected, onSelectTask }: TaskRowProps) => {
             <span className="text-xs text-text-secondary/50 italic">{t('task.unassigned')}</span>
          )}
       </td>
-      <td className="py-3 px-4">
+      <td className="hidden md:table-cell py-3 px-4">
          <span className={cn("text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border font-bold", PRIORITY_COLORS[task.priority])}>
             {getPriorityLabel(task.priority, t)}
          </span>
       </td>
-      <td className="py-3 px-4">
+      <td className="py-2 sm:py-3 px-2 sm:px-4">
         <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md", STATUS_COLORS[task.status])}>
             <span className={cn(
               "w-1.5 h-1.5 rounded-full",
@@ -77,22 +77,22 @@ const TaskRow = memo(({ task, isSelected, onSelectTask }: TaskRowProps) => {
             {getStatusLabel(task.status, t)}
         </span>
       </td>
-      <td className="py-3 px-4">
+      <td className="hidden sm:table-cell py-3 px-4">
          <div className="flex items-center gap-3 w-full max-w-[140px]">
             <div className="flex-1 bg-secondary/10 h-1.5 rounded-full overflow-hidden">
-               <div 
-                 className={cn("h-full rounded-full transition-all duration-500", task.completion === 100 ? "bg-success" : "bg-primary")} 
-                 style={{ width: `${task.completion || 0}%`}} 
-                 aria-label={`${task.completion || 0}% complete`} 
+               <div
+                 className={cn("h-full rounded-full transition-all duration-500", task.completion === 100 ? "bg-success" : "bg-primary")}
+                 style={{ width: `${task.completion || 0}%`}}
+                 aria-label={`${task.completion || 0}% complete`}
                />
             </div>
             <span className="text-xs w-8 text-right text-text-secondary font-mono">{task.completion || 0}%</span>
          </div>
       </td>
-      <td className="py-3 px-4 text-xs text-text-secondary">
+      <td className="hidden lg:table-cell py-3 px-4 text-xs text-text-secondary">
          {task.startDate ? new Date(task.startDate).toLocaleDateString(locale, { month: 'short', day: 'numeric' }) : '-'}
       </td>
-      <td className="py-3 px-4 text-xs text-text-secondary font-medium">
+      <td className="hidden lg:table-cell py-3 px-4 text-xs text-text-secondary font-medium">
          {task.dueDate ? (
            <span className={task.dueDate < Date.now() && task.status !== TaskStatus.DONE ? 'text-negative' : ''}>
               {new Date(task.dueDate).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
@@ -116,24 +116,25 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
 
   return (
     <div className="w-full h-full overflow-hidden bg-surface border border-border-subtle rounded-xl shadow-sm flex flex-col">
-       <div className="overflow-auto custom-scrollbar flex-1">
+       <div className="overflow-auto custom-scrollbar flex-1 min-h-0">
         <table className="w-full text-left border-collapse">
           <thead className="bg-background sticky top-0 z-10 border-b border-border-subtle">
             <tr>
-              <th className="py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-16">{t('list.header.wbs')}</th>
-              <th className="py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider min-w-[240px]">{t('list.header.task_name')}</th>
-              <th className="py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-40">{t('list.header.assignee')}</th>
-              <th className="py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.priority')}</th>
-              <th className="py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-32">{t('list.header.status')}</th>
-              <th className="py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-40">{t('list.header.progress')}</th>
-              <th className="py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.start')}</th>
-              <th className="py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.due')}</th>
+              <th className="py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-text-secondary uppercase tracking-wider w-12 sm:w-16">{t('list.header.wbs')}</th>
+              <th className="py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-text-secondary uppercase tracking-wider min-w-[180px] sm:min-w-[240px]">{t('list.header.task_name')}</th>
+              <th className="hidden sm:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-40">{t('list.header.assignee')}</th>
+              <th className="hidden md:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.priority')}</th>
+              <th className="py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-text-secondary uppercase tracking-wider w-24 sm:w-32">{t('list.header.status')}</th>
+              <th className="hidden sm:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-40">{t('list.header.progress')}</th>
+              <th className="hidden lg:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.start')}</th>
+              <th className="hidden lg:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.due')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-subtle">
             {sortedTasks.length === 0 ? (
                <tr>
-                 <td colSpan={8} className="py-16 text-center">
+                 {/* colSpan matches visible columns: WBS, Task, Status = 3 on mobile */}
+                 <td colSpan={3} className="py-16 text-center">
                     <div className="flex flex-col items-center justify-center">
                        <div className="w-12 h-12 rounded-full bg-background flex items-center justify-center mb-3">
                           <svg className="w-6 h-6 text-text-secondary/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">

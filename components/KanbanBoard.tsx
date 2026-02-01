@@ -151,12 +151,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTa
   }, [tasks]);
 
   return (
-    <div className="h-full w-full overflow-auto">
+    <div className="h-full w-full overflow-x-auto overflow-y-hidden">
       <div className="flex h-full min-w-full gap-2 md:gap-4 pb-2 snap-x px-0 md:px-1">
         {([TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.DONE] as TaskStatus[]).map((status) => (
-          <div key={status} className="flex-1 min-w-[300px] sm:min-w-[320px] flex flex-col bg-background/50 rounded-2xl border border-border-subtle shadow-inner snap-center h-full">
-            <div className="p-4 flex justify-between items-center sticky top-0 z-10">
-              <h3 className="font-bold text-text-primary text-base flex items-center gap-2">
+          <div key={status} className="flex-1 min-w-[280px] sm:min-w-[300px] md:min-w-[320px] flex flex-col bg-background/50 rounded-2xl border border-border-subtle shadow-inner snap-center h-full overflow-hidden">
+            <div className="p-3 sm:p-4 flex justify-between items-center sticky top-0 z-10 shrink-0">
+              <h3 className="font-bold text-text-primary text-sm sm:text-base flex items-center gap-2">
                 <span className={cn("w-2.5 h-2.5 rounded-md", STATUS_INDICATOR_COLORS[status])} aria-hidden="true" />
                 {getStatusLabel(status, t)}
               </h3>
@@ -165,7 +165,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTa
               </span>
             </div>
 
-            <div className="p-3 pt-0 flex flex-col gap-3 overflow-y-auto flex-1 min-h-0 custom-scrollbar pb-4">
+            <div className="p-2 sm:p-3 pt-0 flex flex-col gap-2 sm:gap-3 overflow-y-auto flex-1 min-h-0 custom-scrollbar pb-4">
               {groupedTasks[status].length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed border-border-subtle rounded-xl m-1 bg-surface/30">
                    <div className="w-12 h-12 rounded-full bg-surface shadow-sm border border-border-subtle flex items-center justify-center mb-3">

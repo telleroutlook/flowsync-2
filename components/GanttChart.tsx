@@ -410,9 +410,9 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
   return (
     <div className="flex flex-col h-full bg-surface border border-border-subtle rounded-xl overflow-hidden relative shadow-sm">
       {/* Controls */}
-      <div className="flex items-center justify-between flex-wrap gap-2 px-4 py-2 bg-background border-b border-border-subtle shrink-0 z-20">
+      <div className="flex items-center justify-between flex-wrap gap-2 px-2 sm:px-4 py-2 bg-background border-b border-border-subtle shrink-0 z-20">
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer font-medium select-none">
+          <label className="hidden md:flex items-center gap-2 text-sm text-text-secondary cursor-pointer font-medium select-none">
             <input type="checkbox" checked={showList} onChange={() => setShowList(!showList)} className="rounded border-border-subtle text-primary focus:ring-primary" />
             {t('gantt.show_list')}
           </label>
@@ -426,9 +426,9 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
                  setViewMode(m);
                }}
                className={cn(
-                 "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
-                 viewMode === m 
-                   ? "bg-surface text-primary shadow border border-border-subtle" 
+                 "px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium rounded-md transition-colors",
+                 viewMode === m
+                   ? "bg-surface text-primary shadow border border-border-subtle"
                    : "text-text-secondary hover:bg-surface hover:text-text-primary"
                )}
                aria-label={`${viewModeLabels[m]} view`}
@@ -441,11 +441,11 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
       </div>
 
       {/* Header Row (Fixed) */}
-      <div className="flex h-10 border-b border-border-subtle bg-surface shrink-0 z-10">
+      <div className="flex h-8 sm:h-10 border-b border-border-subtle bg-surface shrink-0 z-10">
         {/* Top Left: Task Name */}
         {showList && (
-          <div className="w-64 shrink-0 border-r border-border-subtle px-4 flex items-center text-xs font-semibold text-text-secondary bg-background shadow-sm z-20">
-             {t('gantt.task_name')}
+          <div className="w-48 sm:w-56 md:w-64 shrink-0 border-r border-border-subtle px-2 sm:px-4 flex items-center text-[10px] sm:text-xs font-semibold text-text-secondary bg-background shadow-sm z-20">
+             <span className="truncate">{t('gantt.task_name')}</span>
           </div>
         )}
         
@@ -469,24 +469,24 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
       </div>
 
       {/* Body (Scrollable) */}
-      <div 
+      <div
         ref={bodyRef}
-        className="flex-1 overflow-auto relative"
+        className="flex-1 overflow-auto relative custom-scrollbar"
         onScroll={handleBodyScroll}
       >
         <div className="flex min-w-full w-max">
             {/* Sticky List Column */}
             {showList && (
-               <div className="sticky left-0 w-64 shrink-0 z-30 bg-surface border-r border-border-subtle shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)]">
+               <div className="sticky left-0 w-48 sm:w-56 md:w-64 shrink-0 z-30 bg-surface border-r border-border-subtle shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)]">
                  {taskEntries.map(task => (
-                   <div 
-                     key={task.id} 
-                     className="px-4 border-b border-border-subtle/50 flex flex-col justify-center hover:bg-background cursor-pointer transition-colors hover:text-primary box-border"
+                   <div
+                     key={task.id}
+                     className="px-2 sm:px-3 md:px-4 border-b border-border-subtle/50 flex flex-col justify-center hover:bg-background cursor-pointer transition-colors hover:text-primary box-border"
                      style={{ height: ROW_HEIGHT }}
                      onClick={() => onSelectTask?.(task.id)}
                    >
-                     <div className="text-sm font-medium text-text-primary truncate">{task.title}</div>
-                     <div className="text-xs text-text-secondary truncate">{task.assignee || t('gantt.unassigned')}</div>
+                     <div className="text-xs sm:text-sm font-medium text-text-primary truncate">{task.title}</div>
+                     <div className="text-[10px] sm:text-xs text-text-secondary truncate">{task.assignee || t('gantt.unassigned')}</div>
                    </div>
                  ))}
                </div>
