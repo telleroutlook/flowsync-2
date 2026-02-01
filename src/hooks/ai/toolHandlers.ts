@@ -277,8 +277,8 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
 
     // Fix predecessors array
     const fixedPredecessors = fixPredecessors(args.predecessors, idMap);
-    const correctedPredecessors = fixedPredecessors.length > 0 &&
-      JSON.stringify(fixedPredecessors) !== JSON.stringify(args.predecessors || []);
+    const correctedPredecessors = args.predecessors != null &&
+      JSON.stringify(fixedPredecessors) !== JSON.stringify(args.predecessors);
 
     const draftActions: DraftAction[] = [{
       id: generateId(),
@@ -296,7 +296,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         completion: args.completion,
         assignee: args.assignee,
         isMilestone: args.isMilestone,
-        predecessors: fixedPredecessors.length > 0 ? fixedPredecessors : args.predecessors,
+        predecessors: fixedPredecessors,
       },
     }];
 
@@ -337,8 +337,8 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
 
     // Fix predecessors array
     const fixedPredecessors = fixPredecessors(args.predecessors, idMap);
-    const correctedPredecessors = fixedPredecessors.length > 0 &&
-      JSON.stringify(fixedPredecessors) !== JSON.stringify(args.predecessors || []);
+    const correctedPredecessors = args.predecessors != null &&
+      JSON.stringify(fixedPredecessors) !== JSON.stringify(args.predecessors);
 
     const correctedTaskId = fixedTaskId !== taskId;
 
@@ -358,7 +358,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         completion: args.completion,
         assignee: args.assignee,
         isMilestone: args.isMilestone,
-        predecessors: fixedPredecessors.length > 0 ? fixedPredecessors : args.predecessors,
+        predecessors: fixedPredecessors,
       },
     }];
 
