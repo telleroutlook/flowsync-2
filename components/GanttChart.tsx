@@ -3,9 +3,10 @@ import { Task } from '../types';
 import { useI18n } from '../src/i18n';
 import { cn } from '../src/utils/cn';
 import { getTasksWithConflicts } from '../src/utils/task';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Calendar } from 'lucide-react';
 import { DAY_MS, GANTT_VIEW_SETTINGS, type GanttViewMode } from '../src/constants/gantt';
 import { getTaskColorClass } from '../shared/constants/colors';
+import { EmptyState } from './ui/EmptyState';
 
 interface GanttChartProps {
   tasks: Task[];
@@ -409,7 +410,14 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
 
   // Early return for empty tasks - after all hooks are called
   if (tasks.length === 0) {
-    return <div className="p-8 text-center text-text-secondary">{t('gantt.no_tasks')}</div>;
+    return (
+      <EmptyState
+        icon={Calendar}
+        title={t('gantt.no_tasks')}
+        variant="minimal"
+        className="p-8"
+      />
+    );
   }
 
   return (

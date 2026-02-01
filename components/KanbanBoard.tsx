@@ -7,7 +7,9 @@ import { getTasksWithConflicts } from '../src/utils/task';
 import { ClipboardList, Calendar, AlertTriangle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './ui/Card';
 import { Badge } from './ui/Badge';
+import { EmptyState } from './ui/EmptyState';
 import { PRIORITY_COLORS_KANBAN, STATUS_INDICATOR_COLORS } from '../shared/constants/colors';
+import { PRIORITY_ICONS } from '../shared/constants/icons';
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -75,6 +77,7 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect, ha
           <Badge
             variant="outline"
             className={cn("shrink-0 uppercase tracking-wider text-[10px] px-2 py-0.5 h-auto", PRIORITY_COLORS_KANBAN[task.priority])}
+            icon={PRIORITY_ICONS[task.priority]}
           >
             {getPriorityShortLabel(task.priority, t)}
           </Badge>
@@ -175,13 +178,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTa
 
             <div className="p-2 sm:p-3 pt-0 flex flex-col gap-2 sm:gap-3 overflow-y-auto flex-1 min-h-0 custom-scrollbar pb-4">
               {groupedTasks[status].length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 border-2 border-dashed border-border-subtle rounded-xl m-1 bg-surface/30">
-                   <div className="w-12 h-12 rounded-full bg-surface shadow-sm border border-border-subtle flex items-center justify-center mb-3">
-                      <ClipboardList className="w-6 h-6 text-text-secondary/50" />
-                   </div>
-                   <p className="text-sm font-semibold text-text-secondary">{t('kanban.empty_title')}</p>
-                   <p className="text-xs text-text-secondary/70 mt-1">{t('kanban.empty_subtitle')}</p>
-                </div>
+                <EmptyState
+                  icon={ClipboardList}
+                  title={t('kanban.empty_title')}
+                  description={t('kanban.empty_subtitle')}
+                  variant="default"
+                  className="h-48 m-1"
+                />
               ) : (
                 groupedTasks[status].map((task) => (
                   <TaskCard

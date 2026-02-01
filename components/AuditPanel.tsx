@@ -3,6 +3,16 @@ import { AuditLog } from '../types';
 import { useI18n } from '../src/i18n';
 import { getActionLabel, getEntityLabel, getActorLabel } from '../src/i18n/labels';
 import { cn } from '../src/utils/cn';
+import { PlusCircle, Edit3, Trash2, RotateCcw, ClipboardList } from 'lucide-react';
+import { EmptyState } from './ui/EmptyState';
+
+// Audit action type icons mapping
+const AUDIT_ACTION_ICONS: Record<string, React.ComponentType<{className?: string}>> = {
+  create: PlusCircle,
+  update: Edit3,
+  delete: Trash2,
+  rollback: RotateCcw,
+};
 
 interface AuditPanelProps {
   isOpen: boolean;
@@ -254,16 +264,23 @@ export const AuditPanel = memo<AuditPanelProps>(({
         )}
 
         {!error && logs.length === 0 && !isLoading && (
-          <div className="mt-3 rounded-lg border border-border-subtle bg-background px-3 py-2 text-sm text-text-secondary">
-            {t('audit.no_entries')}
-          </div>
+          <EmptyState
+            icon={ClipboardList}
+            title={t('audit.no_entries')}
+            variant="bordered"
+            className="mt-3"
+          />
         )}
 
         <div className="mt-3 grid gap-2">
           {logs.map((log) => (
             <div key={log.id} className="flex items-center justify-between rounded-xl border border-border-subtle bg-surface px-4 py-2 shadow-sm">
               <div className="flex items-center gap-3 overflow-hidden">
-                <span className={cn("shrink-0 inline-flex rounded-full border px-2 py-0.5 text-xs font-bold uppercase tracking-wider", auditBadgeClass(log.action))}>
+                <span className={cn("shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-bold uppercase tracking-wider", auditBadgeClass(log.action))}>
+                  {(() => {
+                    const Icon = AUDIT_ACTION_ICONS[log.action];
+                    return Icon ? <Icon className="w-3 h-3" aria-hidden="true" /> : null;
+                  })()}
                   {getActionLabel(log.action, t)}
                 </span>
                 <div className="flex items-center gap-2 text-sm text-text-primary truncate">
@@ -352,7 +369,11 @@ export const AuditPanel = memo<AuditPanelProps>(({
             </div>
             <div className="px-5 py-4 space-y-3">
               <div className="flex flex-wrap gap-2 text-xs text-text-secondary">
-                <span className={cn("inline-flex rounded-full border px-2 py-0.5 font-bold uppercase tracking-wider", auditBadgeClass(selectedAudit.action))}>
+                <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-bold uppercase tracking-wider", auditBadgeClass(selectedAudit.action))}>
+                  {(() => {
+                    const Icon = AUDIT_ACTION_ICONS[selectedAudit.action];
+                    return Icon ? <Icon className="w-3 h-3" aria-hidden="true" /> : null;
+                  })()}
                   {getActionLabel(selectedAudit.action, t)}
                 </span>
                 <span>{getActorLabel(selectedAudit.actor, t)}</span>

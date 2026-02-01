@@ -7,7 +7,7 @@ import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { Textarea } from './ui/Textarea';
 import { cn } from '../src/utils/cn';
-import { X, AlertTriangle, Check, Trash2, Calendar } from 'lucide-react';
+import { X, AlertTriangle, Check, Calendar, Flag, Link, Unlink, Link2 } from 'lucide-react';
 
 const DAY_MS = 86400000;
 const clampCompletion = (value: number) => Math.min(100, Math.max(0, value));
@@ -108,7 +108,10 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">{t('task.details')}</span>
           {selectedTask.isMilestone && (
-              <span className="px-1.5 py-0.5 rounded-full bg-accent/10 text-accent text-[9px] font-bold border border-accent/20">{t('task.milestone')}</span>
+              <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-full bg-accent/10 text-accent text-[9px] font-bold border border-accent/20">
+                <Flag className="w-3 h-3" aria-hidden="true" fill="currentColor" />
+                <span>{t('task.milestone')}</span>
+              </span>
           )}
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7">
@@ -250,6 +253,7 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
         {/* Dependencies */}
         <div className="space-y-2.5 pt-3 border-t border-border-subtle">
           <label className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-2">
+            <Link className="w-3.5 h-3.5" aria-hidden="true" />
             {t('task.dependencies')}
             <span className="bg-secondary/10 text-secondary text-[10px] px-1.5 py-0.5 rounded-full">{predecessorDetails.length}</span>
           </label>
@@ -273,28 +277,33 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
                 <button
                   onClick={() => handleRemovePredecessor(item.ref)}
                   className="p-1 text-text-secondary hover:text-negative hover:bg-negative/10 rounded-md transition-colors opacity-0 group-hover:opacity-100"
-                  title="Remove dependency"
+                  title={t('task.remove_dependency')}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Unlink className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
               </div>
             ))}
 
-            <select
-              className="flex h-8 w-full rounded-md border border-border-subtle bg-surface px-2 py-1 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-              value=""
-              onChange={(event) => {
-                const taskId = event.target.value;
-                if (taskId) handleAddPredecessor(taskId);
-              }}
-            >
-              <option value="">{t('task.add_dependency')}</option>
-              {availableTasks.map(task => (
-                <option key={task.id} value={task.id}>
-                   {task.wbs ? `[${task.wbs}] ` : ''}{task.title}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                className="flex h-8 w-full rounded-md border border-border-subtle bg-surface px-2 py-1 pr-8 text-xs appearance-none ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                value=""
+                onChange={(event) => {
+                  const taskId = event.target.value;
+                  if (taskId) handleAddPredecessor(taskId);
+                }}
+              >
+                <option value="">{t('task.add_dependency')}</option>
+                {availableTasks.map(task => (
+                  <option key={task.id} value={task.id}>
+                     {task.wbs ? `[${task.wbs}] ` : ''}{task.title}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none text-text-secondary">
+                <Link2 className="w-4 h-4" aria-hidden="true" />
+              </div>
+            </div>
           </div>
 
           {hasPredecessorConflicts && (

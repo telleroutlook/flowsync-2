@@ -4,8 +4,11 @@ import { useI18n } from '../src/i18n';
 import { getPriorityLabel, getStatusLabel } from '../src/i18n/labels';
 import { cn } from '../src/utils/cn';
 import { getTasksWithConflicts } from '../src/utils/task';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Inbox } from 'lucide-react';
 import { PRIORITY_COLORS, STATUS_COLORS } from '../shared/constants/colors';
+import { Badge } from './ui/Badge';
+import { EmptyState } from './ui/EmptyState';
+import { PRIORITY_ICONS } from '../shared/constants/icons';
 
 interface ListViewProps {
   tasks: Task[];
@@ -69,9 +72,13 @@ const TaskRow = memo(({ task, isSelected, onSelectTask, hasConflict }: TaskRowPr
          )}
       </td>
       <td className="hidden md:table-cell py-3 px-4">
-         <span className={cn("text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border font-bold", PRIORITY_COLORS[task.priority])}>
+         <Badge
+           variant="outline"
+           className={PRIORITY_COLORS[task.priority]}
+           icon={PRIORITY_ICONS[task.priority]}
+         >
             {getPriorityLabel(task.priority, t)}
-         </span>
+         </Badge>
       </td>
       <td className="py-2 sm:py-3 px-2 sm:px-4">
         <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md", STATUS_COLORS[task.status])}>
@@ -142,16 +149,13 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
           <tbody className="divide-y divide-border-subtle">
             {sortedTasks.length === 0 ? (
                <tr>
-                 {/* colSpan matches visible columns: WBS, Task, Status = 3 on mobile */}
                  <td colSpan={3} className="py-16 text-center">
-                    <div className="flex flex-col items-center justify-center">
-                       <div className="w-12 h-12 rounded-full bg-background flex items-center justify-center mb-3">
-                          <svg className="w-6 h-6 text-text-secondary/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                          </svg>
-                       </div>
-                       <span className="text-sm text-text-secondary">{t('list.empty')}</span>
-                    </div>
+                    <EmptyState
+                      icon={Inbox}
+                      title={t('list.empty')}
+                      variant="minimal"
+                      className="py-16"
+                    />
                  </td>
                </tr>
             ) : (

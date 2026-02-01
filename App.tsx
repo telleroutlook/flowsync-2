@@ -3,7 +3,7 @@ import { ProjectSidebar } from './components/ProjectSidebar';
 import { WorkspacePanel } from './components/WorkspacePanel';
 import { Button } from './components/ui/Button';
 import { cn } from './src/utils/cn';
-import { Menu, Grid, List as ListIcon, Calendar, Upload, Download, History, MessageSquare, FileText, Check, Minus, Plus } from 'lucide-react';
+import { Menu, Grid, List as ListIcon, Calendar, Upload, Download, History, MessageSquare, FileText, FileSpreadsheet, FileJson, Check, Minus, Plus } from 'lucide-react';
 import { LoginModal } from './components/LoginModal';
 import WorkspaceModal from './components/WorkspaceModal';
 import { UserProfileModal } from './components/UserProfileModal';
@@ -673,8 +673,8 @@ function App() {
                 <div className="grid grid-cols-1 gap-1">
                   {([
                     { id: 'image', label: t('export.format.image') || 'Image (PNG)', desc: t('export.format.image_desc') || 'Export view as image', icon: ImageIcon },
-                    { id: 'csv', label: 'CSV', desc: t('export.format.csv_desc'), icon: FileText },
-                    { id: 'json', label: 'JSON', desc: t('export.format.json_desc'), icon: FileText },
+                    { id: 'csv', label: 'CSV', desc: t('export.format.csv_desc'), icon: FileSpreadsheet },
+                    { id: 'json', label: 'JSON', desc: t('export.format.json_desc'), icon: FileJson },
                     { id: 'markdown', label: 'Markdown', desc: t('export.format.markdown_desc'), icon: FileText },
                   ] as const).map(item => (
                     <button

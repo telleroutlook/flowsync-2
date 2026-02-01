@@ -3,7 +3,7 @@ import type { User } from '../types';
 import { useI18n } from '../src/i18n';
 import { Modal } from './Modal';
 import { cn } from '../src/utils/cn';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Languages, Brain, CheckCircle, User as UserIcon } from 'lucide-react';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -49,13 +49,19 @@ export const UserProfileModal = memo<UserProfileModalProps>(({ isOpen, onClose, 
              {user ? (
                <>
                  <h3 className="text-xl font-bold text-text-primary">{user.username}</h3>
-                 <span className="inline-block mt-1.5 px-2.5 py-1 rounded-md bg-success/10 text-success border border-success/20 text-xs font-bold uppercase tracking-wider">
-                   {t('auth.signed_in')}
-                 </span>
+                 <div className="flex items-center justify-center gap-2 mt-1.5">
+                   <CheckCircle className="w-5 h-5 text-success" aria-hidden="true" />
+                   <span className="inline-block px-2.5 py-1 rounded-md bg-success/10 text-success border border-success/20 text-xs font-bold uppercase tracking-wider">
+                     {t('auth.signed_in')}
+                   </span>
+                 </div>
                </>
              ) : (
                <>
-                 <h3 className="text-xl font-bold text-text-secondary">{t('auth.guest')}</h3>
+                 <div className="flex items-center justify-center gap-2">
+                   <UserIcon className="w-5 h-5 text-text-secondary" aria-hidden="true" />
+                   <h3 className="text-xl font-bold text-text-secondary">{t('auth.guest')}</h3>
+                 </div>
                  <p className="text-sm text-text-secondary/60 mt-1 max-w-[200px]">{t('profile.guest_hint')}</p>
                </>
              )}
@@ -64,7 +70,8 @@ export const UserProfileModal = memo<UserProfileModalProps>(({ isOpen, onClose, 
 
         <div className="space-y-4">
           <div className="space-y-1">
-            <label className="block text-xs font-bold text-text-secondary uppercase tracking-wide" htmlFor="profile-language">
+            <label className="flex items-center gap-2 text-xs font-bold text-text-secondary uppercase tracking-wide" htmlFor="profile-language">
+              <Languages className="w-4 h-4 text-text-secondary" aria-hidden="true" />
               {t('language.label')}
             </label>
             <div className="relative">
@@ -86,7 +93,8 @@ export const UserProfileModal = memo<UserProfileModalProps>(({ isOpen, onClose, 
 
           <div className="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-surface">
             <div className="space-y-0.5">
-              <label htmlFor="allow-thinking" className="block text-sm font-medium text-text-primary">
+              <label htmlFor="allow-thinking" className="flex items-center gap-2 text-sm font-medium text-text-primary">
+                <Brain className="w-4 h-4 text-text-secondary" aria-hidden="true" />
                 {t('profile.thinking.label')}
               </label>
               <p className="text-xs text-text-secondary">{t('profile.thinking.description')}</p>
