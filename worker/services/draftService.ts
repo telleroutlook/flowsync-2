@@ -1590,11 +1590,12 @@ export const applyDraft = async (
     }
 
     // Update draft with final status and summary statistics
+    // Include summary for both 'partial' and 'failed' statuses to help users understand what happened
     const updatedDraft: DraftRecord = {
       ...draft,
       status: finalStatus,
       actions: results, // Update actions with execution status
-      summary: finalStatus === 'partial' ? { ...stats } : undefined,
+      summary: (finalStatus === 'partial' || finalStatus === 'failed') ? { ...stats } : undefined,
     };
 
     await db.update(drafts).set({

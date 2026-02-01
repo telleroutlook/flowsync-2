@@ -112,7 +112,7 @@ export type DraftRecord = {
   createdAt: number;
   createdBy: 'user' | 'agent' | 'system';
   reason?: string | null;
-  /** Summary statistics when status is 'partial' */
+  /** Summary statistics when status is 'partial' or 'failed' */
   summary?: {
     success: number;
     warning: number;

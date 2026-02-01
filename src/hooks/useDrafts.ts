@@ -238,6 +238,11 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
               markdownMessage += `- ⏭️ ${t('draft.skipped_count', { count: summary.skipped })}\n`;
             }
             markdownMessage += `\n`;
+          } else if (failedActions.length > 0) {
+            // Fallback: show count from failedActions if summary is missing
+            markdownMessage += `**${t('draft.execution_summary')}**\n`;
+            markdownMessage += `- ❌ ${t('draft.failed_count', { count: failedActions.length })}\n`;
+            markdownMessage += `\n`;
           }
 
           if (failedActions.length > 0) {
@@ -248,6 +253,14 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
               markdownMessage += `**${action.entityType}.${action.action}(${entity})**\n\n`;
               markdownMessage += `\`\`\`\n${error}\n\`\`\`\n\n`;
             }
+          } else if (results.length > 0) {
+            // Edge case: we have results but no failed actions
+            // This can happen if results don't have proper status fields
+            markdownMessage += `### ${t('draft.failed_actions_title')}\n\n`;
+            markdownMessage += `⚠️ ${t('draft.error_details_missing', {
+              count: results.length,
+              draftId: result.draft.id,
+            })}\n\n`;
           } else {
             markdownMessage += `${t('draft.unknown_error')}\n`;
           }

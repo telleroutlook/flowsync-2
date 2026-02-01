@@ -213,6 +213,7 @@ const en = {
   'draft.warnings_auto_corrected': 'Some actions have warnings that were auto-corrected.',
   'draft.failed_summary': 'Success: {success}, Warnings: {warning}, Failed: {failed}, Skipped: {skipped}',
   'draft.unknown_error': 'Unknown error',
+  'draft.error_details_missing': 'Error details are missing. Draft had {count} actions but no error information was recorded. Draft ID: {draftId}',
   'draft.apply_failed_details': 'Draft application failed: {details}',
 
   'audit.title': 'Audit Trail',
@@ -577,6 +578,7 @@ const zh: Record<keyof typeof en, string> = {
   'draft.warnings_auto_corrected': '部分操作有警告，已自动修正。',
   'draft.failed_summary': '成功：{success}，警告：{warning}，失败：{failed}，跳过：{skipped}',
   'draft.unknown_error': '未知错误',
+  'draft.error_details_missing': '缺少错误详细信息。草案包含 {count} 个操作，但没有记录错误信息。草案 ID：{draftId}',
   'draft.apply_failed_details': '草案应用失败：{details}',
 
   'audit.title': '审计记录',
