@@ -53,6 +53,73 @@ const getBoolParam = (args: Record<string, unknown>, key: string): boolean | und
 const getNumberParam = (args: Record<string, unknown>, key: string): number | undefined =>
   typeof args[key] === 'number' ? args[key] : undefined;
 
+/**
+ * Builds a mapping of truncated IDs to full IDs for auto-fixing AI-generated IDs
+ * AI models may truncate UUIDs to first 8 characters, so we need to fix them
+ * @param api API client to fetch tasks
+ * @param projectIds Project IDs to fetch tasks from
+ * @returns Map of truncated (8 chars) and full IDs to full IDs
+ */
+const buildIdMap = async (
+  api: ApiClient,
+  projectIds: Set<string>
+): Promise<Map<string, string>> => {
+  const idMap = new Map<string, string>();
+
+  for (const projectId of projectIds) {
+    try {
+      const tasks = await api.listTasks({ projectId });
+      for (const task of tasks.data) {
+        // Map both full ID and truncated ID (first 8 chars) to full ID
+        idMap.set(task.id, task.id);
+        if (task.id.length >= 8) {
+          const truncated = task.id.substring(0, 8);
+          idMap.set(truncated, task.id);
+        }
+      }
+    } catch (error) {
+      // Ignore fetch errors - we'll try to match IDs as-is
+      console.error('[buildIdMap] Failed to fetch tasks for ID mapping:', error);
+    }
+  }
+
+  return idMap;
+};
+
+/**
+ * Fixes a potentially truncated task ID using the ID mapping
+ * @param id The ID to fix (may be truncated)
+ * @param idMap The ID mapping from buildIdMap
+ * @returns The full ID if found, otherwise the original ID
+ */
+const fixTaskId = (id: string | undefined, idMap: Map<string, string>): string | undefined => {
+  if (!id) return undefined;
+  return idMap.get(id) || id;
+};
+
+/**
+ * Fixes an array of potentially truncated predecessor IDs
+ * @param predecessors The predecessors array to fix
+ * @param idMap The ID mapping from buildIdMap
+ * @returns Fixed array with full IDs
+ */
+const fixPredecessors = (
+  predecessors: unknown,
+  idMap: Map<string, string>
+): string[] => {
+  if (!Array.isArray(predecessors)) return [];
+
+  const fixed: string[] = [];
+  for (const pred of predecessors) {
+    if (typeof pred === 'string') {
+      // Try to map the predecessor ID
+      fixed.push(idMap.get(pred) || pred);
+    }
+    // Skip non-string predecessors (safe filtering)
+  }
+  return fixed;
+};
+
 const toolHandlers: Record<string, ToolHandlerFunction> = {
   // Read-only tools
   listProjects: async (_args, { api, activeProjectId, pushProcessingStep, t }) => {
@@ -199,9 +266,20 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     };
   },
 
-  createTask: (args, { activeProjectId, generateId, t }) => {
+  createTask: async (args, { api, activeProjectId, generateId, t }) => {
     const requestedProjectId = getStringParam(args, 'projectId');
     const corrected = !!activeProjectId && !!requestedProjectId && requestedProjectId !== activeProjectId;
+
+    // Build ID map to fix truncated predecessors
+    const projectIds = new Set<string>();
+    if (activeProjectId) projectIds.add(activeProjectId);
+    const idMap = await buildIdMap(api, projectIds);
+
+    // Fix predecessors array
+    const fixedPredecessors = fixPredecessors(args.predecessors, idMap);
+    const correctedPredecessors = fixedPredecessors.length > 0 &&
+      JSON.stringify(fixedPredecessors) !== JSON.stringify(args.predecessors || []);
+
     const draftActions: DraftAction[] = [{
       id: generateId(),
       entityType: 'task',
@@ -218,11 +296,20 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         completion: args.completion,
         assignee: args.assignee,
         isMilestone: args.isMilestone,
-        predecessors: args.predecessors,
+        predecessors: fixedPredecessors.length > 0 ? fixedPredecessors : args.predecessors,
       },
     }];
+
+    const outputParts: string[] = [];
+    if (corrected) {
+      outputParts.push(t('tool.warning.project_id_corrected'));
+    }
+    if (correctedPredecessors) {
+      outputParts.push(t('tool.warning.predecessors_corrected'));
+    }
+
     return {
-      output: corrected ? t('tool.warning.project_id_corrected') : '',
+      output: outputParts.join(' '),
       draftActions,
       draftReason: getStringParam(args, 'reason'),
     };
@@ -233,16 +320,33 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     if (!taskId) {
       return { output: t('tool.error.invalid_task_id') };
     }
+
+    // Build ID map to fix truncated IDs (both for taskId and predecessors)
+    const projectIds = new Set<string>();
+    if (activeProjectId) projectIds.add(activeProjectId);
+    const idMap = await buildIdMap(api, projectIds);
+
+    // Fix taskId (AI may have truncated it)
+    const fixedTaskId = fixTaskId(taskId, idMap) || taskId;
+
     pushProcessingStep?.(t('processing.reading_task_details'));
-    const task = await api.getTask(taskId);
+    const task = await api.getTask(fixedTaskId);
     if (activeProjectId && task.projectId !== activeProjectId) {
       return { output: t('tool.error.task_not_in_active_project') };
     }
+
+    // Fix predecessors array
+    const fixedPredecessors = fixPredecessors(args.predecessors, idMap);
+    const correctedPredecessors = fixedPredecessors.length > 0 &&
+      JSON.stringify(fixedPredecessors) !== JSON.stringify(args.predecessors || []);
+
+    const correctedTaskId = fixedTaskId !== taskId;
+
     const draftActions: DraftAction[] = [{
       id: generateId(),
       entityType: 'task',
       action: 'update',
-      entityId: taskId,
+      entityId: fixedTaskId,
       after: {
         title: args.title,
         description: args.description,
@@ -254,11 +358,20 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         completion: args.completion,
         assignee: args.assignee,
         isMilestone: args.isMilestone,
-        predecessors: args.predecessors,
+        predecessors: fixedPredecessors.length > 0 ? fixedPredecessors : args.predecessors,
       },
     }];
+
+    const outputParts: string[] = [];
+    if (correctedTaskId) {
+      outputParts.push(t('tool.warning.task_id_corrected'));
+    }
+    if (correctedPredecessors) {
+      outputParts.push(t('tool.warning.predecessors_corrected'));
+    }
+
     return {
-      output: '',
+      output: outputParts.join(' '),
       draftActions,
       draftReason: getStringParam(args, 'reason'),
     };
@@ -269,19 +382,32 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     if (!taskId) {
       return { output: t('tool.error.invalid_task_id') };
     }
+
+    // Build ID map to fix truncated IDs
+    const projectIds = new Set<string>();
+    if (activeProjectId) projectIds.add(activeProjectId);
+    const idMap = await buildIdMap(api, projectIds);
+
+    // Fix taskId (AI may have truncated it)
+    const fixedTaskId = fixTaskId(taskId, idMap) || taskId;
+
     pushProcessingStep?.(t('processing.reading_task_details'));
-    const task = await api.getTask(taskId);
+    const task = await api.getTask(fixedTaskId);
     if (activeProjectId && task.projectId !== activeProjectId) {
       return { output: t('tool.error.task_not_in_active_project') };
     }
+
+    const correctedTaskId = fixedTaskId !== taskId;
+
     const draftActions: DraftAction[] = [{
       id: generateId(),
       entityType: 'task',
       action: 'delete',
-      entityId: taskId,
+      entityId: fixedTaskId,
     }];
+
     return {
-      output: '',
+      output: correctedTaskId ? t('tool.warning.task_id_corrected') : '',
       draftActions,
       draftReason: getStringParam(args, 'reason'),
     };
