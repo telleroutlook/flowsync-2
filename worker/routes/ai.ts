@@ -18,7 +18,7 @@ const MAX_HISTORY_MESSAGES = 30;
 const MAX_MESSAGE_CHARS = 4000;
 const MAX_SYSTEM_CONTEXT_CHARS = 8000;
 const MAX_TOOL_ARGS_CHARS = 8000;
-const MAX_TOOL_CALLS = 12;
+const MAX_TOOL_CALLS = 30;
 const MAX_TURNS = 5;
 const REQUEST_TIMEOUT_MS = 60000;
 const MAX_RETRIES = 2;
@@ -294,6 +294,8 @@ CRITICAL WORKFLOW RULES - FOLLOW THESE IN ORDER
 
 ✏️ STEP 3 - MAKE CHANGES (Write Tools):
 - All changes create DRAFTS requiring user approval
+- ⚠️ CRITICAL: For 5+ tasks, MUST use planChanges (batch operation)
+- ⚠️ CRITICAL: Tool call limit is 30 - plan efficiently!
 - Use createTask for NEW tasks only (search first!)
 - Use updateTask for EXISTING tasks (getTask first!)
 - Use planChanges for batch operations (multiple changes at once)
@@ -332,6 +334,10 @@ DELETE TASK:
 RESCHEDULE/MOVE TASK:
   getTask (read dates) → calculate new dates → updateTask
 
+BATCH UPDATE 5+ TASKS (Preferred):
+  listTasks → planChanges with all updates in ONE call
+  Example: listTasks → planChanges({ actions: [updateTask1, updateTask2, ...] })
+
 ═══════════════════════════════════════════════════════════════
 DATE FORMAT - CRITICAL
 ═══════════════════════════════════════════════════════════════
@@ -363,13 +369,16 @@ COMMON MISTAKES TO AVOID
 ❌ Making up data instead of using tool results
 ❌ Using seconds instead of milliseconds for dates
 ❌ Providing suggestions in wrong language (match user's language!)
+❌ Calling updateTask 17 times individually (EXCEEDS 30-call limit!)
+❌ Not using planChanges for batch updates (inefficient!)
 
 ✅ Best Practices:
 - Search before create
 - Read before update
 - Always provide 3 context-aware suggestions
 - Match the language the user is using
-- Be concise and accurate`;
+- Be concise and accurate
+- For 5+ tasks, use planChanges batch operation`;
 };
 
 type ToolCall = {
