@@ -10,6 +10,7 @@ const en = {
   'common.close': 'Close',
   'common.optional': 'Optional',
   'common.retry': 'Retry',
+  'common.unknown_error': 'Unknown error',
 
   'app.sidebar.open': 'Open Sidebar',
   'app.sidebar.close': 'Close Sidebar',
@@ -197,6 +198,12 @@ const en = {
   'draft.submit_failed': 'Failed to submit draft',
   'draft.created_action_count': 'Draft {id} created with {count} action(s).',
   'draft.create_failed': 'Failed to create draft: {error}',
+  'draft.partial_applied': 'Draft partially applied. Success: {success}, Warnings: {warning}, Failed: {failed}, Skipped: {skipped}.',
+  'draft.failed_actions': 'Failed actions: {details}',
+  'draft.warnings_auto_corrected': 'Some actions have warnings that were auto-corrected.',
+  'draft.failed_summary': 'Success: {success}, Warnings: {warning}, Failed: {failed}, Skipped: {skipped}',
+  'draft.unknown_error': 'Unknown error',
+  'draft.apply_failed_details': 'Draft application failed: {details}',
 
   'audit.title': 'Audit Trail',
   'audit.subtitle': 'Recent activity for this project',
@@ -357,6 +364,7 @@ const zh: Record<keyof typeof en, string> = {
   'common.close': '关闭',
   'common.optional': '可选',
   'common.retry': '重试',
+  'common.unknown_error': '未知错误',
 
   'app.sidebar.open': '打开侧边栏',
   'app.sidebar.close': '关闭侧边栏',
@@ -544,6 +552,12 @@ const zh: Record<keyof typeof en, string> = {
   'draft.submit_failed': '提交草案失败',
   'draft.created_action_count': '草案 {id} 已创建，共 {count} 个操作。',
   'draft.create_failed': '创建草案失败：{error}',
+  'draft.partial_applied': '草案部分应用。成功：{success}，警告：{warning}，失败：{failed}，跳过：{skipped}。',
+  'draft.failed_actions': '失败的操作：{details}',
+  'draft.warnings_auto_corrected': '部分操作有警告，已自动修正。',
+  'draft.failed_summary': '成功：{success}，警告：{warning}，失败：{failed}，跳过：{skipped}',
+  'draft.unknown_error': '未知错误',
+  'draft.apply_failed_details': '草案应用失败：{details}',
 
   'audit.title': '审计记录',
   'audit.subtitle': '本项目最近活动',

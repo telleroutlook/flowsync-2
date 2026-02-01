@@ -84,6 +84,8 @@ export type ProjectActionData = {
 
 export type DraftActionData = TaskActionData | ProjectActionData;
 
+export type ActionStatus = 'pending' | 'success' | 'warning' | 'skipped' | 'failed';
+
 export type DraftAction = {
   id: string;
   entityType: 'task' | 'project';
@@ -93,17 +95,30 @@ export type DraftAction = {
   after?: Record<string, unknown> | null;
   warnings?: string[];
   explicitFields?: string[];  // Fields explicitly modified by user/AI (e.g., ['startDate', 'dueDate'])
+  /** Execution status (available after draft application) */
+  status?: ActionStatus;
+  /** Error message if the action failed */
+  error?: string;
 };
+
+export type DraftStatus = 'pending' | 'applied' | 'partial' | 'discarded' | 'failed';
 
 export type DraftRecord = {
   id: string;
   workspaceId: string;
   projectId: string | null;
-  status: 'pending' | 'applied' | 'discarded' | 'failed';
+  status: DraftStatus;
   actions: DraftAction[];
   createdAt: number;
   createdBy: 'user' | 'agent' | 'system';
   reason?: string | null;
+  /** Summary statistics when status is 'partial' */
+  summary?: {
+    success: number;
+    warning: number;
+    skipped: number;
+    failed: number;
+  };
 };
 
 export type AuditRecord = {

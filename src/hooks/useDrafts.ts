@@ -154,10 +154,11 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
         const draft = drafts.find(d => d.id === id);
         const result = await apiService.applyDraft(id, 'user', draft?.workspaceId);
 
-        console.log('[handleApplyDraft] Draft applied successfully', {
+        console.log('[handleApplyDraft] Draft applied with result', {
           draftId: id,
           resultStatus: result.draft.status,
           resultsCount: result.results?.length,
+          summary: result.draft.summary,
         });
 
         setDrafts(prev => {
@@ -168,7 +169,51 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
         if (draft?.actions.some(a => a.entityType === 'project')) {
           projectModified = true;
         }
-        appendSystemMessage(t('draft.applied', { id }));
+
+        // Handle different draft statuses with user-friendly messages
+        if (result.draft.status === 'applied') {
+          appendSystemMessage(t('draft.applied', { id }));
+        } else if (result.draft.status === 'partial') {
+          // Partial success - show summary and details
+          const summary = result.draft.summary;
+          const results = result.results ?? [];
+          const failedActions = results.filter(a => a.status === 'failed');
+          const warningActions = results.filter(a => a.status === 'warning');
+
+          let message = t('draft.partial_applied', {
+            success: summary?.success ?? 0,
+            warning: summary?.warning ?? 0,
+            failed: summary?.failed ?? 0,
+            skipped: summary?.skipped ?? 0,
+          });
+
+          // Show details of failed actions
+          if (failedActions.length > 0) {
+            const failedDetails = failedActions.map(a => {
+              const entity = a.after?.title || a.after?.name || a.entityId || a.id;
+              return `${a.entityType}.${a.action}(${entity}): ${a.error || t('common.unknown_error')}`;
+            }).join('; ');
+            message += ' ' + t('draft.failed_actions', { details: failedDetails });
+          }
+
+          // Show warnings if any
+          if (warningActions.length > 0 && failedActions.length === 0) {
+            message += ' ' + t('draft.warnings_auto_corrected');
+          }
+
+          appendSystemMessage(message);
+        } else if (result.draft.status === 'failed') {
+          const summary = result.draft.summary;
+          const errorDetails = summary
+            ? t('draft.failed_summary', {
+                success: summary.success,
+                warning: summary.warning,
+                failed: summary.failed,
+                skipped: summary.skipped,
+              })
+            : t('draft.unknown_error');
+          appendSystemMessage(t('draft.apply_failed_details', { details: errorDetails }));
+        }
       }
 
       setPendingDraftId(null);

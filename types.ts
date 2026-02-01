@@ -70,6 +70,8 @@ export interface ChatAttachment {
   url: string;
 }
 
+export type ActionStatus = 'pending' | 'success' | 'warning' | 'skipped' | 'failed';
+
 export interface DraftAction {
   id: string;
   entityType: 'task' | 'project';
@@ -78,17 +80,30 @@ export interface DraftAction {
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
   warnings?: string[];
+  /** Execution status (available after draft application) */
+  status?: ActionStatus;
+  /** Error message if the action failed */
+  error?: string;
 }
+
+export type DraftStatus = 'pending' | 'applied' | 'partial' | 'discarded' | 'failed';
 
 export interface Draft {
   id: string;
   workspaceId?: string;
   projectId: string | null;
-  status: 'pending' | 'applied' | 'discarded' | 'failed';
+  status: DraftStatus;
   actions: DraftAction[];
   createdAt: number;
   createdBy: 'user' | 'agent' | 'system';
   reason?: string | null;
+  /** Summary statistics when status is 'partial' */
+  summary?: {
+    success: number;
+    warning: number;
+    skipped: number;
+    failed: number;
+  };
 }
 
 export interface AuditLog {
