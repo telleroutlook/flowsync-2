@@ -87,15 +87,15 @@ describe('useDrafts', () => {
     expect(appendSystemMessage).toHaveBeenCalledWith('Draft created: d1. Awaiting approval.');
   });
 
-  it('applies a draft and refreshes data', async () => {
+  it('applies a single draft and refreshes data', async () => {
     const appendSystemMessage = vi.fn();
     const appendModelMessage = vi.fn();
     const refreshData = vi.fn(async () => {});
     const refreshAuditLogs = vi.fn(async () => {});
 
     const pendingDrafts: Draft[] = [
-      { ...draftBase, id: 'd1', status: 'pending' },
-      { ...draftBase, id: 'd2', status: 'pending' },
+      { ...draftBase, id: 'd1', status: 'pending', workspaceId: 'ws1' },
+      { ...draftBase, id: 'd2', status: 'pending', workspaceId: 'ws1' },
     ];
 
     api.listDrafts.mockResolvedValue(pendingDrafts);
@@ -124,13 +124,13 @@ describe('useDrafts', () => {
       await result.current.handleApplyDraft('d1');
     });
 
-    expect(api.applyDraft).toHaveBeenCalledWith('d1', 'user');
-    expect(api.applyDraft).toHaveBeenCalledWith('d2', 'user');
+    // Only d1 should be applied (the one that was clicked), not all pending drafts
+    expect(api.applyDraft).toHaveBeenCalledTimes(1);
+    expect(api.applyDraft).toHaveBeenCalledWith('d1', 'user', 'ws1');
     expect(refreshData).toHaveBeenCalledTimes(1);
     expect(refreshAuditLogs).toHaveBeenCalledWith('p1');
     expect(result.current.pendingDraftId).toBe(null);
     expect(appendSystemMessage).toHaveBeenCalledWith('Draft applied: d1');
-    expect(appendSystemMessage).toHaveBeenCalledWith('Draft applied: d2');
   });
 
   it('discards a draft and refreshes list', async () => {

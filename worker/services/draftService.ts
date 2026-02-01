@@ -38,8 +38,8 @@ const parseDraftRow = (row: {
   createdBy: string;
   reason: string | null;
 }): DraftRecord => {
-  // Validate status enum
-  const validStatuses = ['pending', 'applied', 'discarded', 'failed'] as const;
+  // Validate status enum (include all valid DraftStatus values)
+  const validStatuses = ['pending', 'applied', 'discarded', 'failed', 'partial'] as const;
   const status = validStatuses.includes(row.status as any) ? row.status as DraftRecord['status'] : 'pending';
 
   // Validate createdBy enum
