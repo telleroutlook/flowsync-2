@@ -37,16 +37,73 @@ const parseDraftRow = (row: {
   createdAt: number;
   createdBy: string;
   reason: string | null;
-}): DraftRecord => ({
-  id: row.id,
-  workspaceId: row.workspaceId,
-  projectId: row.projectId,
-  status: row.status as DraftRecord['status'],
-  actions: row.actions as DraftAction[],
-  createdAt: row.createdAt,
-  createdBy: row.createdBy as DraftRecord['createdBy'],
-  reason: row.reason,
-});
+}): DraftRecord => {
+  // Validate status enum
+  const validStatuses = ['pending', 'applied', 'discarded', 'failed'] as const;
+  const status = validStatuses.includes(row.status as any) ? row.status as DraftRecord['status'] : 'pending';
+
+  // Validate createdBy enum
+  const validCreators = ['user', 'agent', 'system'] as const;
+  const createdBy = validCreators.includes(row.createdBy as any) ? row.createdBy as DraftRecord['createdBy'] : 'agent';
+
+  // Validate actions is an array
+  const actions = Array.isArray(row.actions) ? row.actions as DraftAction[] : [];
+
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    projectId: row.projectId,
+    status,
+    actions,
+    createdAt: row.createdAt,
+    createdBy,
+    reason: row.reason,
+  };
+};
+
+/**
+ * Safely extracts a string value from unknown input
+ */
+function getString(value: unknown, fallback: string): string {
+  if (typeof value === 'string') return value;
+  return fallback;
+}
+
+/**
+ * Safely extracts an optional string value from unknown input
+ */
+function getOptionalString(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return null;
+  return null;
+}
+
+/**
+ * Safely extracts an optional number value from unknown input
+ */
+function getOptionalNumber(value: unknown): number | null {
+  if (typeof value === 'number' && !Number.isNaN(value)) return value;
+  if (value === null || value === undefined) return null;
+  return null;
+}
+
+/**
+ * Safely extracts a boolean value from unknown input
+ */
+function getBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value;
+  return fallback;
+}
+
+/**
+ * Safely extracts a string array from unknown input
+ */
+function getStringArray(value: unknown): string[] {
+  if (Array.isArray(value) && value.every(item => typeof item === 'string')) {
+    return value as string[];
+  }
+  return [];
+}
 
 const normalizeTaskInput = (
   input: Record<string, unknown>,
@@ -54,30 +111,30 @@ const normalizeTaskInput = (
   projectIdOverride?: string
 ): TaskRecord => {
   const timestamp = now();
-  const projectId = (input.projectId as string | undefined) ?? projectIdOverride ?? fallback?.projectId ?? '';
+  const projectId = getString(input.projectId ?? '', projectIdOverride ?? fallback?.projectId ?? '');
   const status = toTaskStatus(input.status, fallback?.status ?? 'TODO');
   const priority = toPriority(input.priority, fallback?.priority ?? 'MEDIUM');
-  const createdAt = (input.createdAt as number | undefined) ?? fallback?.createdAt ?? timestamp;
-  const updatedAt = (input.updatedAt as number | undefined) ?? timestamp;
-  const startDate = (input.startDate as number | undefined) ?? fallback?.startDate ?? createdAt;
-  const dueDate = (input.dueDate as number | undefined) ?? fallback?.dueDate ?? null;
-  const completion = (input.completion as number | undefined) ?? fallback?.completion ?? 0;
-  const predecessors = (input.predecessors as string[] | undefined) ?? fallback?.predecessors ?? [];
+  const createdAt = getOptionalNumber(input.createdAt) ?? fallback?.createdAt ?? timestamp;
+  const updatedAt = getOptionalNumber(input.updatedAt) ?? timestamp;
+  const startDate = getOptionalNumber(input.startDate) ?? fallback?.startDate ?? createdAt;
+  const dueDate = getOptionalNumber(input.dueDate) ?? fallback?.dueDate ?? null;
+  const completion = getOptionalNumber(input.completion) ?? fallback?.completion ?? 0;
+  const predecessors = getStringArray(input.predecessors) ?? fallback?.predecessors ?? [];
 
   return {
-    id: (input.id as string | undefined) ?? fallback?.id ?? generateId(),
+    id: getString(input.id ?? '', fallback?.id ?? generateId()),
     projectId,
-    title: (input.title as string | undefined) ?? fallback?.title ?? 'Untitled Task',
-    description: (input.description as string | undefined) ?? fallback?.description ?? null,
+    title: getString(input.title ?? '', fallback?.title ?? 'Untitled Task'),
+    description: getOptionalString(input.description) ?? fallback?.description ?? null,
     status: status as TaskRecord['status'],
     priority: priority as TaskRecord['priority'],
-    wbs: (input.wbs as string | undefined) ?? fallback?.wbs ?? null,
+    wbs: getOptionalString(input.wbs) ?? fallback?.wbs ?? null,
     createdAt,
     startDate,
     dueDate,
     completion,
-    assignee: (input.assignee as string | undefined) ?? fallback?.assignee ?? null,
-    isMilestone: (input.isMilestone as boolean | undefined) ?? fallback?.isMilestone ?? false,
+    assignee: getOptionalString(input.assignee) ?? fallback?.assignee ?? null,
+    isMilestone: getBoolean(input.isMilestone, fallback?.isMilestone ?? false),
     predecessors,
     updatedAt,
   };
@@ -90,14 +147,15 @@ const normalizeProjectInput = (
 ): ProjectRecord => {
   const timestamp = now();
   const resolvedWorkspaceId = fallback?.workspaceId ?? workspaceId;
-  const createdAt = (input.createdAt as number | undefined) ?? fallback?.createdAt ?? timestamp;
-  const updatedAt = (input.updatedAt as number | undefined) ?? timestamp;
+  const createdAt = getOptionalNumber(input.createdAt) ?? fallback?.createdAt ?? timestamp;
+  const updatedAt = getOptionalNumber(input.updatedAt) ?? timestamp;
+
   return {
-    id: (input.id as string | undefined) ?? fallback?.id ?? generateId(),
+    id: getString(input.id ?? '', fallback?.id ?? generateId()),
     workspaceId: resolvedWorkspaceId,
-    name: (input.name as string | undefined) ?? fallback?.name ?? 'Untitled Project',
-    description: (input.description as string | undefined) ?? fallback?.description ?? null,
-    icon: (input.icon as string | undefined) ?? fallback?.icon ?? null,
+    name: getString(input.name ?? '', fallback?.name ?? 'Untitled Project'),
+    description: getOptionalString(input.description) ?? fallback?.description ?? null,
+    icon: getOptionalString(input.icon) ?? fallback?.icon ?? null,
     createdAt,
     updatedAt,
   };
