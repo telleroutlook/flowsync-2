@@ -288,7 +288,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
   },
 
   // planChanges is special - handles multiple actions at once
-  planChanges: (args, { activeProjectId, generateId, t }) => {
+  planChanges: async (args, { api, activeProjectId, generateId, t }) => {
     if (!Array.isArray(args.actions)) {
       return { output: t('tool.error.invalid_actions') };
     }
@@ -301,7 +301,45 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       after?: Record<string, unknown>;
     };
 
-    // First pass: collect all new project IDs being created
+    // Build a mapping of truncated IDs to full IDs for auto-fixing AI-generated IDs
+    // AI models may truncate UUIDs to first 8 characters, so we need to fix them
+    const idMap = new Map<string, string>();
+    const projectIds = new Set<string>();
+
+    // Collect all project IDs referenced in actions
+    for (const action of args.actions) {
+      if (action && typeof action === 'object') {
+        const rawAction = action as RawAction;
+        if (rawAction.entityType === 'project' && rawAction.action === 'create') {
+          const createdId = (rawAction.after?.id as string | undefined) ?? undefined;
+          if (createdId) {
+            projectIds.add(createdId);
+          }
+        }
+      }
+    }
+
+    // Fetch tasks from all relevant projects to build ID mapping
+    if (activeProjectId) projectIds.add(activeProjectId);
+
+    for (const projectId of projectIds) {
+      try {
+        const tasks = await api.listTasks({ projectId });
+        for (const task of tasks.data) {
+          // Map both full ID and truncated ID (first 8 chars) to full ID
+          idMap.set(task.id, task.id);
+          if (task.id.length >= 8) {
+            const truncated = task.id.substring(0, 8);
+            idMap.set(truncated, task.id);
+          }
+        }
+      } catch (error) {
+        // Ignore fetch errors - we'll try to match IDs as-is
+        console.error('[planChanges] Failed to fetch tasks for ID mapping:', error);
+      }
+    }
+
+    // First pass: collect all new project IDs being created and find first one
     const newProjectIds = new Set<string>();
     let firstNewProjectId: string | null = null;
     for (const action of args.actions) {
@@ -325,6 +363,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     for (const projectId of newProjectIds) allowedProjectIds.add(projectId);
 
     let correctedProjectCount = 0;
+    let correctedEntityIdCount = 0;
     const draftActions: DraftAction[] = args.actions
       .map((action: unknown) => {
         if (!action || typeof action !== 'object') {
@@ -355,11 +394,41 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
           }
         }
 
+        // Fix truncated entityId (AI may truncate UUIDs to 8 chars)
+        let fixedEntityId = rawAction.entityId;
+        if (fixedEntityId && idMap.has(fixedEntityId)) {
+          const mappedId = idMap.get(fixedEntityId);
+          if (mappedId && mappedId !== fixedEntityId) {
+            fixedEntityId = mappedId;
+            correctedEntityIdCount += 1;
+          }
+        }
+
+        // Fix truncated predecessors in after data
+        if (processedAfter.predecessors && Array.isArray(processedAfter.predecessors)) {
+          const fixedPredecessors: string[] = [];
+          for (const pred of processedAfter.predecessors) {
+            if (typeof pred === 'string') {
+              if (idMap.has(pred)) {
+                const mappedId = idMap.get(pred);
+                if (mappedId) {
+                  fixedPredecessors.push(mappedId);
+                  continue;
+                }
+              }
+              // Not in idMap, keep original
+              fixedPredecessors.push(pred);
+            }
+            // Skip non-string predecessors
+          }
+          processedAfter.predecessors = fixedPredecessors;
+        }
+
         return {
           id: rawAction.id || generateId(),
           entityType: rawAction.entityType as DraftAction['entityType'],
           action: rawAction.action as DraftAction['action'],
-          entityId: rawAction.entityId,
+          entityId: fixedEntityId,
           after: processedAfter,
         };
       })
@@ -373,9 +442,14 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       };
     }
 
-    const output = correctedProjectCount > 0
-      ? t('tool.warning.project_id_corrected_count', { count: correctedProjectCount })
-      : '';
+    const outputParts: string[] = [];
+    if (correctedProjectCount > 0) {
+      outputParts.push(t('tool.warning.project_id_corrected_count', { count: correctedProjectCount }));
+    }
+    if (correctedEntityIdCount > 0) {
+      outputParts.push(t('tool.warning.entity_id_corrected_count', { count: correctedEntityIdCount }));
+    }
+    const output = outputParts.join(' ');
 
     return {
       output,
