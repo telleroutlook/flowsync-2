@@ -53,6 +53,37 @@ export type ProjectRecord = {
   updatedAt: number;
 };
 
+// Stricter types for DraftAction data to improve type safety
+export type TaskActionData = {
+  id?: string;
+  projectId?: string;
+  title?: string;
+  description?: string | null;
+  status?: TaskStatus;
+  priority?: Priority;
+  wbs?: string | null;
+  startDate?: number | null;
+  dueDate?: number | null;
+  completion?: number | null;
+  assignee?: string | null;
+  isMilestone?: boolean;
+  predecessors?: string[];
+  createdAt?: number;
+  updatedAt?: number;
+};
+
+export type ProjectActionData = {
+  id?: string;
+  workspaceId?: string;
+  name?: string;
+  description?: string | null;
+  icon?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+};
+
+export type DraftActionData = TaskActionData | ProjectActionData;
+
 export type DraftAction = {
   id: string;
   entityType: 'task' | 'project';

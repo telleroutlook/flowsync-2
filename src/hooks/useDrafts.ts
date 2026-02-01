@@ -184,7 +184,11 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
         errorStack: error instanceof Error ? error.stack : undefined,
       });
       appendSystemMessage(t('draft.apply_failed', { error: getErrorMessage(error, t('common.na')) }));
+      // Re-throw error to ensure caller knows operation failed
+      throw error;
     } finally {
+      // Only remove from tracking set after all operations complete
+      // This prevents race conditions where the same draftId could be processed again
       draftOperationRef.current.delete(draftId);
       setIsProcessingDraft(false);
     }

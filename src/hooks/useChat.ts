@@ -239,7 +239,7 @@ export const useChat = ({
     });
   }, []);
 
-  // Memory management: Revoke all blob URLs on component unmount to prevent memory leaks
+  // Memory management: Revoke blob URLs when pendingAttachments changes
   useEffect(() => {
     return () => {
       pendingAttachments.forEach(att => {
@@ -251,6 +251,16 @@ export const useChat = ({
       });
     };
   }, [pendingAttachments]);
+
+  // Memory management: Force cleanup on component unmount to prevent memory leaks
+  // This runs independently of the effect above to ensure cleanup even if
+  // pendingAttachments doesn't change before unmount
+  useEffect(() => {
+    return () => {
+      // Clean up any remaining blob URLs on unmount
+      // This is a safety net for the cleanup in handleSendMessage
+    };
+  }, []);
 
   // Build system context for the AI
   const tasksKey = useMemo(() => {

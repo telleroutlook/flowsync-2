@@ -6,6 +6,7 @@ import { useI18n } from '../i18n';
 
 const PAGE_SIZE = 100;
 const PROJECT_CACHE_TTL_MS = 30000;
+const MAX_CACHE_SIZE = 50; // Limit cache size to prevent unbounded growth
 
 const getProjectStorageKey = (workspaceId: string): string =>
   workspaceId ? `activeProjectId:${workspaceId}` : 'activeProjectId';
@@ -17,6 +18,13 @@ const getProjectCache = (workspaceId: string): { data: Project[]; timestamp: num
   projectCacheByWorkspace.get(workspaceId) || null;
 
 const setProjectCache = (workspaceId: string, data: Project[]): void => {
+  // Prevent unbounded cache growth by evicting oldest entry when limit is reached
+  if (projectCacheByWorkspace.size >= MAX_CACHE_SIZE) {
+    const firstKey = projectCacheByWorkspace.keys().next().value;
+    if (firstKey) {
+      projectCacheByWorkspace.delete(firstKey);
+    }
+  }
   projectCacheByWorkspace.set(workspaceId, { data, timestamp: Date.now() });
 };
 

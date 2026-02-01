@@ -358,7 +358,7 @@ export async function processImportActions(
       // Validate projectId
       if (!task.projectId) {
         console.error('[Import] Task missing projectId after resolution:', task);
-        throw new Error(`Task "${task.title}" (id: ${task.id}) is missing a valid projectId. Cannot import.`);
+        throw new Error('Import failed: Task data is incomplete. Please ensure all tasks have a valid project association.');
       }
 
       const shouldUpdate = importStrategy === 'merge' && existingTaskIds.has(task.id);
