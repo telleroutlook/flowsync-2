@@ -208,6 +208,15 @@ function App() {
     }]);
   }, []);
 
+  const appendModelMessage = useCallback((text: string) => {
+    setMessages(prev => [...prev, {
+      id: generateId(),
+      role: 'model',
+      text,
+      timestamp: Date.now(),
+    }]);
+  }, []);
+
   const handleResetChat = useCallback(() => {
     const initialMsg: ChatMessage = {
       id: 'welcome',
@@ -236,6 +245,7 @@ function App() {
     refreshData,
     refreshAuditLogs,
     appendSystemMessage,
+    appendModelMessage,
     onProjectModified: invalidateCache
   });
 

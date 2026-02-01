@@ -53,6 +53,7 @@ describe('useDrafts', () => {
 
   it('creates draft, tracks warnings, and sets pending draft', async () => {
     const appendSystemMessage = vi.fn();
+    const appendModelMessage = vi.fn();
     const refreshData = vi.fn(async () => {});
     const refreshAuditLogs = vi.fn(async () => {});
 
@@ -67,6 +68,7 @@ describe('useDrafts', () => {
         refreshData,
         refreshAuditLogs,
         appendSystemMessage,
+        appendModelMessage,
       }), { wrapper }
     );
 
@@ -87,6 +89,7 @@ describe('useDrafts', () => {
 
   it('applies a draft and refreshes data', async () => {
     const appendSystemMessage = vi.fn();
+    const appendModelMessage = vi.fn();
     const refreshData = vi.fn(async () => {});
     const refreshAuditLogs = vi.fn(async () => {});
 
@@ -107,6 +110,7 @@ describe('useDrafts', () => {
         refreshData,
         refreshAuditLogs,
         appendSystemMessage,
+        appendModelMessage,
       }), { wrapper }
     );
 
@@ -131,6 +135,7 @@ describe('useDrafts', () => {
 
   it('discards a draft and refreshes list', async () => {
     const appendSystemMessage = vi.fn();
+    const appendModelMessage = vi.fn();
     const refreshData = vi.fn(async () => {});
     const refreshAuditLogs = vi.fn(async () => {});
 
@@ -142,6 +147,7 @@ describe('useDrafts', () => {
         refreshData,
         refreshAuditLogs,
         appendSystemMessage,
+        appendModelMessage,
       }), { wrapper }
     );
 

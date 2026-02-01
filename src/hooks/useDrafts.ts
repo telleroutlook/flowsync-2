@@ -9,6 +9,7 @@ interface UseDraftsProps {
   refreshData: () => Promise<void>;
   refreshAuditLogs: (projectId?: string) => Promise<void>;
   appendSystemMessage: (text: string) => void;
+  appendModelMessage: (text: string) => void;
   onProjectModified?: () => void;
 }
 
@@ -28,7 +29,7 @@ interface UseDraftsResult {
   handleDiscardDraft: (draftId: string) => Promise<void>;
 }
 
-export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appendSystemMessage, onProjectModified }: UseDraftsProps) => {
+export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appendSystemMessage, appendModelMessage, onProjectModified }: UseDraftsProps) => {
   const { t } = useI18n();
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [pendingDraftId, setPendingDraftId] = useState<string | null>(null);
@@ -172,47 +173,87 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
 
         // Handle different draft statuses with user-friendly messages
         if (result.draft.status === 'applied') {
+          // Simple success: use system message (not rendered)
           appendSystemMessage(t('draft.applied', { id }));
         } else if (result.draft.status === 'partial') {
-          // Partial success - show summary and details
+          // Partial success: use AI-style message with Markdown formatting
           const summary = result.draft.summary;
           const results = result.results ?? [];
           const failedActions = results.filter(a => a.status === 'failed');
           const warningActions = results.filter(a => a.status === 'warning');
+          const successActions = results.filter(a => a.status === 'success');
 
-          let message = t('draft.partial_applied', {
-            success: summary?.success ?? 0,
-            warning: summary?.warning ?? 0,
-            failed: summary?.failed ?? 0,
-            skipped: summary?.skipped ?? 0,
-          });
+          // Build formatted Markdown message
+          let markdownMessage = `## ${t('draft.partial_applied_title')}\n\n`;
 
-          // Show details of failed actions
+          // Summary section
+          markdownMessage += `**${t('draft.summary')}**\n`;
+          markdownMessage += `- ✅ ${t('draft.success_count', { count: summary?.success ?? successActions.length })}\n`;
+          if (summary?.warning ?? warningActions.length > 0) {
+            markdownMessage += `- ⚠️ ${t('draft.warning_count', { count: summary?.warning ?? warningActions.length })}\n`;
+          }
+          if (summary?.failed ?? failedActions.length > 0) {
+            markdownMessage += `- ❌ ${t('draft.failed_count', { count: summary?.failed ?? failedActions.length })}\n`;
+          }
+          if (summary?.skipped ?? 0) {
+            markdownMessage += `- ⏭️ ${t('draft.skipped_count', { count: summary?.skipped ?? 0 })}\n`;
+          }
+          markdownMessage += `\n`;
+
+          // Failed actions section
           if (failedActions.length > 0) {
-            const failedDetails = failedActions.map(a => {
-              const entity = a.after?.title || a.after?.name || a.entityId || a.id;
-              return `${a.entityType}.${a.action}(${entity}): ${a.error || t('common.unknown_error')}`;
-            }).join('; ');
-            message += ' ' + t('draft.failed_actions', { details: failedDetails });
+            markdownMessage += `### ${t('draft.failed_actions_title')}\n\n`;
+            for (const action of failedActions) {
+              const entity = action.after?.title || action.after?.name || action.entityId || action.id || 'Unknown';
+              const error = action.error || t('common.unknown_error');
+              markdownMessage += `**${action.entityType}.${action.action}(${entity})**\n\n`;
+              markdownMessage += `\`\`\`\n${error}\n\`\`\`\n\n`;
+            }
           }
 
-          // Show warnings if any
+          // Warnings section
           if (warningActions.length > 0 && failedActions.length === 0) {
-            message += ' ' + t('draft.warnings_auto_corrected');
+            markdownMessage += `### ${t('draft.warnings_title')}\n\n`;
+            markdownMessage += `${t('draft.warnings_auto_corrected')}\n\n`;
           }
 
-          appendSystemMessage(message);
+          // Use AI-style rendering for better UX
+          appendModelMessage(markdownMessage);
         } else if (result.draft.status === 'failed') {
+          // Complete failure: use AI-style message with details
           const summary = result.draft.summary;
-          const errorDetails = summary
-            ? t('draft.failed_summary', {
-                success: summary.success,
-                warning: summary.warning,
-                failed: summary.failed,
-                skipped: summary.skipped,
-              })
-            : t('draft.unknown_error');
-          appendSystemMessage(t('draft.apply_failed_details', { details: errorDetails }));
+          const results = result.results ?? [];
+          const failedActions = results.filter(a => a.status === 'failed');
+
+          let markdownMessage = `## ${t('draft.apply_failed_title')}\n\n`;
+
+          if (summary) {
+            markdownMessage += `**${t('draft.execution_summary')}**\n`;
+            markdownMessage += `- ✅ ${t('draft.success_count', { count: summary.success })}\n`;
+            if (summary.warning > 0) {
+              markdownMessage += `- ⚠️ ${t('draft.warning_count', { count: summary.warning })}\n`;
+            }
+            markdownMessage += `- ❌ ${t('draft.failed_count', { count: summary.failed })}\n`;
+            if (summary.skipped > 0) {
+              markdownMessage += `- ⏭️ ${t('draft.skipped_count', { count: summary.skipped })}\n`;
+            }
+            markdownMessage += `\n`;
+          }
+
+          if (failedActions.length > 0) {
+            markdownMessage += `### ${t('draft.failed_actions_title')}\n\n`;
+            for (const action of failedActions) {
+              const entity = action.after?.title || action.after?.name || action.entityId || action.id || 'Unknown';
+              const error = action.error || t('common.unknown_error');
+              markdownMessage += `**${action.entityType}.${action.action}(${entity})**\n\n`;
+              markdownMessage += `\`\`\`\n${error}\n\`\`\`\n\n`;
+            }
+          } else {
+            markdownMessage += `${t('draft.unknown_error')}\n`;
+          }
+
+          // Use AI-style rendering for better UX
+          appendModelMessage(markdownMessage);
         }
       }
 
@@ -237,7 +278,7 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
       draftOperationRef.current.delete(draftId);
       setIsProcessingDraft(false);
     }
-  }, [drafts, refreshData, refreshDrafts, refreshAuditLogs, activeProjectId, appendSystemMessage, onProjectModified, t]);
+  }, [drafts, refreshData, refreshDrafts, refreshAuditLogs, activeProjectId, appendSystemMessage, appendModelMessage, onProjectModified, t]);
 
   const handleDiscardDraft = useCallback(async (draftId: string) => {
     try {
