@@ -67,8 +67,10 @@ export const createProject = async (
   const timestamp = now();
   const createdAt = typeof data.createdAt === 'number' && !Number.isNaN(data.createdAt) ? data.createdAt : timestamp;
   const updatedAt = typeof data.updatedAt === 'number' && !Number.isNaN(data.updatedAt) ? data.updatedAt : createdAt;
+  // Use || instead of ?? to handle empty string as missing ID
+  const id = data.id || generateId();
   const record = {
-    id: data.id ?? generateId(),
+    id,
     workspaceId: data.workspaceId,
     name: data.name,
     description: data.description ?? null,

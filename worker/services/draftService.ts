@@ -122,7 +122,7 @@ const normalizeTaskInput = (
   const predecessors = getStringArray(input.predecessors) ?? fallback?.predecessors ?? [];
 
   return {
-    id: getString(input.id ?? '', fallback?.id ?? generateId()),
+    id: getString(input.id || '', fallback?.id || generateId()),  // Use || to handle empty string
     projectId,
     title: getString(input.title ?? '', fallback?.title ?? 'Untitled Task'),
     description: getOptionalString(input.description) ?? fallback?.description ?? null,
@@ -151,7 +151,7 @@ const normalizeProjectInput = (
   const updatedAt = getOptionalNumber(input.updatedAt) ?? timestamp;
 
   return {
-    id: getString(input.id ?? '', fallback?.id ?? generateId()),
+    id: getString(input.id || '', fallback?.id || generateId()),  // Use || to handle empty string
     workspaceId: resolvedWorkspaceId,
     name: getString(input.name ?? '', fallback?.name ?? 'Untitled Project'),
     description: getOptionalString(input.description) ?? fallback?.description ?? null,
@@ -1103,9 +1103,9 @@ export const applyDraft = async (
           });
 
           try {
-            const beforeSnapshot = await getProjectById(db, (action.after.id as string) ?? '', workspaceId);
+            const beforeSnapshot = await getProjectById(db, (action.after.id as string) || '', workspaceId);
             const created = await createProject(db, {
-              id: (action.after.id as string) ?? undefined,
+              id: (action.after.id as string) || undefined,  // Use || to handle empty string
               name: (action.after.name as string) ?? 'Untitled Project',
               description: (action.after.description as string) ?? undefined,
               icon: (action.after.icon as string) ?? undefined,
@@ -1327,9 +1327,9 @@ export const applyDraft = async (
               throw new Error('Missing projectId for task creation.');
             }
 
-            const beforeSnapshot = await getTaskById(db, (action.after.id as string) ?? '', workspaceId);
+            const beforeSnapshot = await getTaskById(db, (action.after.id as string) || '', workspaceId);
             const created = await createTask(db, {
-              id: (action.after.id as string) ?? undefined,
+              id: (action.after.id as string) || undefined,  // Use || to handle empty string
               projectId: resolvedProjectId,
               title: (action.after.title as string) ?? 'Untitled Task',
               description: (action.after.description as string) ?? undefined,

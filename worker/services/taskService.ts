@@ -211,8 +211,10 @@ export const createTask = async (
   const timestamp = now();
   const createdAt = data.createdAt ?? timestamp;
   const updatedAt = data.updatedAt ?? timestamp;
+  // Use || instead of ?? to handle empty string as missing ID
+  const id = data.id || generateId();
   const record = {
-    id: data.id ?? generateId(),
+    id,
     projectId: data.projectId,
     title: data.title,
     description: data.description ?? null,

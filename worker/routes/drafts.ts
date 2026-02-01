@@ -61,7 +61,7 @@ draftsRoute.post('/', zValidator('json', createDraftSchema), async (c) => {
   try {
     const payload = c.req.valid('json') as z.infer<typeof createDraftSchema>;
     const actions: DraftAction[] = payload.actions.map(action => ({
-      id: action.id ?? generateId(),
+      id: action.id || generateId(),  // Use || to handle empty string
       entityType: action.entityType,
       action: action.action,
       entityId: action.entityId,
