@@ -2,6 +2,8 @@ import React, { useMemo, useRef, useState, useEffect, useId, memo, useCallback }
 import { Task } from '../types';
 import { useI18n } from '../src/i18n';
 import { cn } from '../src/utils/cn';
+import { getTasksWithConflicts } from '../src/utils/task';
+import { AlertTriangle } from 'lucide-react';
 import { DAY_MS, GANTT_VIEW_SETTINGS, type GanttViewMode } from '../src/constants/gantt';
 import { getTaskColorClass } from '../shared/constants/colors';
 
@@ -123,6 +125,9 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
       })
       .sort((a, b) => a.startMs - b.startMs);
   }, [tasks]);
+
+  // Calculate tasks with conflicts for visual indicator
+  const tasksWithConflicts = useMemo(() => getTasksWithConflicts(tasks), [tasks]);
 
   useEffect(() => {
     onViewModeChange?.(viewMode);
@@ -485,7 +490,12 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
                      style={{ height: ROW_HEIGHT }}
                      onClick={() => onSelectTask?.(task.id)}
                    >
-                     <div className="text-xs sm:text-sm font-medium text-text-primary truncate">{task.title}</div>
+                     <div className="flex items-center gap-1.5">
+                       {tasksWithConflicts.has(task.id) && (
+                         <AlertTriangle className="w-3.5 h-3.5 text-negative shrink-0" aria-label={t('task.schedule_conflict')} />
+                       )}
+                       <div className="text-xs sm:text-sm font-medium text-text-primary truncate">{task.title}</div>
+                     </div>
                      <div className="text-[10px] sm:text-xs text-text-secondary truncate">{task.assignee || t('gantt.unassigned')}</div>
                    </div>
                  ))}

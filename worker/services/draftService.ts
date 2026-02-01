@@ -65,7 +65,7 @@ const parseDraftRow = (row: {
  * Safely extracts a string value from unknown input
  */
 function getString(value: unknown, fallback: string): string {
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string' && value !== '') return value;
   return fallback;
 }
 

@@ -3,6 +3,8 @@ import { Task, TaskStatus } from '../types';
 import { useI18n } from '../src/i18n';
 import { getPriorityLabel, getStatusLabel } from '../src/i18n/labels';
 import { cn } from '../src/utils/cn';
+import { getTasksWithConflicts } from '../src/utils/task';
+import { AlertTriangle } from 'lucide-react';
 import { PRIORITY_COLORS, STATUS_COLORS } from '../shared/constants/colors';
 
 interface ListViewProps {
@@ -15,9 +17,10 @@ interface TaskRowProps {
   task: Task;
   isSelected: boolean;
   onSelectTask?: (id: string) => void;
+  hasConflict?: boolean;
 }
 
-const TaskRow = memo(({ task, isSelected, onSelectTask }: TaskRowProps) => {
+const TaskRow = memo(({ task, isSelected, onSelectTask, hasConflict }: TaskRowProps) => {
   const { t, locale } = useI18n();
   const handleClick = useCallback(() => {
     onSelectTask?.(task.id);
@@ -40,6 +43,9 @@ const TaskRow = memo(({ task, isSelected, onSelectTask }: TaskRowProps) => {
               "text-sm font-medium flex items-center gap-1.5",
               task.isMilestone ? "text-critical" : "text-text-primary"
             )}>
+               {hasConflict && (
+                 <AlertTriangle className="w-4 h-4 text-negative shrink-0" aria-label={t('task.schedule_conflict')} />
+               )}
                {task.isMilestone && (
                  <svg className="w-4 h-4 text-critical" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" /></svg>
                )}
@@ -107,6 +113,9 @@ TaskRow.displayName = 'TaskRow';
 export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, onSelectTask }) => {
   const { t } = useI18n();
 
+  // Calculate tasks with conflicts for visual indicator
+  const tasksWithConflicts = useMemo(() => getTasksWithConflicts(tasks), [tasks]);
+
   const sortedTasks = useMemo(() => {
     return [...tasks].sort((a, b) => {
       if (a.wbs && b.wbs) return a.wbs.localeCompare(b.wbs, undefined, { numeric: true });
@@ -152,6 +161,7 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
                   task={task}
                   isSelected={selectedTaskId === task.id}
                   onSelectTask={onSelectTask}
+                  hasConflict={tasksWithConflicts.has(task.id)}
                 />
               ))
             )}

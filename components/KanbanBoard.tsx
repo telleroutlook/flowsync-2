@@ -3,7 +3,8 @@ import { Task, TaskStatus } from '../types';
 import { useI18n } from '../src/i18n';
 import { getPriorityShortLabel, getStatusLabel } from '../src/i18n/labels';
 import { cn } from '../src/utils/cn';
-import { ClipboardList, Calendar } from 'lucide-react';
+import { getTasksWithConflicts } from '../src/utils/task';
+import { ClipboardList, Calendar, AlertTriangle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { PRIORITY_COLORS_KANBAN, STATUS_INDICATOR_COLORS } from '../shared/constants/colors';
@@ -18,9 +19,10 @@ interface TaskCardProps {
   task: Task;
   isSelected?: boolean;
   onSelect?: (id: string) => void;
+  hasConflict?: boolean;
 }
 
-const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect }) => {
+const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect, hasConflict }) => {
   const { t, locale } = useI18n();
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
@@ -58,7 +60,10 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect }) 
       <CardHeader className="p-4 pb-2 space-y-0">
         <div className="flex justify-between items-start gap-2">
           <CardTitle className="text-base font-semibold leading-snug text-text-primary flex-1 min-w-0">
-             <div className="flex flex-wrap items-center gap-1">
+             <div className="flex flex-wrap items-center gap-1.5">
+                {hasConflict && (
+                  <AlertTriangle className="w-4 h-4 text-negative shrink-0" aria-label={t('task.schedule_conflict')} />
+                )}
                 {task.wbs && (
                   <span className="text-[10px] font-mono text-text-secondary tracking-tight shrink-0 leading-none">
                     [{task.wbs}]
@@ -136,6 +141,9 @@ TaskCard.displayName = 'TaskCard';
 export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTaskId, onSelectTask }) => {
   const { t } = useI18n();
 
+  // Calculate tasks with conflicts for visual indicator
+  const tasksWithConflicts = useMemo(() => getTasksWithConflicts(tasks), [tasks]);
+
   const groupedTasks = useMemo(() => {
     const groups = {
       [TaskStatus.TODO]: [] as Task[],
@@ -181,6 +189,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTa
                     task={task}
                     isSelected={selectedTaskId === task.id}
                     onSelect={onSelectTask}
+                    hasConflict={tasksWithConflicts.has(task.id)}
                   />
                 ))
               )}
