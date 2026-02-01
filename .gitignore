@@ -18,6 +18,10 @@ dist-server
 .env.local
 .env.production
 
+# Test files
+test-*.html
+*.test.html
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
