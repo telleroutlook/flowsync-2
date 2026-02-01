@@ -1,10 +1,6 @@
 import { Hono } from 'hono';
 import type { Context, Next } from 'hono';
 import type { Variables, Bindings, DrizzleDB } from './types';
-import { projectsRoute } from './routes/projects';
-import { tasksRoute } from './routes/tasks';
-import { draftsRoute } from './routes/drafts';
-import { auditRoute } from './routes/audit';
 import { aiRoute } from './routes/ai';
 import { authRoute } from './routes/auth';
 import { workspacesRoute } from './routes/workspaces';
@@ -13,6 +9,8 @@ import { systemRoute } from './routes/system';
 import { dataSourcesRoute } from './routes/dataSources';
 import { chartsRoute } from './routes/charts';
 import { chartAiRoute } from './routes/chartAi';
+import { chartExportsRoute } from './routes/chartExports';
+import { chartAuditRoute } from './routes/chartAudit';
 
 export { Variables, Bindings };
 
@@ -116,11 +114,13 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
 
       // Validate CSRF token for API routes
       const isApiRoute = c.req.path.startsWith('/api/');
+      // Skip CSRF for system init endpoint (uses INIT_TOKEN instead)
+      const isSystemInit = c.req.path === '/api/system/init';
 
       // Use timing-safe comparison to prevent timing attacks
       const tokensMatch = cookieToken && headerToken && timingSafeEqual(cookieToken, headerToken);
 
-      if (isApiRoute && !tokensMatch) {
+      if (isApiRoute && !isSystemInit && !tokensMatch) {
         console.warn('CSRF validation failed', {
           path: c.req.path,
           method: c.req.method,
@@ -182,13 +182,12 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
   app.route('/', aiRoute);
   app.route('/api/auth', authRoute);
   app.route('/api/workspaces', workspacesRoute);
-  app.route('/api/projects', projectsRoute);
-  app.route('/api/tasks', tasksRoute);
-  app.route('/api/drafts', draftsRoute);
-  app.route('/api/audit', auditRoute);
   app.route('/api/data-sources', dataSourcesRoute);
   app.route('/api/charts', chartsRoute);
   app.route('/api/chart-ai', chartAiRoute);
+  app.route('/api/chart-exports', chartExportsRoute);
+  app.route('/api/chart-imports', chartExportsRoute);
+  app.route('/api/chart-audit', chartAuditRoute);
   app.route('/api/system', systemRoute);
 
   app.onError((err, c) => {

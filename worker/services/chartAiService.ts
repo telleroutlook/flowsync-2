@@ -2,6 +2,7 @@ import type { DrizzleDB } from '../db';
 import { chartDrafts, chartConfigs } from '../db/schema';
 import { generateId, now } from './utils';
 import { eq } from 'drizzle-orm';
+import { validateEChartsConfig, formatValidationErrors } from './chartValidationService';
 
 /**
  * System prompt for AI chart generation
@@ -88,7 +89,7 @@ const CHART_GENERATION_SYSTEM_PROMPT = `你是 ChartSync AI，一个专业的数
 现在，请根据用户提供的数据和需求生成图表配置。`;
 
 /**
- * Generate charts using AI
+ * Generate charts using AI with self-correction loop
  */
 export async function generateChartsWithAI(
   db: DrizzleDB,
@@ -110,6 +111,7 @@ export async function generateChartsWithAI(
   }
 ) {
   const { dataSourceId, dataSourceContent, projectId, workspaceId, prompt, chartCount = 1 } = options;
+  const maxAttempts = 3;
 
   // Prepare data context for AI
   const dataContext = {
@@ -120,97 +122,213 @@ export async function generateChartsWithAI(
     allData: dataSourceContent.data.slice(0, 100), // Limit data size for context
   };
 
-  // Build user prompt
-  const userPrompt = `
-数据信息：
+  // Build initial user prompt
+  const buildUserPrompt = (correctionContext?: string) => `
+${correctionContext ? correctionContext + '\n\n' : ''}数据信息：
 \`\`\`json
 ${JSON.stringify(dataContext, null, 2)}
 \`\`\`
 
+${correctionContext ? '' : `用户需求：\n${prompt}\n\n请生成 ${chartCount} 个不同类型的图表配置。`}
+`.trim();
+
+  // Self-correction loop
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`AI chart generation - Attempt ${attempt}/${maxAttempts}`);
+
+      // Build messages
+      const messages: Array<{ role: string; content: string }> = [
+        { role: 'system', content: CHART_GENERATION_SYSTEM_PROMPT },
+      ];
+
+      // If this is a correction attempt, add previous errors
+      if (attempt > 1) {
+        messages.push({
+          role: 'user',
+          content: buildUserPrompt(`
+上一次生成的图表配置存在以下验证错误：
+<ERRORS>
+请在重新生成时修复这些错误：
+- 确保每个图表都有完整的 title.text 字段
+- 确保 series 数组不为空且每个系列都有 type 和 data 字段
+- 确保 echartsConfig 是一个完整的、符合 ECharts 规范的对象
+</ERRORS>
+`),
+        });
+      } else {
+        messages.push({
+          role: 'user',
+          content: buildUserPrompt(`
 用户需求：
 ${prompt}
 
 请生成 ${chartCount} 个不同类型的图表配置。
-`;
+`),
+        });
+      }
 
-  try {
-    // Call OpenAI-compatible API
-    const baseUrl = (env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
-    const endpoint = `${baseUrl}/chat/completions`;
-    const model = env.OPENAI_MODEL || 'gpt-4';
+      // Call OpenAI-compatible API
+      const baseUrl = (env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
+      const endpoint = `${baseUrl}/chat/completions`;
+      const model = env.OPENAI_MODEL || 'gpt-4';
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: CHART_GENERATION_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.7,
-        max_tokens: 4000,
-      }),
-    });
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          response_format: { type: 'json_object' },
+          temperature: attempt === 1 ? 0.7 : 0.3, // Lower temperature for corrections
+          max_tokens: 4000,
+        }),
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`OpenAI API error: ${response.status} ${error}`);
-    }
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`OpenAI API error: ${response.status} ${error}`);
+      }
 
-    const result: { choices: Array<{ message?: { content: string } }> } = await response.json();
-    const content = result.choices[0]?.message?.content;
+      const result: { choices: Array<{ message?: { content: string } }> } = await response.json();
+      const content = result.choices[0]?.message?.content;
 
-    if (!content) {
-      throw new Error('No content in AI response');
-    }
+      if (!content) {
+        throw new Error('No content in AI response');
+      }
 
-    // Parse AI response
-    const generated = JSON.parse(content);
-    const charts = generated.charts || [];
+      // Parse AI response
+      const generated = JSON.parse(content);
+      const charts = generated.charts || [];
 
-    // Create draft
-    const timestamp = now();
-    const draft = await db
-      .insert(chartDrafts)
-      .values({
-        id: generateId(),
-        workspaceId,
-        projectId,
-        status: 'pending',
-        draftType: 'create_charts',
-        actions: charts.map((chart: any) => ({
-          type: 'create',
-          data: {
-            title: chart.title,
-            description: chart.description || null,
-            chartType: chart.chartType,
-            echartsConfig: chart.echartsConfig,
+      if (charts.length === 0) {
+        throw new Error('AI generated no charts');
+      }
+
+      // Validate each chart configuration
+      console.log(`Validating ${charts.length} chart configurations...`);
+      const validationResults = await Promise.all(
+        charts.map(async (chart: any, idx: number) => {
+          const result = await validateEChartsConfig(chart.echartsConfig || {});
+          return {
+            index: idx,
+            chart: chart,
+            validation: result,
+          };
+        })
+      );
+
+      // Check if all charts are valid
+      const invalidCharts = validationResults.filter((r) => !r.validation.valid);
+
+      if (invalidCharts.length === 0) {
+        console.log(`✅ All ${charts.length} charts validated successfully on attempt ${attempt}`);
+
+        // Create draft with valid charts
+        const timestamp = now();
+        const draft = await db
+          .insert(chartDrafts)
+          .values({
+            id: generateId(),
+            workspaceId,
+            projectId,
+            status: 'pending',
+            draftType: 'create_charts',
+            actions: charts.map((chart: any) => ({
+              type: 'create',
+              data: {
+                title: chart.title,
+                description: chart.description || null,
+                chartType: chart.chartType,
+                echartsConfig: chart.echartsConfig,
+                generatedBy: 'ai',
+                generationPrompt: prompt,
+                dataSourceId: options.dataSourceId,
+              },
+            })),
             generatedBy: 'ai',
-            generationPrompt: prompt,
-            dataSourceId: options.dataSourceId,
-          },
-        })),
-        generatedBy: 'ai',
-        prompt,
-        createdAt: timestamp,
-        reason: null,
-      })
-      .returning();
+            prompt,
+            createdAt: timestamp,
+            reason: null,
+          })
+          .returning();
 
-    if (!draft[0]) {
-      throw new Error('Failed to create draft');
+        if (!draft[0]) {
+          throw new Error('Failed to create draft');
+        }
+
+        return draft[0];
+      }
+
+      // If invalid and not the last attempt, continue to retry
+      if (attempt < maxAttempts) {
+        console.warn(`⚠️ ${invalidCharts.length} charts failed validation. Retrying...`);
+
+        // Log validation errors for debugging
+        invalidCharts.forEach(({ index, validation }) => {
+          console.error(`Chart ${index} validation errors:`, formatValidationErrors(validation));
+        });
+
+        // Wait a bit before retrying
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        continue;
+      }
+
+      // Last attempt failed - create draft with validation errors
+      console.error(`❌ Validation failed after ${maxAttempts} attempts. Creating draft with errors.`);
+
+      const timestamp = now();
+      const draft = await db
+        .insert(chartDrafts)
+        .values({
+          id: generateId(),
+          workspaceId,
+          projectId,
+          status: 'pending',
+          draftType: 'create_charts',
+          actions: charts.map((chart: any, idx: number) => ({
+            type: 'create',
+            data: {
+              title: chart.title,
+              description: chart.description || null,
+              chartType: chart.chartType,
+              echartsConfig: chart.echartsConfig,
+              generatedBy: 'ai',
+              generationPrompt: prompt,
+              dataSourceId: options.dataSourceId,
+              validationErrors: validationResults[idx].validation.errors,
+            },
+          })),
+          generatedBy: 'ai',
+          prompt,
+          createdAt: timestamp,
+          reason: `Validation failed after ${maxAttempts} attempts`,
+        })
+        .returning();
+
+      if (!draft[0]) {
+        throw new Error('Failed to create draft');
+      }
+
+      return draft[0];
+    } catch (error) {
+      console.error(`Attempt ${attempt} failed:`, error);
+
+      // If this is the last attempt, throw the error
+      if (attempt === maxAttempts) {
+        console.error('AI chart generation failed after max attempts');
+        throw error;
+      }
+
+      // Wait before retrying
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-
-    return draft[0];
-  } catch (error) {
-    console.error('AI chart generation failed:', error);
-    throw error;
   }
+
+  throw new Error('AI chart generation failed: Maximum attempts reached');
 }
 
 /**

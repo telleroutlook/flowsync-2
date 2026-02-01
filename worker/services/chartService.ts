@@ -2,6 +2,7 @@ import { eq, and } from 'drizzle-orm';
 import type { DrizzleDB } from '../db';
 import { chartConfigs, chartProjects, chartAuditLogs } from '../db/schema';
 import { generateId, now } from './utils';
+import { validateEChartsConfig } from './chartValidationService';
 
 /**
  * Record audit log for chart operations
@@ -257,8 +258,7 @@ export async function deleteChart(
 }
 
 /**
- * Validate chart configuration
- * For now, this is a placeholder. Later, integrate with echarts-tool
+ * Validate chart configuration using enhanced validation service
  */
 export async function validateChartConfig(
   db: DrizzleDB,
@@ -272,28 +272,17 @@ export async function validateChartConfig(
     throw new Error('Chart not found');
   }
 
-  // Basic validation
-  const errors: Array<{ message: string; path?: string }> = [];
-  const config = chart.echartsConfig;
+  // Use enhanced validation service
+  const result = await validateEChartsConfig(chart.echartsConfig);
 
-  // Check required fields
-  if (!config.title) {
-    errors.push({ message: 'Missing required field: title', path: 'title' });
-  }
-  if (!config.series || !Array.isArray(config.series) || config.series.length === 0) {
-    errors.push({ message: 'Missing or invalid series field', path: 'series' });
-  }
-
-  const valid = errors.length === 0;
-
-  // Update validation status
+  // Update validation status in database
   await db
     .update(chartConfigs)
     .set({
-      validationStatus: valid ? 'valid' : 'invalid',
-      validationErrors: errors,
+      validationStatus: result.valid ? ('valid' as const) : ('invalid' as const),
+      validationErrors: result.errors,
     })
     .where(eq(chartConfigs.id, id));
 
-  return { valid, errors };
+  return result;
 }

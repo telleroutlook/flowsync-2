@@ -123,6 +123,25 @@ export const ChartCanvas: React.FC<ChartCanvasProps> = ({
     link.click();
   }, [chart.title]);
 
+  // Export chart as JSON configuration
+  const exportJSON = useCallback(() => {
+    const jsonConfig = {
+      title: chart.title,
+      description: chart.description,
+      chartType: chart.chartType,
+      echartsConfig: chart.echartsConfig,
+      exportedAt: new Date().toISOString(),
+    };
+
+    const blob = new Blob([JSON.stringify(jsonConfig, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = `${chart.title}-config.json`;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [chart.title, chart.description, chart.chartType, chart.echartsConfig]);
+
   // Save chart configuration
   const handleSave = useCallback(async () => {
     if (!onSave) return;
@@ -237,7 +256,7 @@ export const ChartCanvas: React.FC<ChartCanvasProps> = ({
             className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-border-subtle hover:bg-surface"
           >
             <Download className="w-4 h-4" />
-            导出 PNG
+            PNG
           </button>
 
           <button
@@ -245,7 +264,16 @@ export const ChartCanvas: React.FC<ChartCanvasProps> = ({
             className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-border-subtle hover:bg-surface"
           >
             <Download className="w-4 h-4" />
-            导出 SVG
+            SVG
+          </button>
+
+          <button
+            onClick={exportJSON}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-border-subtle hover:bg-surface"
+            title="导出 ECharts 配置 JSON"
+          >
+            <Download className="w-4 h-4" />
+            JSON
           </button>
 
           <div className="flex-1" />

@@ -4,14 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-FlowSync AI Studio is a data-driven project management application with:
-- **Frontend**: React 19.2.3 + Vite 6.2.0
+**ChartSync AI** is an AI-powered chart generation and export application with:
+- **Frontend**: React 19.2.3 + Vite 6.2.0 + TypeScript
 - **Backend**: Hono on Cloudflare Workers
 - **Database**: Cloudflare D1 with Drizzle ORM
-- **AI Integration**: OpenAI-compatible API for task/project assistance
+- **AI Integration**: OpenAI-compatible API for intelligent chart generation
+- **Chart Rendering**: ECharts 5.4.3
 - **Deployment**: Cloudflare Workers
 
-The application features project/task management with multiple views (Kanban, List, Gantt), a draft-first workflow for changes, comprehensive audit logging with rollback capabilities, and AI-powered chat assistance.
+The application features AI-driven chart generation from uploaded data, automatic ECharts configuration validation, draft approval workflow, and multi-format export (PNG, SVG, JSON Bundle, PPTX).
 
 ## Development Commands
 
@@ -27,7 +28,8 @@ Vite proxies `/api` requests to the Workers dev server at `http://127.0.0.1:8787
 ### Database Operations
 ```bash
 npm run db:generate          # Generate migration files from schema changes
-npm run db:push              # Push schema to database
+npm run db:push              # Push schema to local database
+npm run db:migrate:prod      # Run migrations on production database
 npm run db:studio            # Open Drizzle Studio for database inspection
 ```
 
@@ -39,9 +41,9 @@ npm run deploy               # Deploy to Cloudflare Workers
 
 ### Testing & Linting
 ```bash
+npm run lint                 # Type check with no emit
 npm run test                 # Run tests in watch mode
 npm run test:run             # Run tests once
-npm run lint                 # Type check with no emit
 ```
 
 ## Architecture
@@ -49,55 +51,64 @@ npm run lint                 # Type check with no emit
 ### Single Worker Architecture
 - **Frontend assets** (Vite build): served from the Worker `assets` binding
 - **Backend API** (Hono): REST API at `/api/*`, manages data persistence and business logic
-- Frontend calls backend API via `services/apiService.ts`
+- Frontend calls backend API via custom hooks
 
 ### Data Flow
 ```
-React Components → Custom Hooks → API Service → Backend Routes → Services → Database
+React Components → Custom Hooks → API Routes → Services → Database
 ```
 
-Example: `TaskDetailPanel.tsx` → `useProjectData.ts` → `apiService.ts` → `/api/tasks` → `taskService.ts` → D1
+Example: `AIChartGenerator.tsx` → `useAIChart.ts` → `/api/chart-ai/generate` → `chartAiService.ts` → D1
 
 ### Key Directories
 - `src/` - Frontend React code
-  - `hooks/` - Custom React hooks (useProjectData, useDrafts, useAuditLogs, useChat, useExport)
-  - `test/` - Test setup and utilities
+  - `hooks/` - Custom React hooks (useChartData, useChartExports, useAIChart, useChartDrafts, useAuditLogs)
 - `worker/` - Backend API code
-  - `routes/` - API route handlers (projects, tasks, drafts, audit, ai, system)
-  - `services/` - Business logic layer
+  - `routes/` - API route handlers (charts, chartAi, chartExports, chartAudit, dataSources, workspaces)
+  - `services/` - Business logic layer (chartService, chartAiService, chartExportService, chartValidationService)
   - `db/` - Database schema and connection
-- `components/` - React UI components (lazy-loaded views: KanbanBoard, ListView, GanttChart)
+- `components/` - React UI components (ChartProjectSidebar, ChartGallery, AIChartGenerator, ChartExportModal, ChartCanvas)
 
 ### Database Schema
 All tables use `id` (text) as primary key:
 
-- **projects** - Project metadata
-- **tasks** - Task records with WBS, dates, dependencies, predecessors (jsonb)
-- **drafts** - Pending change requests with actions (jsonb), status, createdBy
-- **audit_logs** - Complete change history with before/after snapshots (jsonb)
-- **observability_logs** - System monitoring logs
+**Chart System**:
+- **chart_projects** - Chart project metadata
+- **chart_configs** - Chart configurations with ECharts config
+- **data_sources** - Uploaded data files (CSV, JSON, Excel, MD)
+- **chart_drafts** - AI-generated drafts pending approval
+- **chart_audit_logs** - Complete change history
+- **chart_templates** - Predefined chart templates
+
+**System**:
+- **users** - User accounts
+- **sessions** - User sessions
+- **workspaces** - Workspace isolation
+- **workspace_members** - Workspace membership
+- **observability_logs** - System monitoring
+- **rate_limits** - API rate limiting
 
 Timestamps use `bigint` mode for Unix milliseconds.
 
-## Draft-First Workflow
+## Core Features
 
-The draft system is central to the architecture:
+### AI Chart Generation
+1. **Data Upload**: Users upload CSV/JSON/Excel files
+2. **AI Generation**: OpenAI API analyzes data and generates ECharts configs
+3. **Auto-Validation**: Zod schemas validate generated configs
+4. **Self-Correction**: Invalid configs trigger AI retry (max 3 attempts)
+5. **Draft Approval**: Generated charts go through draft approval workflow
 
-1. **Create draft**: `POST /api/drafts` with array of actions
-2. **Apply draft**: `POST /api/drafts/:id/apply`
-3. **Audit trail**: All changes logged to `audit_logs` table
+### Export System
+- **PNG/SVG**: Client-side rendering via ECharts `getDataURL()`
+- **JSON Bundle**: Complete chart project with all configs
+- **PPTX**: (Planned) Server-side using pptxgenjs with client-rendered images
 
-Draft actions support:
-- `{ type: 'create', entityType: 'task' | 'project', data: {...} }`
-- `{ type: 'update', entityType: 'task' | 'project', id: string, data: {...} }`
-- `{ type: 'delete', entityType: 'task' | 'project', id: string }`
-
-Frontend hook: `useDrafts.ts` handles draft submission, approval, and discarding.
-
-### Direct vs Drafted Changes
-- **Drafted**: `POST /api/drafts` → `POST /api/drafts/:id/apply` (audit trail includes draftId)
-- **Direct**: POST/PATCH/DELETE to `/api/projects` or `/api/tasks` (still audited, no draft flow)
-- Both approaches write to audit logs with before/after snapshots
+### Draft Workflow
+1. AI generates charts → saves as `chart_drafts`
+2. User previews in Chart Gallery
+3. Approve: Creates actual `chart_configs`
+4. Reject: Discards draft
 
 ## API Response Format
 
@@ -112,65 +123,127 @@ Consistent JSON response structure:
 
 Error handling is centralized in `worker/app.ts` middleware.
 
+## API Endpoints
+
+### Data Sources
+```
+POST   /api/data-sources/upload              Upload and parse file
+GET    /api/data-sources/project/:projectId  List project data sources
+DELETE /api/data-sources/:id                 Delete data source
+```
+
+### Chart Projects
+```
+POST   /api/chart-projects                   Create project
+GET    /api/chart-projects                   List workspace projects
+PATCH  /api/chart-projects/:id               Update project
+DELETE /api/chart-projects/:id               Delete project
+```
+
+### Chart Configs
+```
+POST   /api/charts                           Create chart
+GET    /api/charts/project/:projectId        List project charts
+GET    /api/charts/:id                       Get chart details
+PATCH  /api/charts/:id                       Update chart config
+DELETE /api/charts/:id                       Delete chart
+POST   /api/charts/:id/validate              Validate ECharts config
+```
+
+### AI Generation
+```
+POST /api/chart-ai/generate                  AI generates charts from data
+POST /api/chart-ai/chat                      AI chat to modify existing chart
+```
+
+### Chart Exports
+```
+POST /api/chart-exports/json-bundle          Export project as JSON
+POST /api/chart-imports/json-bundle          Import JSON bundle
+POST /api/chart-exports/pptx                  (Planned) Export as PPTX
+```
+
+### Audit Logs
+```
+GET  /api/chart-audit                         List audit logs (filtered/paginated)
+GET  /api/chart-audit/:id                     Get single audit log
+```
+
 ## AI Integration
 
 - **Provider**: OpenAI-compatible API (default: `https://api.openai.com/v1`)
 - **Environment variables**:
-  - `OPENAI_API_KEY` (required)
-- **Route**: `POST /api/ai/chat`
-- **Usage**: AI suggests actions that create drafts via `useChat.ts` hook
-
-## Import/Export System
-
-### Export Formats
-CSV, TSV, JSON, Markdown - scope: active project or all projects
-
-### Import Formats
-JSON, CSV, TSV - strategies: Append or Merge by ID
-
-Required CSV/TSV headers (case-insensitive):
-```
-project,id,title,status,priority,assignee,wbs,startDate,dueDate,completion,isMilestone,predecessors,description,createdAt
-```
+  - `OPENAI_API_KEY` (required, set via `wrangler secret put`)
+  - `OPENAI_BASE_URL` (optional, in `wrangler.toml` `[vars]`)
+  - `OPENAI_MODEL` (optional, default: `gpt-4`)
+- **Route**: `POST /api/chart-ai/generate`
+- **Features**:
+  - Automatic chart type selection
+  - Batch generation (1-10 charts per request)
+  - Self-correction with validation feedback
+  - Temperature adjustment (0.7 → 0.3) on retry
 
 ## Environment Setup
 
 Local dev uses `.env`:
-- `DB` binding configured in `wrangler.toml` for D1 (use `wrangler d1` for local migrations)
-  - `OPENAI_API_KEY` - OpenAI API key (required)
-  - `OPENAI_BASE_URL` - Custom OpenAI endpoint (optional, default: `https://api.openai.com/v1`)
-  - `OPENAI_MODEL` - Model name (optional, default: `gpt-4`)
+- `DB` binding configured in `wrangler.toml` for D1
+- `OPENAI_API_KEY` - OpenAI API key (or compatible)
+- `OPENAI_BASE_URL` - Custom OpenAI endpoint (optional)
+- `OPENAI_MODEL` - Model name (optional, default: `gpt-4`)
 
 Production uses Cloudflare bindings:
 - `DB` binding for D1 connectivity
 - `OPENAI_API_KEY` via `wrangler secret put`
-- `INIT_TOKEN` via `wrangler secret put` (used by `POST /api/system/init`)
 - `OPENAI_BASE_URL` and `OPENAI_MODEL` in `wrangler.toml` `[vars]`
-
-### Initialization
-Run once after tables exist:
-`POST /api/system/init` with header `X-Init-Token: <INIT_TOKEN>`
 
 ## Coding Conventions
 
 - **Naming**: Tables use snake_case, TypeScript uses camelCase/PascalCase
 - **Components**: PascalCase.tsx in `components/`
-- **Services/Helpers**: camelCase.ts
+- **Services**: camelCase.ts in `worker/services/`
+- **Routes**: camelCase.ts in `worker/routes/`
 - **Path alias**: `@/*` resolves from repo root
 - **Indentation**: 2 spaces
-- **Commit messages**: Conventional Commits format (e.g., `feat: add gantt zoom`)
+- **Commit messages**: Conventional Commits format (e.g., `feat(charts): add draft approval`)
 
-## Key Architecture Patterns
+## Supported Chart Types
 
-1. **Service Layer Pattern**: Routes handle HTTP, services contain business logic, database queries abstracted
-2. **Serializer Pattern**: Data transformation in `worker/services/serializers.ts`
-3. **Lazy Loading**: View components (Kanban, List, Gantt) loaded on demand
-4. **Constraint Validation**: `constraintService.ts` validates task dependencies, dates, circular references
+ECharts 5.4.3 supports 12 chart types:
+- **line**: 折线图
+- **bar**: 柱状图
+- **pie**: 饼图
+- **scatter**: 散点图
+- **map**: 地图
+- **radar**: 雷达图
+- **gauge**: 仪表盘
+- **funnel**: 漏斗图
+- **heatmap**: 热力图
+- **treemap**: 矩形树图
+- **sankey**: 桑基图
+- **graph**: 关系图
+
+## Validation
+
+Chart configs are validated using Zod schemas in `worker/services/chartValidationService.ts`:
+- Required field checks
+- Type validation for ECharts options
+- Structural integrity checks
+- Custom business rules
 
 ## Important Notes
 
 - All timestamps are Unix milliseconds in bigint format
-- Draft warnings (e.g., constraint violations) are returned but don't block draft creation
-- Audit logs support rollback via `POST /api/audit/:id/rollback`
+- AI-generated charts require approval before appearing in gallery
+- Drafts can be approved or rejected (no rollback needed)
 - The Vite dev server runs on port 5173, proxying API calls to port 8787
 - D1 connection is initialized in `worker/db/d1.ts` and injected into Hono context
+- Client-side rendering required for PPT export (Workers don't have DOM)
+
+## Security
+
+- ✅ All API inputs validated with Zod schemas
+- ✅ File upload type and size restrictions
+- ✅ Workspace-level data isolation
+- ✅ CSRF protection with timing-safe comparison
+- ✅ Rate limiting on AI endpoints
+- ✅ Audit logging for all chart operations

@@ -23,6 +23,7 @@
     "@hono/zod-validator": "^0.4.3",
     "drizzle-orm": "^0.44.2",
     "echarts": "^5.4.3",
+    "echarts-tool": "^0.0.1",
     "framer-motion": "^12.29.0",
     "hono": "^4.6.9",
     "html2canvas": "^1.4.1",
