@@ -17,4 +17,6 @@ export interface Bindings {
   INIT_TOKEN?: string;
   DB: D1Database;
   ASSETS: Fetcher;
+  R2: R2Bucket;
+  BROWSER: any; // BrowserRendering API binding
 }

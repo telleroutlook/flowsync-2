@@ -210,3 +210,85 @@ export interface ProjectActionArgs {
   icon?: string;
   reason?: string;
 }
+
+// ==================== Chart Types ====================
+
+export type ChartType =
+  | 'line'
+  | 'bar'
+  | 'pie'
+  | 'scatter'
+  | 'map'
+  | 'radar'
+  | 'gauge'
+  | 'funnel'
+  | 'heatmap'
+  | 'treemap'
+  | 'sankey'
+  | 'graph';
+
+export interface ChartProject {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ChartConfig {
+  id: string;
+  projectId: string;
+  dataSourceId: string | null;
+  title: string;
+  description: string | null;
+  chartType: ChartType;
+  echartsConfig: Record<string, unknown>;
+  validationStatus: 'valid' | 'invalid' | 'pending';
+  validationErrors: Array<{ message: string; path?: string }>;
+  generatedBy: 'ai' | 'user';
+  generationPrompt: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface DataSource {
+  id: string;
+  projectId: string;
+  workspaceId: string;
+  fileName: string;
+  fileType: 'csv' | 'json' | 'xlsx' | 'xls' | 'md';
+  fileSize: number;
+  content: {
+    data: Record<string, unknown>[];
+    metadata: {
+      columns: string[];
+      rowCount: number;
+      sample: Record<string, unknown>[];
+    };
+  } | null;
+  r2Key: string | null;
+  parseStatus: 'pending' | 'success' | 'failed';
+  parseErrors: string | null;
+  uploadedAt: number;
+  uploadedBy: string;
+}
+
+export interface ChartDraft {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  status: 'pending' | 'approved' | 'rejected' | 'applied';
+  draftType: 'create_charts' | 'modify_charts' | 'delete_charts';
+  actions: Array<{
+    type: 'create' | 'update' | 'delete';
+    entityId?: string;
+    data?: Record<string, unknown>;
+  }>;
+  generatedBy: string;
+  prompt: string | null;
+  createdAt: number;
+  reason: string | null;
+}
+

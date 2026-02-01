@@ -10,6 +10,9 @@ import { authRoute } from './routes/auth';
 import { workspacesRoute } from './routes/workspaces';
 import { authMiddleware } from './routes/middleware';
 import { systemRoute } from './routes/system';
+import { dataSourcesRoute } from './routes/dataSources';
+import { chartsRoute } from './routes/charts';
+import { chartAiRoute } from './routes/chartAi';
 
 export { Variables, Bindings };
 
@@ -183,6 +186,9 @@ export const createApp = (db: DrizzleDB, bindings?: Bindings) => {
   app.route('/api/tasks', tasksRoute);
   app.route('/api/drafts', draftsRoute);
   app.route('/api/audit', auditRoute);
+  app.route('/api/data-sources', dataSourcesRoute);
+  app.route('/api/charts', chartsRoute);
+  app.route('/api/chart-ai', chartAiRoute);
   app.route('/api/system', systemRoute);
 
   app.onError((err, c) => {

@@ -1,5 +1,5 @@
 {
-  "name": "flowsync-ai",
+  "name": "chartsync-ai",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -14,14 +14,15 @@
     "test:run": "vitest run",
     "deploy": "npm run build:prod && wrangler deploy",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply flowsync --local",
-    "db:migrate:prod": "wrangler d1 migrations apply flowsync --remote",
+    "db:migrate:local": "wrangler d1 migrations apply chartsync --local",
+    "db:migrate:prod": "wrangler d1 migrations apply chartsync --remote",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.3",
     "drizzle-orm": "^0.44.2",
+    "echarts": "^5.4.3",
     "framer-motion": "^12.29.0",
     "hono": "^4.6.9",
     "html2canvas": "^1.4.1",
@@ -30,11 +31,14 @@
     "jspdf-autotable": "^5.0.7",
     "lru-cache": "^11.2.5",
     "lucide-react": "^0.563.0",
+    "papaparse": "^5.4.1",
+    "pptxgenjs": "^3.12.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "uuid": "^13.0.0",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.2"
   },
   "devDependencies": {
@@ -43,6 +47,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22.14.0",
+    "@types/papaparse": "^5.3.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.23",

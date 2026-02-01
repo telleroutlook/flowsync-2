@@ -9,11 +9,13 @@ import { now as getCurrentTime } from './utils';
  * Limits are per IP address and endpoint type:
  * - AUTH: 5 attempts per 15 minutes (login, register)
  * - GENERAL: 100 requests per minute
+ * - UPLOAD: 10 uploads per 5 minutes (file upload protection)
  */
 export const RATE_LIMITS = {
   AUTH: { maxAttempts: 5, windowMs: 15 * 60 * 1000 }, // 15 minutes
   GENERAL: { maxAttempts: 100, windowMs: 60 * 1000 }, // 1 minute
   AI: { maxAttempts: 20, windowMs: 60 * 1000 }, // 1 minute - cost protection
+  UPLOAD: { maxAttempts: 10, windowMs: 5 * 60 * 1000 }, // 5 minutes - file upload protection
 } as const;
 
 export type RateLimitType = keyof typeof RATE_LIMITS;

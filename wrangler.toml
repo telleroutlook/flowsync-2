@@ -1,4 +1,4 @@
-name = "flowsync-2"
+name = "chartsync-ai"
 main = "worker/index.ts"
 compatibility_date = "2025-02-04"
 compatibility_flags = ["nodejs_compat_v2"]
@@ -9,13 +9,22 @@ binding = "ASSETS"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "flowsync"
-database_id = "376955eb-a3f2-48c0-a8f2-056be5b1c9ea"
+database_name = "chartsync"
+database_id = "a6e22f05-b0f1-45b3-93aa-11991d2ccf10"
 migrations_dir = "migrations_sqlite"
 
 [vars]
 OPENAI_BASE_URL = "https://open.bigmodel.cn/api/coding/paas/v4"
 OPENAI_MODEL = "GLM-4.7"
+
+# Browser Rendering API for chart screenshots
+[browser]
+binding = "BROWSER"
+
+# R2 Storage for large file uploads
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "chartsync-uploads"
 
 [observability]
 [observability.logs]

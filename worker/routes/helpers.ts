@@ -9,8 +9,12 @@ export const jsonError = (
   c: Context,
   code: string,
   message: string,
-  status = 400
-) => c.json({ success: false, error: { code, message } }, status as ContentfulStatusCode);
+  status = 400,
+  extra?: Record<string, unknown>
+) => c.json(
+  { success: false, error: { code, message, ...extra } },
+  status as ContentfulStatusCode
+);
 
 /**
  * Validates that a workspace exists in the request context.
