@@ -25,13 +25,15 @@ interface TaskDetailPanelProps {
   onClose: () => void;
   onUpdate: (id: string, updates: Partial<Task>) => void;
   tasks: Task[];
+  isMobile?: boolean;
 };
 
 export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
   selectedTask,
   onClose,
   onUpdate,
-  tasks
+  tasks,
+  isMobile = false
 }) => {
   const { t } = useI18n();
 
@@ -103,7 +105,12 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
   }
 
   return (
-    <div className="w-[350px] bg-surface border-l border-border-subtle shadow-xl flex flex-col h-full animate-slide-in-right z-30">
+    <div className={cn(
+      "bg-surface shadow-xl flex flex-col h-full animate-slide-in-right z-30",
+      isMobile
+        ? "w-full border-0"
+        : "w-[350px] border-l border-border-subtle"
+    )}>
       <div className="p-3 border-b border-border-subtle flex items-center justify-between bg-surface/50 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">{t('task.details')}</span>

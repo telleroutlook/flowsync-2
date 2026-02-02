@@ -17,6 +17,7 @@ interface KanbanBoardProps {
   onSelectTask?: (id: string) => void;
   loading?: boolean;
   zoom?: number;
+  isMobile?: boolean;
 }
 
 interface TaskCardProps {
@@ -143,7 +144,7 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect, ha
 });
 TaskCard.displayName = 'TaskCard';
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTaskId, onSelectTask, loading = false, zoom = 1 }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTaskId, onSelectTask, loading = false, zoom = 1, isMobile = false }) => {
   const { t } = useI18n();
 
   // Calculate tasks with conflicts for visual indicator
@@ -178,10 +179,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTa
   }
 
   return (
-    <div className="h-full w-full overflow-x-auto overflow-y-hidden">
+    <div className={cn("h-full w-full", isMobile ? "overflow-y-auto" : "overflow-x-auto overflow-y-hidden")}>
       <div className="h-full min-w-full">
         <div
-          className="flex h-full min-w-full gap-2 md:gap-4 pb-2 snap-x px-0 md:px-1"
+          className={cn("gap-2 md:gap-4 pb-2", isMobile ? "flex flex-col overflow-y-auto" : "flex h-full min-w-full snap-x px-0 md:px-1")}
           style={{
             transform: `scale(${zoom})`,
             transformOrigin: 'top left',
@@ -189,7 +190,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTa
           }}
         >
         {([TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.DONE] as TaskStatus[]).map((status) => (
-          <div key={status} className="flex-1 min-w-[280px] sm:min-w-[300px] md:min-w-[320px] flex flex-col bg-background/50 rounded-2xl border border-border-subtle shadow-inner snap-center h-full overflow-hidden">
+          <div key={status} className={cn(
+            "flex flex-col bg-background/50 rounded-2xl border border-border-subtle shadow-inner overflow-hidden",
+            isMobile ? "w-full" : "flex-1 min-w-[280px] sm:min-w-[300px] md:min-w-[320px] h-full snap-center"
+          )}>
             <div className="p-3 sm:p-4 flex justify-between items-center sticky top-0 z-10 shrink-0">
               <h3 className="font-bold text-text-primary text-sm sm:text-base flex items-center gap-2">
                 <span className={cn("w-2.5 h-2.5 rounded-md", STATUS_INDICATOR_COLORS[status])} aria-hidden="true" />

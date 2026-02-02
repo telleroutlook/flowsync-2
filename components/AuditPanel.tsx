@@ -192,12 +192,12 @@ export const AuditPanel = memo<AuditPanelProps>(({
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-col sm:flex-row gap-2">
           <input
             value={filters.q}
             onChange={(event) => setFilters(prev => ({ ...prev, q: event.target.value }))}
             placeholder={t('audit.search_placeholder')}
-            className="w-44 rounded-lg border border-border-subtle bg-surface px-3 py-1.5 text-sm text-text-primary focus:border-primary outline-none"
+            className="w-full sm:w-44 rounded-lg border border-border-subtle bg-surface px-3 py-1.5 text-sm text-text-primary focus:border-primary outline-none"
           />
           <select
             value={filters.actor}
@@ -232,13 +232,13 @@ export const AuditPanel = memo<AuditPanelProps>(({
             type="date"
             value={filters.from}
             onChange={(event) => setFilters(prev => ({ ...prev, from: event.target.value }))}
-            className="w-[130px] rounded-lg border border-border-subtle bg-surface px-2 py-1.5 text-sm text-text-secondary focus:border-primary outline-none"
+            className="w-full sm:w-[130px] rounded-lg border border-border-subtle bg-surface px-2 py-1.5 text-sm text-text-secondary focus:border-primary outline-none"
           />
           <input
             type="date"
             value={filters.to}
             onChange={(event) => setFilters(prev => ({ ...prev, to: event.target.value }))}
-            className="w-[130px] rounded-lg border border-border-subtle bg-surface px-2 py-1.5 text-sm text-text-secondary focus:border-primary outline-none"
+            className="w-full sm:w-[130px] rounded-lg border border-border-subtle bg-surface px-2 py-1.5 text-sm text-text-secondary focus:border-primary outline-none"
           />
           <button
             type="button"

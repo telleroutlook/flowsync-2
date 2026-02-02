@@ -32,7 +32,7 @@ export const Modal = memo<ModalProps>(({ isOpen, onClose, title, children }) => 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-text-primary/40 backdrop-blur-sm animate-fade-in">
       <div
-        className="bg-surface rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all animate-scale-in border border-border-subtle"
+        className="bg-surface rounded-xl shadow-2xl w-full max-w-full sm:max-w-md mx-4 sm:mx-0 overflow-hidden transform transition-all animate-scale-in border border-border-subtle"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
@@ -41,10 +41,10 @@ export const Modal = memo<ModalProps>(({ isOpen, onClose, title, children }) => 
           <h3 id="modal-title" className="text-lg font-semibold text-text-primary">{title}</h3>
           <button
             onClick={onClose}
-            className="text-text-secondary hover:text-text-primary transition-colors p-1 rounded-md hover:bg-background"
+            className="text-text-secondary hover:text-text-primary transition-colors p-2 rounded-md hover:bg-background min-w-[44px] min-h-[44px] flex items-center justify-center"
             aria-label={t('common.close')}
           >
-            <X className="w-5 h-5" />
+            <X className="w-6 h-6" />
           </button>
         </div>
         <div className="p-6">

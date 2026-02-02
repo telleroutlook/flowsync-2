@@ -802,6 +802,7 @@ function App() {
                         onSelectTask={handleSelectTask}
                         loading={isLoadingTasks}
                         zoom={currentZoom}
+                        isMobile={isMobile}
                       />
                     </div>
                   )}
@@ -813,6 +814,7 @@ function App() {
                         onSelectTask={handleSelectTask}
                         loading={isLoadingTasks}
                         zoom={currentZoom}
+                        isMobile={isMobile}
                       />
                     </div>
                   )}
@@ -825,6 +827,7 @@ function App() {
                         selectedTaskId={selectedTaskId}
                         onSelectTask={handleSelectTask}
                         loading={isLoadingTasks}
+                        isMobile={isMobile}
                         onUpdateTaskDates={(id, startDate, dueDate) => {
                           queueTaskUpdate(id, { startDate, dueDate });
                         }}
@@ -836,8 +839,8 @@ function App() {
 
               <div className={cn(
                 "transition-all duration-300",
-                selectedTask 
-                  ? (isMobile ? "fixed inset-0 z-50 p-4 bg-background/95 backdrop-blur-sm" : "w-[350px] opacity-100 translate-x-0") 
+                selectedTask
+                  ? (isMobile ? "fixed inset-0 z-40 p-4 bg-background/95 backdrop-blur-sm" : "w-[350px] opacity-100 translate-x-0")
                   : (isMobile ? "hidden" : "w-0 opacity-0 translate-x-10 pointer-events-none")
               )}>
                 {selectedTask && (
@@ -846,6 +849,7 @@ function App() {
                     onClose={() => setSelectedTaskId(null)}
                     onUpdate={queueTaskUpdate}
                     tasks={tasks}
+                    isMobile={isMobile}
                   />
                 )}
               </div>

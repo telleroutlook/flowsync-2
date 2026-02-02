@@ -4,7 +4,7 @@ import { useI18n } from '../src/i18n';
 import { getPriorityLabel, getStatusLabel } from '../src/i18n/labels';
 import { cn } from '../src/utils/cn';
 import { getTasksWithConflicts } from '../src/utils/task';
-import { AlertTriangle, Inbox, Loader2 } from 'lucide-react';
+import { AlertTriangle, Inbox, Loader2, Calendar } from 'lucide-react';
 import { PRIORITY_COLORS, STATUS_COLORS } from '../shared/constants/colors';
 import { Badge } from './ui/Badge';
 import { EmptyState } from './ui/EmptyState';
@@ -16,6 +16,7 @@ interface ListViewProps {
   onSelectTask?: (id: string) => void;
   loading?: boolean;
   zoom?: number;
+  isMobile?: boolean;
 }
 
 interface TaskRowProps {
@@ -24,6 +25,80 @@ interface TaskRowProps {
   onSelectTask?: (id: string) => void;
   hasConflict?: boolean;
 }
+
+const TaskCardMobile = memo(({ task, isSelected, onSelectTask, hasConflict }: TaskRowProps) => {
+  const { t, locale } = useI18n();
+  const handleClick = useCallback(() => {
+    onSelectTask?.(task.id);
+  }, [onSelectTask, task.id]);
+
+  return (
+    <div
+      onClick={handleClick}
+      className={cn(
+        "p-3 border-b border-border-subtle bg-surface cursor-pointer transition-colors",
+        isSelected ? "bg-primary/5" : "hover:bg-background"
+      )}
+    >
+      {/* Title and Status */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-1">
+            {hasConflict && <AlertTriangle className="w-4 h-4 text-negative shrink-0" aria-label={t('task.schedule_conflict')} />}
+            {task.wbs && <span className="text-[10px] font-mono text-text-secondary">[{task.wbs}]</span>}
+          </div>
+          <p className="text-sm font-medium text-text-primary break-words">{task.title}</p>
+          {task.description && (
+            <p className="text-xs text-text-secondary truncate mt-0.5">{task.description}</p>
+          )}
+        </div>
+        <span className={cn("text-xs px-2 py-1 rounded shrink-0", STATUS_COLORS[task.status])}>
+          {getStatusLabel(task.status, t)}
+        </span>
+      </div>
+
+      {/* Assignee, Priority, Due Date */}
+      <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary mb-2">
+        {task.assignee && (
+          <div className="flex items-center gap-1">
+            <div className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px]">
+              {task.assignee.charAt(0).toUpperCase()}
+            </div>
+            <span className="truncate max-w-[80px]">{task.assignee}</span>
+          </div>
+        )}
+        <Badge variant="outline" className={PRIORITY_COLORS[task.priority]}>
+          {getPriorityLabel(task.priority, t)}
+        </Badge>
+        {task.dueDate && (
+          <span className={cn(
+            "flex items-center gap-1",
+            task.dueDate < Date.now() && task.status !== TaskStatus.DONE && "text-negative"
+          )}>
+            <Calendar className="w-3 h-3" />
+            {new Date(task.dueDate).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
+          </span>
+        )}
+      </div>
+
+      {/* Progress */}
+      <div>
+        <div className="flex justify-between text-xs text-text-secondary mb-1">
+          <span>{t('kanban.progress')}</span>
+          <span>{task.completion || 0}%</span>
+        </div>
+        <div className="w-full bg-background h-1 rounded-full overflow-hidden">
+          <div
+            className={cn("h-full rounded-full", task.completion === 100 ? "bg-success" : "bg-primary")}
+            style={{ width: `${task.completion || 0}%` }}
+            aria-label={`${task.completion || 0}% complete`}
+          />
+        </div>
+      </div>
+    </div>
+  );
+});
+TaskCardMobile.displayName = 'TaskCardMobile';
 
 const TaskRow = memo(({ task, isSelected, onSelectTask, hasConflict }: TaskRowProps) => {
   const { t, locale } = useI18n();
@@ -119,7 +194,7 @@ const TaskRow = memo(({ task, isSelected, onSelectTask, hasConflict }: TaskRowPr
 });
 TaskRow.displayName = 'TaskRow';
 
-export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, onSelectTask, loading = false, zoom = 1 }) => {
+export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, onSelectTask, loading = false, zoom = 1, isMobile = false }) => {
   const { t } = useI18n();
 
   // Calculate tasks with conflicts for visual indicator
@@ -170,7 +245,7 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
               <th className="hidden lg:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.due')}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border-subtle">
+          <tbody className={cn("divide-y divide-border-subtle", isMobile && "hidden")}>
             {sortedTasks.length === 0 ? (
                <tr>
                  <td colSpan={8} className="py-16 text-center">
@@ -194,6 +269,31 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
               ))
             )}
           </tbody>
+          {/* Mobile Card Layout */}
+          {isMobile && (
+            <div className="divide-y divide-border-subtle">
+              {sortedTasks.length === 0 ? (
+                <div className="py-16 text-center">
+                  <EmptyState
+                    icon={Inbox}
+                    title={t('list.empty')}
+                    variant="minimal"
+                    className="py-16"
+                  />
+                </div>
+              ) : (
+                sortedTasks.map((task) => (
+                  <TaskCardMobile
+                    key={task.id}
+                    task={task}
+                    isSelected={selectedTaskId === task.id}
+                    onSelectTask={onSelectTask}
+                    hasConflict={tasksWithConflicts.has(task.id)}
+                  />
+                ))
+              )}
+            </div>
+          )}
         </table>
           </div>
         </div>

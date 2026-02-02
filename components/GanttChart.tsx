@@ -17,6 +17,7 @@ interface GanttChartProps {
   onSelectTask?: (id: string) => void;
   onUpdateTaskDates?: (id: string, startDate: number, dueDate: number) => void;
   loading?: boolean;
+  isMobile?: boolean;
 }
 
 type ViewMode = GanttViewMode;
@@ -84,10 +85,11 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
   onSelectTask,
   onUpdateTaskDates,
   loading = false,
+  isMobile = false,
 }) => {
   const { t, locale } = useI18n();
   const [viewMode, setViewMode] = useState<ViewMode>('Month');
-  // Default to hiding list on small screens
+  // Default to hiding list on small screens or mobile
   const [showList, setShowList] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragDeltaMs, setDragDeltaMs] = useState(0);
@@ -140,6 +142,13 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
     userSelectedViewRef.current = false;
   }, [projectId]);
 
+  // Sync showList with isMobile prop - hide list when on mobile
+  useEffect(() => {
+    if (isMobile && showList) {
+      setShowList(false);
+    }
+  }, [isMobile, showList]);
+
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
@@ -162,7 +171,8 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
     if (taskEntries.length === 0) return;
     if (userSelectedViewRef.current) return;
 
-    const availableWidth = Math.max(0, timelineWidth - (showList ? LIST_WIDTH : 0));
+    const effectiveListWidth = isMobile ? 0 : LIST_WIDTH;
+    const availableWidth = Math.max(0, timelineWidth - (showList ? effectiveListWidth : 0));
     if (availableWidth <= 0) return;
 
     const candidates: ViewMode[] = ['Day', 'Week', 'Month', 'Year'];
@@ -472,7 +482,7 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
       {/* Header Row (Fixed) */}
       <div className="flex h-8 sm:h-10 border-b border-border-subtle bg-surface shrink-0 z-10">
         {/* Top Left: Task Name */}
-        {showList && (
+        {showList && !isMobile && (
           <div className="w-48 sm:w-56 md:w-64 shrink-0 border-r border-border-subtle px-2 sm:px-4 flex items-center text-[10px] sm:text-xs font-semibold text-text-secondary bg-background shadow-sm z-20">
              <span className="truncate">{t('gantt.task_name')}</span>
           </div>
@@ -505,7 +515,7 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
       >
         <div className="flex min-w-full w-max">
             {/* Sticky List Column */}
-            {showList && (
+            {showList && !isMobile && (
                <div className="sticky left-0 w-48 sm:w-56 md:w-64 shrink-0 z-30 bg-surface border-r border-border-subtle shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)]">
                  {taskEntries.map(task => (
                    <div
