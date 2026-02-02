@@ -644,9 +644,12 @@ const planActions = async (
   const { resolveTask, resolveProject } = await import('./entityResolver');
   const resolvedActions = await Promise.all(
     actions.map(async (action) => {
-      // Skip resolution for create actions and actions with valid IDs
+      // Skip resolution for create actions
       if (action.action === 'create') return action;
-      if (action.entityId && action.entityId.length >= 8) return action;
+
+      // Skip resolution if entityId is a complete UUID (36 characters for standard format)
+      // Partial/truncated IDs (like first 8 chars) will be resolved by entityResolver
+      if (action.entityId && action.entityId.length === 36) return action;
 
       // Try to resolve task references
       if (action.entityType === 'task') {
