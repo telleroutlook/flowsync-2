@@ -107,8 +107,10 @@ export async function resolveTask(
                     activeProjectId;
   const assignee = ref.fallbackRef?.assignee || (ref.after?.assignee as string);
 
-  // Strategy 1: Exact UUID match
-  if (ref.entityId) {
+  // Strategy 1: Exact UUID match (36 characters)
+  // If AI provides a complete UUID, we ONLY use exact match
+  // This prevents matching to wrong tasks when the specified ID doesn't exist
+  if (ref.entityId && ref.entityId.length === 36) {
     const { tasks, projects } = await import('../db/schema');
     const { toTaskRecord } = await import('./serializers');
 
@@ -133,7 +135,15 @@ export async function resolveTask(
         confidence: 1.0,
       };
     }
-    warnings.push(`ID not found: ${ref.entityId}`);
+
+    // Complete UUID provided but not found - fail fast
+    // Do NOT try other strategies as they might match to wrong tasks
+    return {
+      success: false,
+      confidence: 0,
+      error: `Task with ID ${ref.entityId} not found in workspace ${workspaceId}`,
+      warnings,
+    };
   }
 
   // Strategy 2: Truncated ID (first 8 characters)
@@ -303,8 +313,10 @@ export async function resolveProject(
 
   const name = normalize(ref.fallbackRef?.title || (ref.after?.name as string));
 
-  // Strategy 1: Exact UUID match
-  if (ref.entityId) {
+  // Strategy 1: Exact UUID match (36 characters)
+  // If AI provides a complete UUID, we ONLY use exact match
+  // This prevents matching to wrong projects when the specified ID doesn't exist
+  if (ref.entityId && ref.entityId.length === 36) {
     const { projects } = await import('../db/schema');
     const { toProjectRecord } = await import('./serializers');
 
@@ -328,6 +340,14 @@ export async function resolveProject(
         confidence: EXACT_MATCH_CONFIDENCE,
       };
     }
+
+    // Complete UUID provided but not found - fail fast
+    // Do NOT try other strategies as they might match to wrong projects
+    return {
+      success: false,
+      confidence: 0,
+      error: `Project with ID ${ref.entityId} not found in workspace ${workspaceId}`,
+    };
   }
 
   // Strategy 2: Truncated ID (first 8 characters)
