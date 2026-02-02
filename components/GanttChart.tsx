@@ -3,7 +3,7 @@ import { Task } from '../types';
 import { useI18n } from '../src/i18n';
 import { cn } from '../src/utils/cn';
 import { getTasksWithConflicts } from '../src/utils/task';
-import { AlertTriangle, Calendar } from 'lucide-react';
+import { AlertTriangle, Calendar, Loader2 } from 'lucide-react';
 import { DAY_MS, GANTT_VIEW_SETTINGS, type GanttViewMode } from '../src/constants/gantt';
 import { getTaskColorClass } from '../shared/constants/colors';
 import { EmptyState } from './ui/EmptyState';
@@ -16,6 +16,7 @@ interface GanttChartProps {
   selectedTaskId?: string | null;
   onSelectTask?: (id: string) => void;
   onUpdateTaskDates?: (id: string, startDate: number, dueDate: number) => void;
+  loading?: boolean;
 }
 
 type ViewMode = GanttViewMode;
@@ -82,6 +83,7 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
   selectedTaskId,
   onSelectTask,
   onUpdateTaskDates,
+  loading = false,
 }) => {
   const { t, locale } = useI18n();
   const [viewMode, setViewMode] = useState<ViewMode>('Month');
@@ -417,6 +419,20 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
         variant="minimal"
         className="p-8"
       />
+    );
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="w-full h-full overflow-hidden bg-surface border border-border-subtle rounded-xl shadow-sm flex flex-col">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" aria-hidden="true" />
+            <p className="text-sm text-text-secondary font-medium">{t('app.loading.project_data')}</p>
+          </div>
+        </div>
+      </div>
     );
   }
 

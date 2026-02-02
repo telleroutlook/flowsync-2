@@ -4,7 +4,7 @@ import { useI18n } from '../src/i18n';
 import { getPriorityLabel, getStatusLabel } from '../src/i18n/labels';
 import { cn } from '../src/utils/cn';
 import { getTasksWithConflicts } from '../src/utils/task';
-import { AlertTriangle, Inbox } from 'lucide-react';
+import { AlertTriangle, Inbox, Loader2 } from 'lucide-react';
 import { PRIORITY_COLORS, STATUS_COLORS } from '../shared/constants/colors';
 import { Badge } from './ui/Badge';
 import { EmptyState } from './ui/EmptyState';
@@ -14,6 +14,7 @@ interface ListViewProps {
   tasks: Task[];
   selectedTaskId?: string | null;
   onSelectTask?: (id: string) => void;
+  loading?: boolean;
 }
 
 interface TaskRowProps {
@@ -117,7 +118,7 @@ const TaskRow = memo(({ task, isSelected, onSelectTask, hasConflict }: TaskRowPr
 });
 TaskRow.displayName = 'TaskRow';
 
-export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, onSelectTask }) => {
+export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, onSelectTask, loading = false }) => {
   const { t } = useI18n();
 
   // Calculate tasks with conflicts for visual indicator
@@ -129,6 +130,20 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
       return a.createdAt - b.createdAt;
     });
   }, [tasks]);
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="w-full h-full overflow-hidden bg-surface border border-border-subtle rounded-xl shadow-sm flex flex-col">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" aria-hidden="true" />
+            <p className="text-sm text-text-secondary font-medium">{t('app.loading.project_data')}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full overflow-hidden bg-surface border border-border-subtle rounded-xl shadow-sm flex flex-col">
@@ -149,7 +164,7 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
           <tbody className="divide-y divide-border-subtle">
             {sortedTasks.length === 0 ? (
                <tr>
-                 <td colSpan={3} className="py-16 text-center">
+                 <td colSpan={8} className="py-16 text-center">
                     <EmptyState
                       icon={Inbox}
                       title={t('list.empty')}

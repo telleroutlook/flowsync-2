@@ -133,6 +133,7 @@ function App() {
     activeProject,
     activeTasks,
     isLoading: isLoadingData,
+    isLoadingTasks,
     error: dataError,
     refreshData,
     handleSelectProject,
@@ -799,6 +800,7 @@ function App() {
                         tasks={activeTasks}
                         selectedTaskId={selectedTaskId}
                         onSelectTask={handleSelectTask}
+                        loading={isLoadingTasks}
                       />
                     </div>
                   )}
@@ -808,6 +810,7 @@ function App() {
                         tasks={activeTasks}
                         selectedTaskId={selectedTaskId}
                         onSelectTask={handleSelectTask}
+                        loading={isLoadingTasks}
                       />
                     </div>
                   )}
@@ -819,6 +822,7 @@ function App() {
                         zoom={1}
                         selectedTaskId={selectedTaskId}
                         onSelectTask={handleSelectTask}
+                        loading={isLoadingTasks}
                         onUpdateTaskDates={(id, startDate, dueDate) => {
                           queueTaskUpdate(id, { startDate, dueDate });
                         }}
