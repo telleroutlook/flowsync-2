@@ -800,7 +800,7 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     },
     {
       name: 'planChanges',
-      description: 'Create MULTIPLE related changes in a SINGLE draft for batch approval. Use this when making several task/project changes together that should be approved as a group. More efficient than multiple individual create/update/delete calls.',
+      description: 'Create MULTIPLE related changes in a SINGLE draft for batch approval. Use this when making several task/project changes together that should be approved as a group. More efficient than multiple individual create/update/delete calls.\n\nFor UPDATE and DELETE actions, you can provide EITHER:\n1. entityId (exact UUID or first 8 characters)\n2. Title in the after object (system will match by title)\n3. WBS code in the after object\n\nThe system uses intelligent matching to find the correct entity even with partial information.',
       parameters: {
         type: 'object',
         properties: {
@@ -815,11 +815,11 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
                 action: { type: 'string', enum: ['create', 'update', 'delete'] },
                 entityId: {
                   type: 'string',
-                  description: 'Required for update and delete actions',
+                  description: 'Optional: The ID of the entity (for update/delete). Can be exact UUID or first 8 chars. If not provided, system will match by title/WBS.',
                 },
                 after: {
                   type: 'object',
-                  description: 'The new state. Required for create and update actions.',
+                  description: 'The new state. Required for create/update. For update/delete, include title/WBS for fuzzy matching if entityId is omitted.',
                 },
               },
               required: ['entityType', 'action'],
@@ -834,7 +834,9 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
         const summary = actions.map((action) => {
           const type = typeof action.entityType === 'string' ? action.entityType : 'unknown';
           const op = typeof action.action === 'string' ? action.action : 'unknown';
-          const id = typeof action.entityId === 'string' ? action.entityId : 'new';
+          const after = action.after as Record<string, unknown> | undefined;
+          const id = typeof action.entityId === 'string' ? action.entityId :
+                    (typeof after?.title === 'string' ? `"${after.title}"` : 'new');
           return `${op} ${type}(${id})`;
         }).join(', ');
         return JSON.stringify({

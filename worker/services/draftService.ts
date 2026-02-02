@@ -638,11 +638,98 @@ const planActions = async (
   const planned: DraftAction[] = [];
   const warnings: string[] = [];
 
+  // INTELLIGENT ENTITY RESOLUTION: Resolve missing/incorrect entityIds
+  // This cascading resolution tries multiple strategies to match entities
+  // when AI provides incomplete or inaccurate information
+  const { resolveTask, resolveProject } = await import('./entityResolver');
+  const resolvedActions = await Promise.all(
+    actions.map(async (action) => {
+      // Skip resolution for create actions and actions with valid IDs
+      if (action.action === 'create') return action;
+      if (action.entityId && action.entityId.length >= 8) return action;
+
+      // Try to resolve task references
+      if (action.entityType === 'task') {
+        // Determine the active project ID from context
+        const projectId = action.after?.projectId as string | undefined;
+
+        const result = await resolveTask(db, {
+          entityType: 'task',
+          action: action.action as 'update' | 'delete',
+          entityId: action.entityId,
+          after: action.after as Record<string, unknown> | undefined,
+          fallbackRef: {
+            title: action.after?.title as string | undefined,
+            wbs: action.after?.wbs as string | undefined,
+            projectId: projectId,
+            assignee: action.after?.assignee as string | undefined,
+          },
+        }, workspaceId, projectId);
+
+        if (result.success && result.entityId) {
+          // Log resolution warnings for transparency
+          if (result.warnings && result.warnings.length > 0) {
+            warnings.push(...result.warnings);
+          }
+
+          // Return action with resolved entityId
+          return {
+            ...action,
+            entityId: result.entityId,
+          };
+        } else {
+          // Resolution failed - add warning but keep original action
+          warnings.push(
+            `Failed to resolve task reference: ${action.after?.title || action.entityId || 'unknown'}. ` +
+            `Reason: ${result.error || 'Entity not found'}`
+          );
+          return action;
+        }
+      }
+
+      // Try to resolve project references
+      if (action.entityType === 'project') {
+        const result = await resolveProject(db, {
+          entityType: 'project',
+          action: action.action as 'update' | 'delete',
+          entityId: action.entityId,
+          after: action.after as Record<string, unknown> | undefined,
+          fallbackRef: {
+            title: action.after?.name as string | undefined,
+          },
+        }, workspaceId);
+
+        if (result.success && result.entityId) {
+          // Log resolution warnings for transparency
+          if (result.warnings && result.warnings.length > 0) {
+            warnings.push(...result.warnings);
+          }
+
+          // Return action with resolved entityId
+          return {
+            ...action,
+            entityId: result.entityId,
+          };
+        } else {
+          // Resolution failed - add warning but keep original action
+          warnings.push(
+            `Failed to resolve project reference: ${action.after?.name || action.entityId || 'unknown'}. ` +
+            `Reason: ${result.error || 'Entity not found'}`
+          );
+          return action;
+        }
+      }
+
+      return action;
+    })
+  );
+
   // SMART PROJECT ID ASSIGNMENT: First pass - collect new project IDs being created
+  // (Use resolvedActions since they have entityId filled in)
   const newProjectIds = new Set<string>();
   let firstNewProjectId: string | null = null;
 
-  for (const action of actions) {
+  for (const action of resolvedActions) {
     if (action.entityType === 'project' && action.action === 'create' && action.after) {
       const createdId = (action.after.id as string | undefined) ?? undefined;
       if (createdId) {
@@ -655,8 +742,8 @@ const planActions = async (
   }
 
   // SMART PROJECT ID ASSIGNMENT: Second pass - assign projectId to tasks without one
-  // This creates a NEW array with modified actions to avoid mutating the input
-  const adjustedActions = actions.map(action => {
+  // This builds on top of resolvedActions to create a fully processed action array
+  const adjustedActions = resolvedActions.map(action => {
     if (action.entityType === 'task' && action.action === 'create' && action.after) {
       const after = action.after as Record<string, unknown>;
       const currentProjectId = after.projectId as string | undefined;
@@ -1953,8 +2040,11 @@ export const applyDraft = async (
     if (stats.failed > 0 && stats.success === 0) {
       // All operations failed
       finalStatus = 'failed';
-    } else if (stats.failed > 0 || stats.warning > 0) {
-      // Partial success with failures or warnings
+    } else if (stats.skipped > 0 && stats.success === 0 && stats.failed === 0) {
+      // All operations were skipped (e.g., tasks not found)
+      finalStatus = 'failed';
+    } else if (stats.failed > 0 || stats.warning > 0 || stats.skipped > 0) {
+      // Partial success with failures, warnings, or skipped operations
       finalStatus = 'partial';
     }
 
