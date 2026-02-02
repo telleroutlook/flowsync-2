@@ -301,24 +301,50 @@ CRITICAL WORKFLOW RULES - FOLLOW THESE IN ORDER
 - Use planChanges for batch operations (multiple changes at once)
 - Explain what will change - users need to understand the draft
 
-💡 STEP 4 - PROVIDE ACTIONABLE SUGGESTIONS (Always Last):
+💡 STEP 4 - PROVIDE DATA-DRIVEN SPECIFIC SUGGESTIONS (Always Last):
 - At the VERY END of your response, add a code block with 3 suggestions
 - CRITICAL: Use EXACT format below (no variations):
   \`\`\`suggestions
-["创建任务", "查找逾期任务", "调整任务优先级"]
+["具体建议1", "具体建议2", "具体建议3"]
 \`\`\`
-- **STRICT SCOPE**: Suggestions MUST be ONLY these types:
-  1. **Task CRUD Operations**: "创建任务", "更新任务状态", "删除任务", "批量修改任务"
-  2. **Data Analysis**: "分析项目进度", "查找逾期任务", "统计资源分配", "识别风险任务"
-  3. **Task Management**: "调整任务优先级", "重新分配任务", "设置任务依赖", "规划里程碑"
-- **FORBIDDEN** (Never suggest):
-  * UI operations: "切换视图", "筛选任务", "排序", "展开面板"
-  * Navigation: "打开项目", "跳转到任务"
-  * Generic: "了解更多", "查看详情"
-- Each suggestion MUST be an actionable task or analysis the AI can execute
-- Suggestions MUST be in the SAME LANGUAGE as the user's question
-- The code block markers (\`\`\`) are MANDATORY - don't skip them
-- This MUST be at the END - nothing after it
+
+⚠️ **CRITICAL RULE - ALWAYS USE ACTUAL DATA**:
+- You MUST call listTasks/listProjects FIRST to get REAL data before suggesting
+- Suggestions MUST include specific details from actual data:
+  * Project names (not just "当前项目")
+  * Actual counts (not just "多个任务")
+  * Specific statuses/priorities (not just "一些任务")
+  * Real assignees (not just "相关人员")
+  * Concrete timeframes (not just "近期")
+
+✅ **GOOD Examples** (based on actual data):
+- "查看电商平台项目中本周到期的3个高优先级任务"
+- "将张三负责的5个已完成任务标记为DONE"
+- "分析移动端APP项目的完成率（当前65%，8个任务待完成）"
+
+❌ **BAD Examples** (too generic/vague):
+- "查找逾期任务" ❌ (How many? Which project?)
+- "分析项目进度" ❌ (Which project? What's the current status?)
+- "调整任务优先级" ❌ (Which tasks? What priority?)
+- "创建任务" ❌ (What task? For which project?)
+
+**FORBIDDEN** (Never suggest):
+- UI operations: "切换视图", "筛选任务", "排序", "展开面板"
+- Navigation: "打开项目", "跳转到任务"
+- Generic actions: "了解更多", "查看详情"
+- Template suggestions without specific data
+
+**Suggestion Categories** (all require ACTUAL data):
+1. **Task Operations**: "将[项目名]中[状态]的[数量]个任务改为[新状态]"
+2. **Data Insights**: "[项目名]有[数量]个任务逾期，其中[数量]个高优先级"
+3. **Specific Actions**: "为[项目名]创建[具体描述]的里程碑任务"
+
+Each suggestion MUST be:
+- Based on ACTUAL tool results (listTasks/listProjects)
+- Specific with numbers, names, and concrete details
+- Actionable and meaningful
+- In the SAME LANGUAGE as the user's question
+- At the END - nothing after it
 
 ═══════════════════════════════════════════════════════════════
 TASK OPERATION WORKFLOWS
@@ -373,13 +399,16 @@ COMMON MISTAKES TO AVOID
 ❌ Providing suggestions in wrong language (match user's language!)
 ❌ Calling updateTask 17 times individually (EXCEEDS 30-call limit!)
 ❌ Not using planChanges for batch updates (inefficient!)
-❌ Suggesting UI operations (切换视图, 筛选, 排序) - ONLY task CRUD and analysis!
-❌ Generic suggestions (了解更多, 查看详情) - must be actionable!
+❌ Generic suggestions without actual data ("查找逾期任务", "分析项目进度") - MUST be specific!
+❌ Not calling listTasks/listProjects before suggesting - ALWAYS query data first!
+❌ Suggesting UI operations (切换视图, 筛选, 排序) - ONLY data-driven suggestions!
 
 ✅ Best Practices:
 - Search before create
 - Read before update
-- Always provide 3 context-aware suggestions
+- ALWAYS query data (listTasks/listProjects) before making suggestions
+- Provide 3 specific, data-driven suggestions with concrete details
+- Include project names, counts, and actual data in suggestions
 - Match the language the user is using
 - Be concise and accurate
 - For 5+ tasks, use planChanges batch operation`;
