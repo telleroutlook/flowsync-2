@@ -15,6 +15,7 @@ interface ListViewProps {
   selectedTaskId?: string | null;
   onSelectTask?: (id: string) => void;
   loading?: boolean;
+  zoom?: number;
 }
 
 interface TaskRowProps {
@@ -118,7 +119,7 @@ const TaskRow = memo(({ task, isSelected, onSelectTask, hasConflict }: TaskRowPr
 });
 TaskRow.displayName = 'TaskRow';
 
-export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, onSelectTask, loading = false }) => {
+export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, onSelectTask, loading = false, zoom = 1 }) => {
   const { t } = useI18n();
 
   // Calculate tasks with conflicts for visual indicator
@@ -148,7 +149,15 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
   return (
     <div className="w-full h-full overflow-hidden bg-surface border border-border-subtle rounded-xl shadow-sm flex flex-col">
        <div className="overflow-auto custom-scrollbar flex-1 min-h-0">
-        <table className="w-full text-left border-collapse">
+        <div className="min-w-full">
+          <div
+            style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: 'top left',
+              width: zoom !== 1 ? `${100 / zoom}%` : '100%'
+            }}
+          >
+          <table className="w-full text-left border-collapse">
           <thead className="bg-background sticky top-0 z-10 border-b border-border-subtle">
             <tr>
               <th className="py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-text-secondary uppercase tracking-wider w-12 sm:w-16">{t('list.header.wbs')}</th>
@@ -186,6 +195,8 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
             )}
           </tbody>
         </table>
+          </div>
+        </div>
        </div>
     </div>
   );

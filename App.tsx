@@ -801,6 +801,7 @@ function App() {
                         selectedTaskId={selectedTaskId}
                         onSelectTask={handleSelectTask}
                         loading={isLoadingTasks}
+                        zoom={currentZoom}
                       />
                     </div>
                   )}
@@ -811,6 +812,7 @@ function App() {
                         selectedTaskId={selectedTaskId}
                         onSelectTask={handleSelectTask}
                         loading={isLoadingTasks}
+                        zoom={currentZoom}
                       />
                     </div>
                   )}
@@ -819,7 +821,7 @@ function App() {
                       <GanttChart
                         tasks={activeTasks}
                         projectId={activeProjectId}
-                        zoom={1}
+                        zoom={currentZoom}
                         selectedTaskId={selectedTaskId}
                         onSelectTask={handleSelectTask}
                         loading={isLoadingTasks}

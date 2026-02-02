@@ -16,6 +16,7 @@ interface KanbanBoardProps {
   selectedTaskId?: string | null;
   onSelectTask?: (id: string) => void;
   loading?: boolean;
+  zoom?: number;
 }
 
 interface TaskCardProps {
@@ -142,7 +143,7 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect, ha
 });
 TaskCard.displayName = 'TaskCard';
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTaskId, onSelectTask, loading = false }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTaskId, onSelectTask, loading = false, zoom = 1 }) => {
   const { t } = useI18n();
 
   // Calculate tasks with conflicts for visual indicator
@@ -178,7 +179,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTa
 
   return (
     <div className="h-full w-full overflow-x-auto overflow-y-hidden">
-      <div className="flex h-full min-w-full gap-2 md:gap-4 pb-2 snap-x px-0 md:px-1">
+      <div className="h-full min-w-full">
+        <div
+          className="flex h-full min-w-full gap-2 md:gap-4 pb-2 snap-x px-0 md:px-1"
+          style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: 'top left',
+            width: zoom !== 1 ? `${100 / zoom}%` : '100%'
+          }}
+        >
         {([TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.DONE] as TaskStatus[]).map((status) => (
           <div key={status} className="flex-1 min-w-[280px] sm:min-w-[300px] md:min-w-[320px] flex flex-col bg-background/50 rounded-2xl border border-border-subtle shadow-inner snap-center h-full overflow-hidden">
             <div className="p-3 sm:p-4 flex justify-between items-center sticky top-0 z-10 shrink-0">
@@ -214,6 +223,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = memo(({ tasks, selectedTa
             </div>
           </div>
         ))}
+        </div>
       </div>
     </div>
   );
