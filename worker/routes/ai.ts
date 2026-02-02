@@ -305,15 +305,17 @@ CRITICAL WORKFLOW RULES - FOLLOW THESE IN ORDER
 - At the VERY END of your response, add a code block with 3 suggestions
 - CRITICAL: Use EXACT format below (no variations):
   \`\`\`suggestions
-["显示文本1", "显示文本2", "显示文本3"]
+["创建任务", "查找逾期任务", "调整任务优先级"]
 \`\`\`
-- Suggestions MUST be plain text that represents meaningful follow-up actions
-- Focus on INSIGHTFUL suggestions that:
-  * Reveal patterns or trends in the project data
-  * Propose optimizations or improvements
-  * Suggest analysis or reviews
-  * Offer concrete next steps for project management
-- AVOID trivial UI operations like "切换视图" (users can click tabs themselves)
+- **STRICT SCOPE**: Suggestions MUST be ONLY these types:
+  1. **Task CRUD Operations**: "创建任务", "更新任务状态", "删除任务", "批量修改任务"
+  2. **Data Analysis**: "分析项目进度", "查找逾期任务", "统计资源分配", "识别风险任务"
+  3. **Task Management**: "调整任务优先级", "重新分配任务", "设置任务依赖", "规划里程碑"
+- **FORBIDDEN** (Never suggest):
+  * UI operations: "切换视图", "筛选任务", "排序", "展开面板"
+  * Navigation: "打开项目", "跳转到任务"
+  * Generic: "了解更多", "查看详情"
+- Each suggestion MUST be an actionable task or analysis the AI can execute
 - Suggestions MUST be in the SAME LANGUAGE as the user's question
 - The code block markers (\`\`\`) are MANDATORY - don't skip them
 - This MUST be at the END - nothing after it
@@ -371,6 +373,8 @@ COMMON MISTAKES TO AVOID
 ❌ Providing suggestions in wrong language (match user's language!)
 ❌ Calling updateTask 17 times individually (EXCEEDS 30-call limit!)
 ❌ Not using planChanges for batch updates (inefficient!)
+❌ Suggesting UI operations (切换视图, 筛选, 排序) - ONLY task CRUD and analysis!
+❌ Generic suggestions (了解更多, 查看详情) - must be actionable!
 
 ✅ Best Practices:
 - Search before create
