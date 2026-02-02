@@ -620,18 +620,20 @@ function App() {
               event.currentTarget.value = '';
             }}
           />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => importInputRef.current?.click()}
-            className="h-8 px-3 text-xs"
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            {t('app.header.import')}
-          </Button>
+          <div className="hidden md:flex">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => importInputRef.current?.click()}
+              className="h-8 px-3 text-xs"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              {t('app.header.import')}
+            </Button>
+          </div>
 
           {/* Audit Button */}
-          <div className="relative">
+          <div className="relative hidden md:flex">
             <Button
               variant={isAuditOpen ? 'secondary' : 'outline'}
               size="sm"
@@ -648,7 +650,7 @@ function App() {
           </div>
 
           {/* Export Button */}
-          <div className="relative">
+          <div className="relative hidden md:flex">
             <Button
               variant="outline"
               size="sm"
