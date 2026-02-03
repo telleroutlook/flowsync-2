@@ -104,7 +104,7 @@ const en = {
   'app.loading.project_data': 'Loading Project Data...',
   'app.loading.view': 'Loading View...',
 
-  'chat.welcome': "Hello! I'm FlowSync. I'm ready to help you manage your projects, tasks, and schedules. How can I assist you today?",
+  'chat.welcome': "Hi! I'm FlowSync. Ready to help with your projects.",
   'chat.assistant_name': 'Joule Assistant',
   'chat.status_online': 'Online',
   'chat.new_chat': 'New Chat',
@@ -175,6 +175,8 @@ const en = {
 
   // AI Suggestions
   'suggestions.create_first_task': 'Create my first task',
+  'suggestions.add_detailed_tasks': 'Add detailed tasks to project',
+  'suggestions.analyze_project_risks': 'Analyze project risks',
   'suggestions.import_tasks': 'Import tasks from CSV/JSON',
   'suggestions.review_overdue': 'Review {count} overdue tasks',
   'suggestions.reschedule_overdue': 'Reschedule overdue tasks',
@@ -473,7 +475,7 @@ const zh: Record<keyof typeof en, string> = {
   'app.loading.project_data': '加载项目数据中…',
   'app.loading.view': '加载视图中…',
 
-  'chat.welcome': '你好！我是 FlowSync。我已准备好帮助你管理项目、任务与日程。今天我能帮你什么？',
+  'chat.welcome': '你好！我是 FlowSync。准备好帮你管理项目了。',
   'chat.assistant_name': 'Joule 助手',
   'chat.status_online': '在线',
   'chat.new_chat': '新对话',
@@ -544,6 +546,8 @@ const zh: Record<keyof typeof en, string> = {
 
   // AI 建议相关
   'suggestions.create_first_task': '创建我的第一个任务',
+  'suggestions.add_detailed_tasks': '为项目添加详细任务',
+  'suggestions.analyze_project_risks': '分析项目风险',
   'suggestions.import_tasks': '从 CSV/JSON 导入任务',
   'suggestions.review_overdue': '查看 {count} 个逾期任务',
   'suggestions.reschedule_overdue': '重新安排逾期任务',

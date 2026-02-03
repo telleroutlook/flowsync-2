@@ -45,6 +45,9 @@ LoadingSpinner.displayName = 'LoadingSpinner';
 const APP_HEADER_HEIGHT = '3rem';
 const MOBILE_NAV_HEIGHT = '4rem';
 
+// Task count threshold for AI suggestions
+const SUGGESTION_TASK_COUNT_THRESHOLD = 4;
+
 function App() {
   const { t } = useI18n();
   const zoomLevels = useMemo(() => [0.6, 0.8, 1, 1.2, 1.4], []);
@@ -150,6 +153,14 @@ function App() {
     [tasks, selectedTaskId]
   );
 
+  // Dynamic suggestion text based on task count
+  const initialSuggestionText = useMemo(
+    () => activeTasks.length < SUGGESTION_TASK_COUNT_THRESHOLD
+      ? t('suggestions.add_detailed_tasks')
+      : t('suggestions.analyze_project_risks'),
+    [activeTasks.length, t]
+  );
+
   // 2. Chat State (Lifted)
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const loadedProjectIdRef = useRef<string | null>(null);
@@ -171,11 +182,11 @@ function App() {
   // Load chat messages when active project changes
   useEffect(() => {
     if (!activeProjectId) return;
-    
+
     // If we've already loaded for this project, don't reload
     // (This helps if activeProjectId is stable across renders)
     if (loadedProjectIdRef.current === activeProjectId) return;
-    
+
     const key = `chat_history_${activeProjectId}`;
     const saved = storageGet(key);
     let loadedMessages: ChatMessage[];
@@ -189,6 +200,7 @@ function App() {
           role: 'model',
           text: t('chat.welcome'),
           timestamp: Date.now(),
+          suggestions: [{ text: initialSuggestionText, action: initialSuggestionText }],
         }];
       }
     } else {
@@ -197,12 +209,13 @@ function App() {
           role: 'model',
           text: t('chat.welcome'),
           timestamp: Date.now(),
+          suggestions: [{ text: initialSuggestionText, action: initialSuggestionText }],
         }];
     }
-    
+
     setMessages(loadedMessages);
     loadedProjectIdRef.current = activeProjectId;
-  }, [activeProjectId, t]);
+  }, [activeProjectId, t, initialSuggestionText]);
 
   const appendSystemMessage = useCallback((text: string) => {
     setMessages(prev => [...prev, {
@@ -228,9 +241,10 @@ function App() {
       role: 'model',
       text: t('chat.welcome'),
       timestamp: Date.now(),
+      suggestions: [{ text: initialSuggestionText, action: initialSuggestionText }],
     };
     setMessages([initialMsg]);
-  }, [t]);
+  }, [t, initialSuggestionText]);
 
   // 3. Audit Logs
   const { 
