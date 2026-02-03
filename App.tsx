@@ -11,7 +11,9 @@ import { ChatInterface } from './components/ChatInterface';
 import { AuditPanel } from './components/AuditPanel';
 import { TaskDetailPanel } from './components/TaskDetailPanel';
 import { CreateProjectModal } from './components/CreateProjectModal';
-import { Task, ChatMessage } from './types';
+import { EditProjectModal } from './components/EditProjectModal';
+import { DeleteProjectModal } from './components/DeleteProjectModal';
+import { Task, ChatMessage, Project } from './types';
 import { useProjectData } from './src/hooks/useProjectData';
 import { useAuth } from './src/hooks/useAuth';
 import { useWorkspaces } from './src/hooks/useWorkspaces';
@@ -83,6 +85,10 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAuditOpen, setIsAuditOpen] = useState(false);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
+  const [isEditProjectOpen, setIsEditProjectOpen] = useState(false);
+  const [isDeleteProjectOpen, setIsDeleteProjectOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [deleteProject, setDeleteProject] = useState<Project | null>(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -413,7 +419,34 @@ function App() {
     );
   }, [submitDraft, invalidateCache]);
 
+  const handleEditProject = useCallback((project: Project) => {
+    setEditingProject(project);
+    setIsEditProjectOpen(true);
+  }, []);
+
+  const handleUpdateProject = useCallback(async (id: string, name: string, description: string) => {
+    invalidateCache();
+    await submitDraft(
+      [
+        {
+          id: generateId(),
+          entityType: 'project',
+          action: 'update',
+          entityId: id,
+          after: { name, description },
+        },
+      ],
+      { createdBy: 'user', autoApply: true, reason: 'Manual project update' }
+    );
+  }, [submitDraft, invalidateCache]);
+
+  const handleRequestDeleteProject = useCallback((project: Project) => {
+    setDeleteProject(project);
+    setIsDeleteProjectOpen(true);
+  }, []);
+
   const handleDeleteProject = useCallback(async (id: string) => {
+    invalidateCache();
     await submitDraft(
       [
         {
@@ -425,7 +458,7 @@ function App() {
       ],
       { createdBy: 'user', autoApply: true, reason: 'Manual project delete' }
     );
-  }, [submitDraft]);
+  }, [submitDraft, invalidateCache]);
 
   // Optimistic Task Updates with Debounce
   const queueTaskUpdate = useCallback((id: string, updates: Partial<Task>) => {
@@ -533,7 +566,8 @@ function App() {
             if (isMobile) setMobileTab('workspace');
           }}
           onCreateProject={manualCreateProject}
-          onDeleteProject={handleDeleteProject}
+          onEditProject={handleEditProject}
+          onRequestDeleteProject={handleRequestDeleteProject}
           onClose={() => {
             setIsSidebarOpen(false);
             if (isMobile) setMobileTab('workspace');
@@ -778,6 +812,26 @@ function App() {
           isOpen={isCreateProjectOpen}
           onClose={() => setIsCreateProjectOpen(false)}
           onCreate={handleCreateProject}
+        />
+
+        <EditProjectModal
+          isOpen={isEditProjectOpen}
+          project={editingProject}
+          onClose={() => {
+            setIsEditProjectOpen(false);
+            setEditingProject(null);
+          }}
+          onSave={handleUpdateProject}
+        />
+
+        <DeleteProjectModal
+          isOpen={isDeleteProjectOpen}
+          project={deleteProject}
+          onClose={() => {
+            setIsDeleteProjectOpen(false);
+            setDeleteProject(null);
+          }}
+          onConfirm={handleDeleteProject}
         />
 
         <LoginModal

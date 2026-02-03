@@ -1,9 +1,9 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Project } from '../types';
 import { useI18n } from '../src/i18n';
 import { cn } from '../src/utils/cn';
 import { Button } from './ui/Button';
-import { Plus, ChevronLeft, Trash2, Lightbulb, Box } from 'lucide-react';
+import { Plus, ChevronLeft, Trash2, Lightbulb, Box, MoreVertical, Pencil } from 'lucide-react';
 
 export interface ProjectSidebarProps {
   topSlot?: React.ReactNode;
@@ -11,7 +11,8 @@ export interface ProjectSidebarProps {
   activeProjectId: string;
   onSelectProject: (id: string) => void;
   onCreateProject: () => void;
-  onDeleteProject: (id: string) => void;
+  onEditProject: (project: Project) => void;
+  onRequestDeleteProject: (project: Project) => void;
   onClose: () => void;
 }
 
@@ -19,11 +20,15 @@ export interface ProjectItemProps {
   project: Project;
   isActive: boolean;
   onSelectProject: (id: string) => void;
-  onDeleteProject: (event: React.MouseEvent, id: string, name: string) => void;
+  onEditProject: (project: Project) => void;
+  onRequestDeleteProject: (project: Project) => void;
   t: ReturnType<typeof useI18n>['t'];
 }
 
-const ProjectItem = memo<ProjectItemProps>(({ project, isActive, onSelectProject, onDeleteProject, t }) => {
+const ProjectItem = memo<ProjectItemProps>(({ project, isActive, onSelectProject, onEditProject, onRequestDeleteProject, t }) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
   const handleClick = useCallback(() => {
     onSelectProject(project.id);
   }, [project.id, onSelectProject]);
@@ -35,9 +40,33 @@ const ProjectItem = memo<ProjectItemProps>(({ project, isActive, onSelectProject
     }
   }, [project.id, onSelectProject]);
 
+  const handleMenuToggle = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+    setIsMenuOpen((prev) => !prev);
+  }, []);
+
+  const handleEdit = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+    setIsMenuOpen(false);
+    onEditProject(project);
+  }, [onEditProject, project]);
+
   const handleDelete = useCallback((event: React.MouseEvent) => {
-    onDeleteProject(event, project.id, project.name);
-  }, [project.id, project.name, onDeleteProject, t]);
+    event.stopPropagation();
+    setIsMenuOpen(false);
+    onRequestDeleteProject(project);
+  }, [onRequestDeleteProject, project]);
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isMenuOpen]);
 
   return (
     <div
@@ -73,18 +102,46 @@ const ProjectItem = memo<ProjectItemProps>(({ project, isActive, onSelectProject
         </div>
       </div>
 
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={handleDelete}
-        className={cn(
-          "h-7 w-7 opacity-0 group-hover:opacity-100 text-text-secondary hover:text-negative hover:bg-negative/10 transition-all rounded-md",
-          isActive && "opacity-0 group-hover:opacity-100"
+      <div className="relative" ref={menuRef}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleMenuToggle}
+          className={cn(
+            "h-7 w-7 opacity-0 group-hover:opacity-100 text-text-secondary hover:text-text-primary hover:bg-surface-active transition-all rounded-md",
+            isActive && "opacity-0 group-hover:opacity-100"
+          )}
+          title={t('app.sidebar.actions')}
+        >
+          <MoreVertical className="w-3.5 h-3.5" />
+        </Button>
+
+        {isMenuOpen && (
+          <div
+            className="absolute right-0 mt-1 w-40 rounded-lg border border-border-subtle bg-surface shadow-lg z-20 overflow-hidden"
+            role="menu"
+          >
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-xs font-medium text-text-primary hover:bg-surface-active flex items-center gap-2"
+              onClick={handleEdit}
+              role="menuitem"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              {t('app.sidebar.edit')}
+            </button>
+            <button
+              type="button"
+              className="w-full px-3 py-2 text-left text-xs font-medium text-negative hover:bg-negative/10 flex items-center gap-2"
+              onClick={handleDelete}
+              role="menuitem"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {t('app.sidebar.delete')}
+            </button>
+          </div>
         )}
-        title={t('app.sidebar.delete')}
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </Button>
+      </div>
     </div>
   );
 });
@@ -96,17 +153,11 @@ export const ProjectSidebar = memo<ProjectSidebarProps>(({
   activeProjectId,
   onSelectProject,
   onCreateProject,
-  onDeleteProject,
+  onEditProject,
+  onRequestDeleteProject,
   onClose,
 }) => {
   const { t } = useI18n();
-
-  const handleDeleteProject = useCallback((event: React.MouseEvent, id: string, name: string) => {
-    event.stopPropagation();
-    if (confirm(t('app.sidebar.delete_confirm', { name }))) {
-      onDeleteProject(id);
-    }
-  }, [t, onDeleteProject]);
 
   return (
     <div className="w-full bg-background/50 flex flex-col h-full shrink-0 shadow-sm z-10 md:bg-background">
@@ -160,7 +211,8 @@ export const ProjectSidebar = memo<ProjectSidebarProps>(({
             project={project}
             isActive={project.id === activeProjectId}
             onSelectProject={onSelectProject}
-            onDeleteProject={handleDeleteProject}
+            onEditProject={onEditProject}
+            onRequestDeleteProject={onRequestDeleteProject}
             t={t}
           />
         ))}

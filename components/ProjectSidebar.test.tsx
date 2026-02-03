@@ -10,13 +10,13 @@ const projects = [
 ];
 
 describe('ProjectSidebar', () => {
-  it('handles select, create, delete, and close actions', async () => {
+  it('handles select, create, edit, delete, and close actions', async () => {
     const user = userEvent.setup();
     const onSelectProject = vi.fn();
     const onCreateProject = vi.fn();
-    const onDeleteProject = vi.fn();
+    const onEditProject = vi.fn();
+    const onRequestDeleteProject = vi.fn();
     const onClose = vi.fn();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     render(
       <I18nProvider>
@@ -25,7 +25,8 @@ describe('ProjectSidebar', () => {
           activeProjectId="p1"
           onSelectProject={onSelectProject}
           onCreateProject={onCreateProject}
-          onDeleteProject={onDeleteProject}
+          onEditProject={onEditProject}
+          onRequestDeleteProject={onRequestDeleteProject}
           onClose={onClose}
         />
       </I18nProvider>
@@ -40,13 +41,15 @@ describe('ProjectSidebar', () => {
     await user.click(screen.getByTitle('Collapse Sidebar'));
     expect(onClose).toHaveBeenCalledTimes(1);
 
-    const deleteButtons = screen.getAllByTitle('Delete Project');
-    const deleteButton = deleteButtons[1];
-    if (deleteButton) {
-      await user.click(deleteButton);
-    }
-    expect(onDeleteProject).toHaveBeenCalledWith('p2');
+    const actionButtons = screen.getAllByTitle('Project actions');
+    const secondActionButton = actionButtons[1];
+    if (!secondActionButton) throw new Error('Expected second project action button.');
+    await user.click(secondActionButton);
+    await user.click(screen.getByText('Edit Project'));
+    expect(onEditProject).toHaveBeenCalledWith(projects[1]);
 
-    confirmSpy.mockRestore();
+    await user.click(secondActionButton);
+    await user.click(screen.getByText('Delete Project'));
+    expect(onRequestDeleteProject).toHaveBeenCalledWith(projects[1]);
   });
 });
