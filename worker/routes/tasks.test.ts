@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { tasksRoute } from './tasks';
 import type { Variables } from '../types';
+import { expectError, expectSuccess, readJson } from './testUtils';
 
 vi.mock('../services/taskService', () => ({
   listTasks: vi.fn(),
@@ -29,12 +30,12 @@ vi.mock('./middleware', () => ({
 import { listTasks, createTask, updateTask, deleteTask } from '../services/taskService';
 import { recordAudit } from '../services/auditService';
 
-const mockDb = {};
+const mockDb = {} as Variables['db'];
 
 const buildApp = () => {
   const app = new Hono<{ Variables: Variables }>();
   app.use('*', async (c, next) => {
-    c.set('db', mockDb as any);
+    c.set('db', mockDb);
     c.set('user', null);
     c.set('workspace', null);
     c.set('workspaceMembership', null);
@@ -52,10 +53,11 @@ describe('tasksRoute', () => {
   it('rejects invalid query params', async () => {
     const app = buildApp();
     const res = await app.request('/api/tasks?page=bad');
-    const json = (await res.json()) as any;
+    const json = await readJson<Record<string, unknown>>(res);
+    const error = expectError(json);
 
     expect(res.status).toBe(400);
-    expect(json.error.code).toBe('INVALID_QUERY');
+    expect(error.error.code).toBe('INVALID_QUERY');
   });
 
   it('creates a task and records audit', async () => {
@@ -66,10 +68,11 @@ describe('tasksRoute', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projectId: 'p1', title: 'Task', status: 'TODO', priority: 'LOW' }),
     });
-    const json = (await res.json()) as any;
+    const json = await readJson<{ id: string }>(res);
+    const success = expectSuccess(json);
 
     expect(res.status).toBe(201);
-    expect(json.data.id).toBe('t1');
+    expect(success.data.id).toBe('t1');
     expect(recordAudit).toHaveBeenCalled();
   });
 
@@ -81,29 +84,32 @@ describe('tasksRoute', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: 'Updated' }),
     });
-    const json = (await res.json()) as any;
+    const json = await readJson<Record<string, unknown>>(res);
+    const error = expectError(json);
 
     expect(res.status).toBe(404);
-    expect(json.error.code).toBe('NOT_FOUND');
+    expect(error.error.code).toBe('NOT_FOUND');
   });
 
   it('returns 404 for missing delete target', async () => {
     (deleteTask as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     const app = buildApp();
     const res = await app.request('/api/tasks/t1', { method: 'DELETE' });
-    const json = (await res.json()) as any;
+    const json = await readJson<Record<string, unknown>>(res);
+    const error = expectError(json);
 
     expect(res.status).toBe(404);
-    expect(json.error.code).toBe('NOT_FOUND');
+    expect(error.error.code).toBe('NOT_FOUND');
   });
 
   it('lists tasks', async () => {
     (listTasks as ReturnType<typeof vi.fn>).mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 50 });
     const app = buildApp();
     const res = await app.request('/api/tasks');
-    const json = (await res.json()) as any;
+    const json = await readJson<{ total: number }>(res);
+    const success = expectSuccess(json);
 
     expect(res.status).toBe(200);
-    expect(json.data.total).toBe(0);
+    expect(success.data.total).toBe(0);
   });
 });

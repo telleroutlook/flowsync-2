@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { aiRoute } from './ai';
 import type { Variables } from '../types';
+import { expectError, expectSuccess, readJson } from './testUtils';
 
 vi.mock('../services/logService', () => ({
   recordLog: vi.fn(),
@@ -28,12 +29,12 @@ const mockDb = {
   insert: vi.fn(() => mockDb),
   values: vi.fn(() => Promise.resolve()),
   delete: vi.fn(() => mockDb),
-};
+} as unknown as Variables['db'];
 
 const buildApp = () => {
   const app = new Hono<{ Variables: Variables }>();
   app.use('*', async (c, next) => {
-    c.set('db', mockDb as any);
+    c.set('db', mockDb);
     c.set('user', null);
     c.set('workspace', null);
     c.set('workspaceMembership', null);
@@ -68,10 +69,11 @@ describe('aiRoute', () => {
       },
       { OPENAI_API_KEY: '' }
     );
-    const json = (await res.json()) as any;
+    const json = await readJson<Record<string, unknown>>(res);
+    const error = expectError(json);
 
     expect(res.status).toBe(500);
-    expect(json.error.code).toBe('MISSING_API_KEY');
+    expect(error.error.code).toBe('MISSING_API_KEY');
   });
 
   it('returns model response with tool calls', async () => {
@@ -106,12 +108,13 @@ describe('aiRoute', () => {
       },
       { OPENAI_API_KEY: 'test-key' }
     );
-    const json = (await res.json()) as any;
+    const json = await readJson<{ text: string; toolCalls: Array<{ name: string }> }>(res);
+    const success = expectSuccess(json);
 
     expect(res.status).toBe(200);
-    expect(json.data.text).toBe('Hi there');
-    expect(json.data.toolCalls).toHaveLength(1);
-    expect(json.data.toolCalls[0].name).toBe('listProjects');
+    expect(success.data.text).toBe('Hi there');
+    expect(success.data.toolCalls).toHaveLength(1);
+    expect(success.data.toolCalls[0]?.name).toBe('listProjects');
     expect(recordLog).toHaveBeenCalledTimes(3);
   });
 
@@ -129,10 +132,11 @@ describe('aiRoute', () => {
       },
       { OPENAI_API_KEY: 'test-key' }
     );
-    const json = (await res.json()) as any;
+    const json = await readJson<Record<string, unknown>>(res);
+    const error = expectError(json);
 
     expect(res.status).toBe(502);
-    expect(json.error.code).toBe('OPENAI_ERROR');
+    expect(error.error.code).toBe('OPENAI_ERROR');
     expect(recordLog).toHaveBeenCalledTimes(2);
   });
 
@@ -165,10 +169,11 @@ describe('aiRoute', () => {
         OPENAI_MODEL: 'GLM-4.7',
       }
     );
-    const json = (await res.json()) as any;
+    const json = await readJson<{ text: string }>(res);
+    const success = expectSuccess(json);
 
     expect(res.status).toBe(200);
-    expect(json.data.text).toBe('Custom');
+    expect(success.data.text).toBe('Custom');
     expect(fetchMock).toHaveBeenCalled();
 
     const [url, options] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];

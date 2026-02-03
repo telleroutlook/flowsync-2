@@ -19,7 +19,7 @@ export const jsonError = (
  *
  * @hono/zod-validator returns a non-standard error format on validation failure.
  * This wrapper intercepts ZodError and returns our standard API format:
- * { success: false, error: { code: "VALIDATION_ERROR", message: "..." } }
+ * { success: false, error: { code: "VALIDATION_ERROR", message: "...", details: [...] } }
  *
  * @param schema - Zod schema to validate against
  * @returns zValidator middleware with custom error handling
@@ -35,14 +35,19 @@ export const jsonError = (
 export const validatedJson = <T extends z.ZodTypeAny>(schema: T) => {
   return zValidator('json', schema, async (result, c) => {
     if (!result.success) {
-      const firstError = result.error.issues[0];
+      const [firstError] = result.error.issues;
       const message = firstError?.message || 'Validation failed';
+      const details = result.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      }));
       return c.json(
         {
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
             message,
+            details,
           },
         },
         400

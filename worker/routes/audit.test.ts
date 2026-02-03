@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { auditRoute } from './audit';
 import type { Variables } from '../types';
+import { expectError, readJson } from './testUtils';
 
 vi.mock('../services/auditService', () => ({
   listAuditLogs: vi.fn(),
@@ -23,12 +24,12 @@ vi.mock('./middleware', () => ({
 
 import { getAuditLogById } from '../services/auditService';
 
-const mockDb = {};
+const mockDb = {} as Variables['db'];
 
 const buildApp = () => {
   const app = new Hono<{ Variables: Variables }>();
   app.use('*', async (c, next) => {
-    c.set('db', mockDb as any);
+    c.set('db', mockDb);
     c.set('user', null);
     c.set('workspace', null);
     c.set('workspaceMembership', null);
@@ -46,20 +47,22 @@ describe('auditRoute', () => {
   it('rejects invalid query params', async () => {
     const app = buildApp();
     const res = await app.request('/api/audit?page=bad');
-    const json = (await res.json()) as any;
+    const json = await readJson<Record<string, unknown>>(res);
+    const error = expectError(json);
 
     expect(res.status).toBe(400);
-    expect(json.error.code).toBe('INVALID_QUERY');
+    expect(error.error.code).toBe('INVALID_QUERY');
   });
 
   it('returns 404 for missing audit entry', async () => {
     (getAuditLogById as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     const app = buildApp();
     const res = await app.request('/api/audit/a1');
-    const json = (await res.json()) as any;
+    const json = await readJson<Record<string, unknown>>(res);
+    const error = expectError(json);
 
     expect(res.status).toBe(404);
-    expect(json.error.code).toBe('NOT_FOUND');
+    expect(error.error.code).toBe('NOT_FOUND');
   });
 
 /*
@@ -74,10 +77,11 @@ describe('auditRoute', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ actor: 'user' }),
     });
-    const json = (await res.json()) as any;
+    const json = await readJson<Record<string, unknown>>(res);
+    const errorResponse = expectError(json);
 
     expect(res.status).toBe(409);
-    expect(json.error.code).toBe('INVALID_ROLLBACK');
+    expect(errorResponse.error.code).toBe('INVALID_ROLLBACK');
   });
   */
 });

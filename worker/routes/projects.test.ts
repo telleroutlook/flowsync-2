@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { projectsRoute } from './projects';
 import type { Variables } from '../types';
+import { expectError, expectSuccess, readJson } from './testUtils';
 
 vi.mock('../services/projectService', () => ({
   listProjects: vi.fn(),
@@ -39,12 +40,12 @@ const mockDb = {
       where: async () => [{ id: 't1' }],
     }),
   }),
-};
+} as unknown as Variables['db'];
 
 const buildApp = () => {
   const app = new Hono<{ Variables: Variables }>();
   app.use('*', async (c, next) => {
-    c.set('db', mockDb as any);
+    c.set('db', mockDb);
     c.set('user', null);
     c.set('workspace', null);
     c.set('workspaceMembership', null);
@@ -67,21 +68,22 @@ describe('projectsRoute', () => {
     (listProjects as ReturnType<typeof vi.fn>).mockResolvedValue([{ id: 'p1', name: 'Alpha' }]);
     const app = buildApp();
     const res = await app.request('/api/projects');
-    const json = (await res.json()) as any;
+    const json = await readJson<Array<{ id: string }>>(res);
+    const success = expectSuccess(json);
 
     expect(res.status).toBe(200);
-    expect(json.success).toBe(true);
-    expect(json.data[0].id).toBe('p1');
+    expect(success.data[0]?.id).toBe('p1');
   });
 
   it('returns 404 for missing project', async () => {
     (getProjectById as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     const app = buildApp();
     const res = await app.request('/api/projects/p1');
-    const json = (await res.json()) as any;
+    const json = await readJson<Record<string, unknown>>(res);
+    const error = expectError(json);
 
     expect(res.status).toBe(404);
-    expect(json.error.code).toBe('NOT_FOUND');
+    expect(error.error.code).toBe('NOT_FOUND');
   });
 
   it('creates a project and records audit', async () => {
@@ -92,10 +94,11 @@ describe('projectsRoute', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Alpha' }),
     });
-    const json = (await res.json()) as any;
+    const json = await readJson<{ id: string }>(res);
+    const success = expectSuccess(json);
 
     expect(res.status).toBe(201);
-    expect(json.data.id).toBe('p1');
+    expect(success.data.id).toBe('p1');
     expect(recordAudit).toHaveBeenCalled();
   });
 
@@ -107,10 +110,11 @@ describe('projectsRoute', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'Updated' }),
     });
-    const json = (await res.json()) as any;
+    const json = await readJson<Record<string, unknown>>(res);
+    const error = expectError(json);
 
     expect(res.status).toBe(404);
-    expect(json.error.code).toBe('NOT_FOUND');
+    expect(error.error.code).toBe('NOT_FOUND');
   });
 
   it('deletes a project and records audit', async () => {
@@ -118,10 +122,11 @@ describe('projectsRoute', () => {
     (deleteProject as ReturnType<typeof vi.fn>).mockResolvedValue({ project: { id: 'p1', name: 'Alpha' }, deletedTasks: 1 });
     const app = buildApp();
     const res = await app.request('/api/projects/p1', { method: 'DELETE' });
-    const json = (await res.json()) as any;
+    const json = await readJson<{ project: { id: string } }>(res);
+    const success = expectSuccess(json);
 
     expect(res.status).toBe(200);
-    expect(json.data.project.id).toBe('p1');
+    expect(success.data.project.id).toBe('p1');
     expect(recordAudit).toHaveBeenCalled();
   });
 });
