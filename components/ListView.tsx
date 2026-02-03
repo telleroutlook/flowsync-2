@@ -196,6 +196,7 @@ TaskRow.displayName = 'TaskRow';
 
 export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, onSelectTask, loading = false, zoom = 1, isMobile = false }) => {
   const { t } = useI18n();
+  const zoomStyle = zoom !== 1 ? ({ zoom } as React.CSSProperties) : undefined;
 
   // Calculate tasks with conflicts for visual indicator
   const tasksWithConflicts = useMemo(() => getTasksWithConflicts(tasks), [tasks]);
@@ -224,15 +225,8 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
   return (
     <div className="w-full h-full overflow-hidden bg-surface border border-border-subtle rounded-xl shadow-sm flex flex-col">
       <div className="overflow-auto custom-scrollbar flex-1 min-h-0">
-        <div
-          style={{
-            transform: `scale(${zoom})`,
-            transformOrigin: 'top left',
-            width: zoom !== 1 ? `${100 / zoom}%` : '100%'
-          }}
-        >
-          {!isMobile && (
-            <table className="w-full text-left border-collapse min-w-full">
+        {!isMobile && (
+          <table className="w-full text-left border-collapse min-w-full" style={zoomStyle}>
               <thead className="bg-background sticky top-0 z-10 border-b border-border-subtle">
                 <tr>
                   <th className="py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-text-secondary uppercase tracking-wider w-12 sm:w-16">{t('list.header.wbs')}</th>
@@ -269,35 +263,34 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
                   ))
                 )}
               </tbody>
-            </table>
-          )}
+          </table>
+        )}
 
-          {/* Mobile Card Layout */}
-          {isMobile && (
-            <div className="divide-y divide-border-subtle">
-              {sortedTasks.length === 0 ? (
-                <div className="py-16 text-center">
-                  <EmptyState
-                    icon={Inbox}
-                    title={t('list.empty')}
-                    variant="minimal"
-                    className="py-16"
-                  />
-                </div>
-              ) : (
-                sortedTasks.map((task) => (
-                  <TaskCardMobile
-                    key={task.id}
-                    task={task}
-                    isSelected={selectedTaskId === task.id}
-                    onSelectTask={onSelectTask}
-                    hasConflict={tasksWithConflicts.has(task.id)}
-                  />
-                ))
-              )}
-            </div>
-          )}
-        </div>
+        {/* Mobile Card Layout */}
+        {isMobile && (
+          <div className="divide-y divide-border-subtle" style={zoomStyle}>
+            {sortedTasks.length === 0 ? (
+              <div className="py-16 text-center">
+                <EmptyState
+                  icon={Inbox}
+                  title={t('list.empty')}
+                  variant="minimal"
+                  className="py-16"
+                />
+              </div>
+            ) : (
+              sortedTasks.map((task) => (
+                <TaskCardMobile
+                  key={task.id}
+                  task={task}
+                  isSelected={selectedTaskId === task.id}
+                  onSelectTask={onSelectTask}
+                  hasConflict={tasksWithConflicts.has(task.id)}
+                />
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
