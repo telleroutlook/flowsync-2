@@ -271,26 +271,85 @@ class ApiError extends Error {
   }
 }
 
-const detectUserLanguage = (message: string): 'en' | 'zh' => {
-  // Simple heuristic: if message contains CJK characters, treat as Chinese.
-  // This keeps behavior aligned with the user's question language.
-  return /[\u4e00-\u9fff]/.test(message) ? 'zh' : 'en';
+type UserLanguage = 'en' | 'zh-Hans' | 'zh-Hant' | 'ja' | 'ko' | 'es' | 'de' | 'pt' | 'ar';
+
+const detectUserLanguage = (message: string): UserLanguage => {
+  // Heuristic detection using Unicode scripts and common diacritics.
+  // This keeps behavior aligned with the user's question language without heavy deps.
+  const text = message.trim();
+  if (!text) return 'en';
+
+  if (/[\u0600-\u06FF]/.test(text)) return 'ar';
+  if (/[\u3040-\u30FF]/.test(text)) return 'ja';
+  if (/[\uAC00-\uD7AF]/.test(text)) return 'ko';
+
+  // Distinguish Traditional Chinese by common-specific characters.
+  if (/[\u4e00-\u9fff]/.test(text)) {
+    const traditionalChars = /[繁體國學區關觀體頭愛樂機術傳藝萬與並為來應發後萬灣龍顯驚]|[臺灣]/;
+    return traditionalChars.test(text) ? 'zh-Hant' : 'zh-Hans';
+  }
+
+  // Latin-script heuristics for European languages.
+  if (/[ñ¡¿]/i.test(text) || /[áéíóúü]/i.test(text)) return 'es';
+  if (/[ãõç]/i.test(text)) return 'pt';
+  if (/[äöüß]/i.test(text)) return 'de';
+
+  return 'en';
 };
 
-const buildSystemInstruction = (systemContext?: string, userLanguage: 'en' | 'zh' = 'en') => {
+const buildSystemInstruction = (systemContext?: string, userLanguage: UserLanguage = 'en') => {
   const today = new Date().toISOString().split('T')[0];
-  const languageLine = userLanguage === 'zh'
-    ? 'User language: Chinese (zh).'
-    : 'User language: English (en).';
-  const suggestionExamples = userLanguage === 'zh'
-    ? `✅ **GOOD Examples** (based on actual data):
-- "查看电商平台项目中本周到期的3个高优先级任务"
-- "将张三负责的5个已完成任务标记为DONE"
-- "分析移动端APP项目的完成率（当前65%，8个任务待完成）"`
-    : `✅ **GOOD Examples** (based on actual data):
+  const languageLineMap: Record<UserLanguage, string> = {
+    en: 'User language: English (en).',
+    'zh-Hans': 'User language: Simplified Chinese (zh-Hans).',
+    'zh-Hant': 'User language: Traditional Chinese (zh-Hant).',
+    ja: 'User language: Japanese (ja).',
+    ko: 'User language: Korean (ko).',
+    es: 'User language: Spanish (es).',
+    de: 'User language: German (de).',
+    pt: 'User language: Portuguese (pt).',
+    ar: 'User language: Arabic (ar).',
+  };
+  const suggestionExamplesMap: Record<UserLanguage, string> = {
+    en: `✅ **GOOD Examples** (based on actual data):
 - "Review 3 high-priority tasks due this week in the Ecommerce Platform project"
 - "Mark 5 completed tasks owned by Alice as DONE"
-- "Analyze Mobile App project completion (65% complete, 8 tasks remaining)"`;
+- "Analyze Mobile App project completion (65% complete, 8 tasks remaining)"`,
+    'zh-Hans': `✅ **GOOD Examples** (based on actual data):
+- "查看电商平台项目中本周到期的3个高优先级任务"
+- "将张三负责的5个已完成任务标记为DONE"
+- "分析移动端APP项目的完成率（当前65%，8个任务待完成）"`,
+    'zh-Hant': `✅ **GOOD Examples** (based on actual data):
+- "查看電商平台專案中本週到期的3個高優先級任務"
+- "將張三負責的5個已完成任務標記為DONE"
+- "分析行動端APP專案的完成率（目前65%，8個任務待完成）"`,
+    ja: `✅ **GOOD Examples** (based on actual data):
+- "ECプラットフォームプロジェクトで今週期限の高優先度タスク3件を確認して"
+- "山田が担当する完了済みタスク5件をDONEに更新して"
+- "モバイルアプリプロジェクトの進捗を分析（現在65%完了、残り8件）"`,
+    ko: `✅ **GOOD Examples** (based on actual data):
+- "이커머스 플랫폼 프로젝트에서 이번 주 마감인 높은 우선순위 작업 3건 확인"
+- "김민수가 담당한 완료 작업 5건을 DONE으로 표시"
+- "모바일 앱 프로젝트 진행률 분석(현재 65% 완료, 남은 작업 8건)"`,
+    es: `✅ **GOOD Examples** (based on actual data):
+- "Revisar 3 tareas de alta prioridad que vencen esta semana en el proyecto Plataforma Ecommerce"
+- "Marcar como DONE 5 tareas completadas de Ana"
+- "Analizar el avance del proyecto App Móvil (65% completo, 8 tareas restantes)"`,
+    de: `✅ **GOOD Examples** (based on actual data):
+- "3 Aufgaben mit hoher Priorität prüfen, die diese Woche im Projekt E-Commerce-Plattform fällig sind"
+- "5 erledigte Aufgaben von Anna als DONE markieren"
+- "Fortschritt des Mobile-App-Projekts analysieren (65% abgeschlossen, 8 Aufgaben übrig)"`,
+    pt: `✅ **GOOD Examples** (based on actual data):
+- "Revisar 3 tarefas de alta prioridade com prazo nesta semana no projeto Plataforma de E-commerce"
+- "Marcar como DONE 5 tarefas concluídas de Ana"
+- "Analisar o andamento do projeto App Móvel (65% concluído, 8 tarefas restantes)"`,
+    ar: `✅ **GOOD Examples** (based on actual data):
+- "مراجعة 3 مهام عالية الأولوية مستحقة هذا الأسبوع في مشروع منصة التجارة الإلكترونية"
+- "وضع 5 مهام مكتملة يملكها أحمد على DONE"
+- "تحليل تقدم مشروع تطبيق الجوال (مكتمل 65%، متبقٍ 8 مهام)"`,
+  };
+  const languageLine = languageLineMap[userLanguage] ?? languageLineMap.en;
+  const suggestionExamples = suggestionExamplesMap[userLanguage] ?? suggestionExamplesMap.en;
   return `You are FlowSync AI, a project management assistant. Help users manage tasks and projects efficiently.
 
 ${systemContext || ''}
