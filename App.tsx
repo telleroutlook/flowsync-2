@@ -41,6 +41,10 @@ const LoadingSpinner = memo(({ message }: { message: string }) => (
 ));
 LoadingSpinner.displayName = 'LoadingSpinner';
 
+// Layout constants (module-level to avoid recreation on each render)
+const APP_HEADER_HEIGHT = '3.5rem';
+const MOBILE_NAV_HEIGHT = '64px';
+
 function App() {
   const { t } = useI18n();
   const zoomLevels = useMemo(() => [0.6, 0.8, 1, 1.2, 1.4], []);
@@ -480,6 +484,10 @@ function App() {
   return (
     <div
       className="flex h-screen h-[100dvh] w-full bg-background overflow-hidden text-text-primary font-sans selection:bg-primary/20 selection:text-primary flex-col md:flex-row"
+      style={{
+        '--app-header-height': APP_HEADER_HEIGHT,
+        '--app-mobile-nav-height': MOBILE_NAV_HEIGHT
+      } as React.CSSProperties}
     >
       
       {/* 1. Project Sidebar (Left) */}
@@ -528,7 +536,7 @@ function App() {
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {/* Header */}
           <div className={cn(
-            "min-h-[3.5rem] py-2 border-b border-border-subtle flex items-center flex-wrap gap-2 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0",
+            "min-h-[var(--app-header-height)] py-2 border-b border-border-subtle flex items-center flex-wrap gap-2 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0",
             isMobile ? "px-2" : "px-4"
           )}>
           <Button
@@ -842,7 +850,7 @@ function App() {
               <div className={cn(
                 "transition-all duration-300",
                 selectedTask
-                  ? (isMobile ? "fixed inset-0 z-40 p-4 bg-background/95 backdrop-blur-sm" : "w-[350px] opacity-100 translate-x-0")
+                  ? (isMobile ? "fixed inset-0 z-40 px-4 pt-[calc(var(--app-header-height)+env(safe-area-inset-top)+1rem)] pb-[calc(var(--app-mobile-nav-height)+env(safe-area-inset-bottom)+1rem)] bg-background/95 backdrop-blur-sm" : "w-[350px] opacity-100 translate-x-0")
                   : (isMobile ? "hidden" : "w-0 opacity-0 translate-x-10 pointer-events-none")
               )}>
                 {selectedTask && (
