@@ -281,7 +281,7 @@ export async function resolveTask(
       .where(
         and(
           eq(projects.workspaceId, workspaceId),
-          sql`LEFT(CAST(${tasks.id} AS TEXT), ${UUID_PREFIX_LENGTH}) = ${prefix}`
+          sql`SUBSTR(CAST(${tasks.id} AS TEXT), 1, ${UUID_PREFIX_LENGTH}) = ${prefix}`
         )
       )
       .limit(10);
@@ -486,7 +486,7 @@ export async function resolveProject(
       .where(
         and(
           eq(projects.workspaceId, workspaceId),
-          sql`LEFT(CAST(${projects.id} AS TEXT), ${UUID_PREFIX_LENGTH}) = ${prefix}`
+          sql`SUBSTR(CAST(${projects.id} AS TEXT), 1, ${UUID_PREFIX_LENGTH}) = ${prefix}`
         )
       )
       .limit(10);

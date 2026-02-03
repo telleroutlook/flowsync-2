@@ -174,7 +174,7 @@ async function matchByTruncatedId(
     .where(
       and(
         eq(projects.workspaceId, workspaceId),
-        sql`LEFT(CAST(${tasks.id} AS TEXT), ${UUID_PREFIX_LENGTH}) = ${prefix}`
+        sql`SUBSTR(CAST(${tasks.id} AS TEXT), 1, ${UUID_PREFIX_LENGTH}) = ${prefix}`
       )
     )
     .limit(10);
