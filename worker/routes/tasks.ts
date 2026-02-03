@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { zValidator } from '@hono/zod-validator';
-import { jsonError, jsonOk, requireWorkspace } from './helpers';
+import { jsonError, jsonOk, requireWorkspace, validatedJson } from './helpers';
 import { workspaceMiddleware } from './middleware';
 import { createTask, deleteTask, getTaskById, listTasks, updateTask } from '../services/taskService';
 import { recordAudit } from '../services/auditService';
@@ -32,8 +31,7 @@ const taskInputSchema = z.object({
   assignee: z.string().optional(),
   isMilestone: z.boolean().optional(),
   predecessors: z.array(z.string()).optional(),
-  createdAt: z.number().optional(),
-  updatedAt: z.number().optional(),
+  // createdAt and updatedAt are server-side only, not accepted from client
 });
 
 const taskUpdateSchema = z.object({
@@ -84,7 +82,7 @@ tasksRoute.get('/:id', async (c) => {
   return jsonOk(c, task);
 });
 
-tasksRoute.post('/', zValidator('json', taskInputSchema), async (c) => {
+tasksRoute.post('/', validatedJson(taskInputSchema), async (c) => {
   const error = requireWorkspace(c);
   if (error) return error;
   const workspace = c.get('workspace')!;
@@ -103,8 +101,6 @@ tasksRoute.post('/', zValidator('json', taskInputSchema), async (c) => {
     assignee: data.assignee,
     isMilestone: data.isMilestone,
     predecessors: data.predecessors,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
   }, workspace.id);
   if (!task) return jsonError(c, 'INVALID_PROJECT', 'Project not found in workspace.', 404);
   await recordAudit(c.get('db'), {
@@ -123,7 +119,7 @@ tasksRoute.post('/', zValidator('json', taskInputSchema), async (c) => {
   return jsonOk(c, task, 201);
 });
 
-tasksRoute.patch('/:id', zValidator('json', taskUpdateSchema), async (c) => {
+tasksRoute.patch('/:id', validatedJson(taskUpdateSchema), async (c) => {
   const error = requireWorkspace(c);
   if (error) return error;
   const workspace = c.get('workspace')!;

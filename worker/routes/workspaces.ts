@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { zValidator } from '@hono/zod-validator';
-import { jsonError, jsonOk } from './helpers';
+import { jsonError, jsonOk, validatedJson } from './helpers';
 import {
   approveWorkspaceRequest,
   createWorkspace,
@@ -31,7 +30,7 @@ workspacesRoute.get('/', async (c) => {
   return jsonOk(c, workspaces);
 });
 
-workspacesRoute.post('/', zValidator('json', workspaceSchema), async (c) => {
+workspacesRoute.post('/', validatedJson(workspaceSchema), async (c) => {
   const user = c.get('user');
   if (!user) return jsonError(c, 'UNAUTHORIZED', 'Login required.', 401);
   const payload = c.req.valid('json');

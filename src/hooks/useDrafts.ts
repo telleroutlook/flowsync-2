@@ -82,23 +82,11 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     options: { reason?: string; createdBy: Draft['createdBy']; autoApply?: boolean; silent?: boolean }
   ): Promise<Draft> => {
     try {
-      console.log('[submitDraft] Creating draft', {
-        actionCount: actions.length,
-        actions: actions.map(a => ({ type: `${a.entityType}.${a.action}`, id: a.entityId }))
-      });
-
       const result = await apiService.createDraft({
         projectId: activeProjectId || undefined,
         createdBy: options.createdBy,
         reason: options.reason,
         actions,
-      });
-
-      console.log('[submitDraft] Draft created', {
-        draftId: result.draft.id,
-        workspaceId: result.draft.workspaceId,
-        actionCount: result.draft.actions.length,
-        warnings: result.warnings
       });
 
       setDraftWarnings(result.warnings);
@@ -137,13 +125,8 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
   }, [activeProjectId, refreshData, refreshAuditLogs, appendSystemMessage, onProjectModified, t]);
 
   const handleApplyDraft = useCallback(async (draftId: string, options?: { autoFix?: boolean; force?: boolean }) => {
-    console.log('[handleApplyDraft] Called with draftId:', draftId, 'options:', options);
-    console.log('[handleApplyDraft] pendingDraft:', pendingDraft);
-    console.log('[handleApplyDraft] All drafts:', drafts.map(d => ({ id: d.id, status: d.status })));
-
     // Prevent duplicate operations
     if (draftOperationRef.current.has(draftId)) {
-      console.log('[handleApplyDraft] Skipping - already processing');
       return;
     }
     draftOperationRef.current.add(draftId);
@@ -157,25 +140,13 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
       let projectModified = false;
 
       for (const id of targetIds) {
-        console.log('[handleApplyDraft] Applying draft', {
-          draftId: id,
-          workspaceId: drafts.find(d => d.id === id)?.workspaceId,
-        });
-
         const draft = drafts.find(d => d.id === id);
-        const result = await apiService.applyDraft(id, 'user', draft?.workspaceId, options);
-
-        console.log('[handleApplyDraft] Draft applied with result', {
-          draftId: id,
-          resultStatus: result.draft.status,
-          resultsCount: result.results?.length,
-          summary: result.draft.summary,
-          hasConflicts: result.conflicts,
-        });
+        const result = options
+          ? await apiService.applyDraft(id, 'user', draft?.workspaceId, options)
+          : await apiService.applyDraft(id, 'user', draft?.workspaceId);
 
         // Handle conflict response
         if (result.conflicts && result.conflicts.length > 0) {
-          console.log('[handleApplyDraft] Conflicts detected, showing dialog');
           const canAutoFix = result.conflicts.every(c => c.canAutoFix);
           setConflictDialog({
             draftId: id,

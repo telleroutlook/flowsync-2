@@ -106,13 +106,6 @@ const DraftNotification = memo<DraftNotificationProps>(({
     ? draftWarnings.slice(0, MAX_WARNINGS_SHOWN)
     : draftWarnings;
 
-  // Debug logging
-  console.log('[DraftNotification] Rendering', {
-    pendingDraftId: pendingDraft.id,
-    status: pendingDraft.status,
-    actionCount: pendingDraft.actions.length,
-  });
-
   return (
   <motion.div
     initial={{ height: 0, opacity: 0 }}
@@ -165,7 +158,6 @@ const DraftNotification = memo<DraftNotificationProps>(({
         variant="default"
         size="sm"
         onClick={() => {
-          console.log('[Accept Button] Clicked, calling onApplyDraft with draftId:', pendingDraft.id);
           onApplyDraft(pendingDraft.id);
         }}
         isLoading={draftProcessingState === 'applying'}

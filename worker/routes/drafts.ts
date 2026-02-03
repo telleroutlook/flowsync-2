@@ -1,10 +1,9 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { zValidator } from '@hono/zod-validator';
-import { jsonError, jsonOk, requireWorkspace } from './helpers';
+import { jsonError, jsonOk, requireWorkspace, validatedJson } from './helpers';
 import { workspaceMiddleware } from './middleware';
 import { applyDraft, createDraft, discardDraft, getDraftById, listDrafts, cleanupDrafts } from '../services/draftService';
-import { recordLog } from '../services/logService';
+import { recordLog, debugLog } from '../services/logService';
 import { generateId } from '../services/utils';
 import type { DraftAction } from '../services/types';
 import type { Variables } from '../types';
@@ -56,7 +55,7 @@ draftsRoute.get('/:id', async (c) => {
   return jsonOk(c, draft);
 });
 
-draftsRoute.post('/', zValidator('json', createDraftSchema), async (c) => {
+draftsRoute.post('/', validatedJson(createDraftSchema), async (c) => {
   const error = requireWorkspace(c);
   if (error) return error;
   const workspace = c.get('workspace')!;
@@ -82,7 +81,7 @@ draftsRoute.post('/', zValidator('json', createDraftSchema), async (c) => {
   }
 });
 
-draftsRoute.post('/:id/apply', zValidator('json', applySchema), async (c) => {
+draftsRoute.post('/:id/apply', validatedJson(applySchema), async (c) => {
   const error = requireWorkspace(c);
   if (error) return error;
   const workspace = c.get('workspace')!;
@@ -98,7 +97,7 @@ draftsRoute.post('/:id/apply', zValidator('json', applySchema), async (c) => {
 
     // If conflicts detected and not resolved, return 202 to indicate user confirmation needed
     if (result.conflicts && result.conflicts.length > 0) {
-      console.log('[Draft Apply] Conflicts detected, returning 202', {
+      debugLog('draft_apply_conflicts', {
         draftId: result.draft.id,
         conflictCount: result.conflicts.length,
       });
@@ -125,7 +124,7 @@ draftsRoute.post('/:id/discard', async (c) => {
   return jsonOk(c, draft);
 });
 
-draftsRoute.delete('/cleanup', zValidator('json', cleanupSchema), async (c) => {
+draftsRoute.delete('/cleanup', validatedJson(cleanupSchema), async (c) => {
   const error = requireWorkspace(c);
   if (error) return error;
   const workspace = c.get('workspace')!;

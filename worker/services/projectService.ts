@@ -5,6 +5,7 @@ import { generateId, now } from './utils';
 import type { ProjectRecord } from './types';
 import { seedProjects } from '../db/seed';
 import { retryOnce } from './dbHelpers';
+import { LRUCache } from 'lru-cache';
 
 export const listProjects = async (
   db: ReturnType<typeof import('../db').getDb>,
@@ -152,6 +153,13 @@ export const deleteProject = async (
 };
 
 const PROJECT_CACHE_TTL_MS = 30_000;
-const projectCache = new Map<string, { data: ProjectRecord[]; at: number }>();
+
+// Memory management: LRU cache prevents unbounded growth in long-running Workers
+// Automatically evicts least-recently-used entries when max size is reached
+const projectCache = new LRUCache<string, { data: ProjectRecord[]; at: number }>({
+  max: 100, // Maximum number of workspace entries to cache (lower than tasks since fewer projects)
+  ttl: PROJECT_CACHE_TTL_MS, // Time-to-live in milliseconds
+  updateAgeOnGet: true, // Refresh entry age on access (true LRU behavior)
+});
 
 const isCacheFresh = (timestamp: number) => now() - timestamp < PROJECT_CACHE_TTL_MS;

@@ -57,8 +57,10 @@ export async function checkRateLimit(
   const attemptCount = recentAttempts.length;
 
   if (attemptCount >= config.maxAttempts) {
-    // Rate limit exceeded - calculate retry after time
-    const oldestAttempt = recentAttempts[0]?.timestamp || currentTime;
+    // Rate limit exceeded - calculate retry after time using the earliest attempt
+    // Use Math.min to find the earliest timestamp (results may not be sorted)
+    const timestamps = recentAttempts.map(a => Number(a.timestamp));
+    const oldestAttempt = Math.min(...timestamps);
     const retryAfter = Math.ceil((oldestAttempt + config.windowMs - currentTime) / 1000);
     return { allowed: false, retryAfter };
   }

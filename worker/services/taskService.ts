@@ -311,7 +311,10 @@ const buildTaskCacheKey = (filters: TaskFilters, workspaceId: string) => {
   if (filters.priority) parts.push(`pr:${filters.priority}`);
   if (filters.assignee) parts.push(`a:${filters.assignee}`);
   if (filters.isMilestone !== undefined) parts.push(`m:${filters.isMilestone}`);
-  if (filters.q) parts.push(`q:${filters.q.length}`); // Only store length for queries
+  if (filters.q) {
+    // Encode to avoid collisions with separator characters in the cache key
+    parts.push(`q:${encodeURIComponent(filters.q)}`);
+  }
   if (filters.page && filters.page > 1) parts.push(`pg:${filters.page}`);
   if (filters.pageSize && filters.pageSize !== 50) parts.push(`psz:${filters.pageSize}`);
   return parts.join('|');

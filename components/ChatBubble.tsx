@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from 'react';
 import { ChatMessage, ChatAttachment, ActionableSuggestion } from '../types';
 import { Paperclip, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DOMPurify from 'isomorphic-dompurify';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -107,24 +108,24 @@ const MarkdownContent = memo<MarkdownContentProps>(({ content, isUser, codeLabel
   const blockCodeHeaderClass = cn("text-[10px] px-3 py-1.5 font-mono opacity-80 border-b", isUser ? "border-primary-foreground/10 bg-primary-foreground/5" : "border-border-subtle bg-secondary/5 text-text-secondary");
   const blockCodeClass = cn("block p-3 overflow-x-auto font-mono text-xs", isUser ? "text-primary-foreground/90" : "text-text-primary");
 
-  const components = useMemo(() => ({
-    table: ({ node, ...props }: any) => (
+  const components = useMemo((): Components => ({
+    table: ({ node, ...props }) => (
       <div className={tableClass}>
         <table className="w-full text-left text-xs border-collapse" {...props} />
       </div>
     ),
-    thead: ({ node, ...props }: any) => <thead className={theadClass} {...props} />,
-    th: ({ node, ...props }: any) => <th className={thClass} {...props} />,
-    tr: ({ node, ...props }: any) => <tr className={trClass} {...props} />,
-    td: ({ node, ...props }: any) => <td className="px-2 py-1.5" {...props} />,
-    p: ({ node, ...props }: any) => <p className="mb-1.5 last:mb-0 leading-relaxed" {...props} />,
+    thead: ({ node, ...props }) => <thead className={theadClass} {...props} />,
+    th: ({ node, ...props }) => <th className={thClass} {...props} />,
+    tr: ({ node, ...props }) => <tr className={trClass} {...props} />,
+    td: ({ node, ...props }) => <td className="px-2 py-1.5" {...props} />,
+    p: ({ node, ...props }) => <p className="mb-1.5 last:mb-0 leading-relaxed" {...props} />,
     // Add rel="noopener noreferrer nofollow" to all links for security
-    a: ({ node, ...props }: any) => <a target="_blank" rel="noopener noreferrer nofollow" className="underline underline-offset-2 opacity-90 hover:opacity-100 font-medium" {...props} />,
-    ul: ({ node, ...props }: any) => <ul className="list-disc list-outside ml-4 mb-1.5 space-y-0.5" {...props} />,
-    ol: ({ node, ...props }: any) => <ol className="list-decimal list-outside ml-4 mb-1.5 space-y-0.5" {...props} />,
-    li: ({ node, ...props }: any) => <li className="pl-0.5" {...props} />,
-    blockquote: ({ node, ...props }: any) => <blockquote className={blockquoteClass} {...props} />,
-    code: ({ node, className, children, ...props }: any) => {
+    a: ({ node, ...props }) => <a target="_blank" rel="noopener noreferrer nofollow" className="underline underline-offset-2 opacity-90 hover:opacity-100 font-medium" {...props} />,
+    ul: ({ node, ...props }) => <ul className="list-disc list-outside ml-4 mb-1.5 space-y-0.5" {...props} />,
+    ol: ({ node, ...props }) => <ol className="list-decimal list-outside ml-4 mb-1.5 space-y-0.5" {...props} />,
+    li: ({ node, ...props }) => <li className="pl-0.5" {...props} />,
+    blockquote: ({ node, ...props }) => <blockquote className={blockquoteClass} {...props} />,
+    code: ({ node, className, children, ...props }) => {
       const match = /language-(\w+)/.exec(className || '');
       const isInline = !match && !String(children).includes('\n');
       return isInline ? (
@@ -138,9 +139,9 @@ const MarkdownContent = memo<MarkdownContentProps>(({ content, isUser, codeLabel
         </div>
       );
     },
-    pre: ({ node, ...props }: any) => {
-      const { ref, ...rest } = props as any;
-      return <div className="not-prose" {...rest} />;
+    pre: ({ node, ...props }) => {
+      const { ref, ...rest } = props as { ref?: unknown; [key: string]: unknown };
+      return <div className="not-prose" {...(rest as Record<string, unknown>)} />;
     },
   }), [tableClass, theadClass, thClass, trClass, blockquoteClass, inlineCodeClass, blockCodeWrapperClass, blockCodeHeaderClass, blockCodeClass, codeLabel]);
 

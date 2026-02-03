@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { zValidator } from '@hono/zod-validator';
-import { jsonError, jsonOk } from './helpers';
+import { jsonError, jsonOk, validatedJson } from './helpers';
 import { workspaceMiddleware } from './middleware';
 import { recordLog } from '../services/logService';
 import { getAuthorizationHeader } from '../utils/bigmodelAuth';
@@ -785,7 +784,7 @@ const runAIRequest = async (
   };
 };
 
-aiRoute.post('/api/ai', zValidator('json', requestSchema), async (c) => {
+aiRoute.post('/api/ai', validatedJson(requestSchema), async (c) => {
   const requestId = generateRequestId();
   const input = c.req.valid('json');
 
@@ -812,7 +811,7 @@ aiRoute.post('/api/ai', zValidator('json', requestSchema), async (c) => {
   }
 });
 
-aiRoute.post('/api/ai/stream', zValidator('json', requestSchema), async (c) => {
+aiRoute.post('/api/ai/stream', validatedJson(requestSchema), async (c) => {
   const requestId = generateRequestId();
   const input = c.req.valid('json');
   const encoder = new TextEncoder();

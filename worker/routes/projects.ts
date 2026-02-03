@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { zValidator } from '@hono/zod-validator';
 import { eq } from 'drizzle-orm';
-import { jsonError, jsonOk, requireWorkspace } from './helpers';
+import { jsonError, jsonOk, requireWorkspace, validatedJson } from './helpers';
 import { workspaceMiddleware } from './middleware';
 import { createProject, deleteProject, getProjectById, listProjects, updateProject } from '../services/projectService';
 import { recordAudit } from '../services/auditService';
@@ -18,8 +17,7 @@ const projectInputSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   icon: z.string().optional(),
-  createdAt: z.number().optional(),
-  updatedAt: z.number().optional(),
+  // createdAt and updatedAt are server-side only, not accepted from client
 });
 
 const projectUpdateSchema = z.object({
@@ -45,7 +43,7 @@ projectsRoute.get('/:id', async (c) => {
   return jsonOk(c, project);
 });
 
-projectsRoute.post('/', zValidator('json', projectInputSchema), async (c) => {
+projectsRoute.post('/', validatedJson(projectInputSchema), async (c) => {
   const error = requireWorkspace(c);
   if (error) return error;
   const workspace = c.get('workspace')!;
@@ -55,8 +53,6 @@ projectsRoute.post('/', zValidator('json', projectInputSchema), async (c) => {
     name: data.name,
     description: data.description,
     icon: data.icon,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
     workspaceId: workspace.id,
   });
   await recordAudit(c.get('db'), {
@@ -75,7 +71,7 @@ projectsRoute.post('/', zValidator('json', projectInputSchema), async (c) => {
   return jsonOk(c, project, 201);
 });
 
-projectsRoute.patch('/:id', zValidator('json', projectUpdateSchema), async (c) => {
+projectsRoute.patch('/:id', validatedJson(projectUpdateSchema), async (c) => {
   const error = requireWorkspace(c);
   if (error) return error;
   const workspace = c.get('workspace')!;

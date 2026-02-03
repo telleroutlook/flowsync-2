@@ -1,38 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { zValidator } from '@hono/zod-validator';
-import { jsonError, jsonOk } from './helpers';
+import { jsonError, jsonOk, validatedJson } from './helpers';
 import { createSession, createUser, getUserByUsername, parseAuthHeader, revokeSession, verifyPassword } from '../services/authService';
 import { checkRateLimit, getClientIp } from '../services/rateLimitService';
 import type { Variables } from '../types';
 
 export const authRoute = new Hono<{ Variables: Variables }>();
-
-/**
- * Custom Zod validator wrapper that returns our standard error format.
- *
- * @hono/zod-validator returns a non-standard error format on validation failure.
- * This wrapper intercepts ZodError and returns our standard API format:
- * { success: false, error: { code: "VALIDATION_ERROR", message: "..." } }
- */
-const validatedJson = <T extends z.ZodTypeAny>(schema: T) => {
-  return zValidator('json', schema, async (result, c) => {
-    if (!result.success) {
-      const firstError = result.error.issues[0];
-      const message = firstError?.message || 'Validation failed';
-      return c.json(
-        {
-          success: false,
-          error: {
-            code: 'VALIDATION_ERROR',
-            message,
-          },
-        },
-        400
-      );
-    }
-  });
-};
 
 /**
  * Custom password validation that checks length and character variety.
@@ -116,7 +89,7 @@ const updateProfileSchema = z.object({
   allowThinking: z.boolean().optional(),
 });
 
-authRoute.put('/me', zValidator('json', updateProfileSchema), async (c) => {
+authRoute.put('/me', validatedJson(updateProfileSchema), async (c) => {
   const user = c.get('user');
   if (!user) return jsonError(c, 'UNAUTHORIZED', 'Not logged in.', 401);
 

@@ -50,14 +50,18 @@ const parseDraftRow = (row: {
 }): DraftRecord => {
   // Validate status enum (include all valid DraftStatus values)
   const validStatuses = ['pending', 'applied', 'discarded', 'failed', 'partial'] as const;
-  const status = validStatuses.includes(row.status as any) ? row.status as DraftRecord['status'] : 'pending';
+  const status: DraftRecord['status'] = validStatuses.includes(row.status as DraftRecord['status'])
+    ? row.status as DraftRecord['status']
+    : 'pending';
 
   // Validate createdBy enum
   const validCreators = ['user', 'agent', 'system'] as const;
-  const createdBy = validCreators.includes(row.createdBy as any) ? row.createdBy as DraftRecord['createdBy'] : 'agent';
+  const createdBy: DraftRecord['createdBy'] = validCreators.includes(row.createdBy as DraftRecord['createdBy'])
+    ? row.createdBy as DraftRecord['createdBy']
+    : 'agent';
 
   // Validate actions is an array
-  const actions = Array.isArray(row.actions) ? row.actions as DraftAction[] : [];
+  const actions: DraftAction[] = Array.isArray(row.actions) ? row.actions as DraftAction[] : [];
 
   return {
     id: row.id,
