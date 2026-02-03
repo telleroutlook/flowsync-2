@@ -223,52 +223,55 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
 
   return (
     <div className="w-full h-full overflow-hidden bg-surface border border-border-subtle rounded-xl shadow-sm flex flex-col">
-       <div className="overflow-auto custom-scrollbar flex-1 min-h-0">
-        <div className="min-w-full">
-          <div
-            style={{
-              transform: `scale(${zoom})`,
-              transformOrigin: 'top left',
-              width: zoom !== 1 ? `${100 / zoom}%` : '100%'
-            }}
-          >
-          <table className="w-full text-left border-collapse">
-          <thead className="bg-background sticky top-0 z-10 border-b border-border-subtle">
-            <tr>
-              <th className="py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-text-secondary uppercase tracking-wider w-12 sm:w-16">{t('list.header.wbs')}</th>
-              <th className="py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-text-secondary uppercase tracking-wider min-w-[180px] sm:min-w-[240px]">{t('list.header.task_name')}</th>
-              <th className="hidden sm:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-40">{t('list.header.assignee')}</th>
-              <th className="hidden md:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.priority')}</th>
-              <th className="py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-text-secondary uppercase tracking-wider w-24 sm:w-32">{t('list.header.status')}</th>
-              <th className="hidden sm:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-40">{t('list.header.progress')}</th>
-              <th className="hidden lg:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.start')}</th>
-              <th className="hidden lg:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.due')}</th>
-            </tr>
-          </thead>
-          <tbody className={cn("divide-y divide-border-subtle", isMobile && "hidden")}>
-            {sortedTasks.length === 0 ? (
-               <tr>
-                 <td colSpan={8} className="py-16 text-center">
-                    <EmptyState
-                      icon={Inbox}
-                      title={t('list.empty')}
-                      variant="minimal"
-                      className="py-16"
+      <div className="overflow-auto custom-scrollbar flex-1 min-h-0">
+        <div
+          style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: 'top left',
+            width: zoom !== 1 ? `${100 / zoom}%` : '100%'
+          }}
+        >
+          {!isMobile && (
+            <table className="w-full text-left border-collapse min-w-full">
+              <thead className="bg-background sticky top-0 z-10 border-b border-border-subtle">
+                <tr>
+                  <th className="py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-text-secondary uppercase tracking-wider w-12 sm:w-16">{t('list.header.wbs')}</th>
+                  <th className="py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-text-secondary uppercase tracking-wider min-w-[180px] sm:min-w-[240px]">{t('list.header.task_name')}</th>
+                  <th className="hidden sm:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-40">{t('list.header.assignee')}</th>
+                  <th className="hidden md:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.priority')}</th>
+                  <th className="py-2 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs font-semibold text-text-secondary uppercase tracking-wider w-24 sm:w-32">{t('list.header.status')}</th>
+                  <th className="hidden sm:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-40">{t('list.header.progress')}</th>
+                  <th className="hidden lg:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.start')}</th>
+                  <th className="hidden lg:table-cell py-3 px-4 text-xs font-semibold text-text-secondary uppercase tracking-wider w-28">{t('list.header.due')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {sortedTasks.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-16 text-center">
+                      <EmptyState
+                        icon={Inbox}
+                        title={t('list.empty')}
+                        variant="minimal"
+                        className="py-16"
+                      />
+                    </td>
+                  </tr>
+                ) : (
+                  sortedTasks.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      isSelected={selectedTaskId === task.id}
+                      onSelectTask={onSelectTask}
+                      hasConflict={tasksWithConflicts.has(task.id)}
                     />
-                 </td>
-               </tr>
-            ) : (
-              sortedTasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  isSelected={selectedTaskId === task.id}
-                  onSelectTask={onSelectTask}
-                  hasConflict={tasksWithConflicts.has(task.id)}
-                />
-              ))
-            )}
-          </tbody>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
+
           {/* Mobile Card Layout */}
           {isMobile && (
             <div className="divide-y divide-border-subtle">
@@ -294,10 +297,8 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
               )}
             </div>
           )}
-        </table>
-          </div>
         </div>
-       </div>
+      </div>
     </div>
   );
 });
