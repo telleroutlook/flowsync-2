@@ -6,8 +6,8 @@ export const toProjectRecord = (row: {
   name: string;
   description: string | null;
   icon: string | null;
-  createdAt: number;
-  updatedAt: number;
+  createdAt: string;
+  updatedAt: string;
 }): ProjectRecord => ({
   id: row.id,
   workspaceId: row.workspaceId,
@@ -26,14 +26,14 @@ export const toTaskRecord = (row: {
   status: string;
   priority: string;
   wbs: string | null;
-  createdAt: number;
-  startDate: number | null;
-  dueDate: number | null;
+  createdAt: string;
+  startDate: string | null;
+  dueDate: string | null;
   completion: number | null;
   assignee: string | null;
   isMilestone: boolean;
   predecessors: string[] | null;
-  updatedAt: number;
+  updatedAt: string;
 }): TaskRecord => ({
   id: row.id,
   projectId: row.projectId,

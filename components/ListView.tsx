@@ -4,6 +4,7 @@ import { useI18n } from '../src/i18n';
 import { getPriorityLabel, getStatusLabel } from '../src/i18n/labels';
 import { cn } from '../src/utils/cn';
 import { getTasksWithConflicts } from '../src/utils/task';
+import { dateStringToMs, formatDisplayDate, todayDateString } from '../src/utils/date';
 import { AlertTriangle, Inbox, Loader2, Calendar } from 'lucide-react';
 import { PRIORITY_COLORS, STATUS_COLORS } from '../shared/constants/colors';
 import { Badge } from './ui/Badge';
@@ -73,10 +74,10 @@ const TaskCardMobile = memo(({ task, isSelected, onSelectTask, hasConflict }: Ta
         {task.dueDate && (
           <span className={cn(
             "flex items-center gap-1",
-            task.dueDate < Date.now() && task.status !== TaskStatus.DONE && "text-negative"
+            dateStringToMs(task.dueDate) < dateStringToMs(todayDateString()) && task.status !== TaskStatus.DONE && "text-negative"
           )}>
             <Calendar className="w-3 h-3" />
-            {new Date(task.dueDate).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })}
+            {formatDisplayDate(task.dueDate, locale)}
           </span>
         )}
       </div>
@@ -180,12 +181,12 @@ const TaskRow = memo(({ task, isSelected, onSelectTask, hasConflict }: TaskRowPr
          </div>
       </td>
       <td className="hidden lg:table-cell py-3 px-4 text-xs text-text-secondary">
-         {task.startDate ? new Date(task.startDate).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}
+         {task.startDate ? formatDisplayDate(task.startDate, locale) : '-'}
       </td>
       <td className="hidden lg:table-cell py-3 px-4 text-xs text-text-secondary font-medium">
          {task.dueDate ? (
-           <span className={task.dueDate < Date.now() && task.status !== TaskStatus.DONE ? 'text-negative' : ''}>
-              {new Date(task.dueDate).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })}
+           <span className={dateStringToMs(task.dueDate) < dateStringToMs(todayDateString()) && task.status !== TaskStatus.DONE ? 'text-negative' : ''}>
+              {formatDisplayDate(task.dueDate, locale)}
            </span>
          ) : '-'}
       </td>
@@ -204,7 +205,7 @@ export const ListView: React.FC<ListViewProps> = memo(({ tasks, selectedTaskId, 
   const sortedTasks = useMemo(() => {
     return [...tasks].sort((a, b) => {
       if (a.wbs && b.wbs) return a.wbs.localeCompare(b.wbs, undefined, { numeric: true });
-      return a.createdAt - b.createdAt;
+      return dateStringToMs(a.createdAt) - dateStringToMs(b.createdAt);
     });
   }, [tasks]);
 

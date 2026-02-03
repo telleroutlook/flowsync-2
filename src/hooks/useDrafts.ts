@@ -4,6 +4,7 @@ import { Draft, DraftAction } from '../../types';
 import type { ConflictInfo } from '../../components/ConflictDialog';
 import { useI18n } from '../i18n';
 import { getErrorMessage } from '../utils/error';
+import { formatTaskDate } from '../utils/date';
 
 interface UseDraftsProps {
   activeProjectId: string;
@@ -53,6 +54,38 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
     () => drafts.find(draft => draft.id === pendingDraftId) || null,
     [drafts, pendingDraftId]
   );
+
+  const buildAppliedSummary = useCallback((results: DraftAction[] | undefined): string | null => {
+    if (!results || results.length === 0) return null;
+
+    const summaries = results
+      .filter(action => (action.status === 'success' || action.status === 'warning') && action.after && action.entityType === 'task')
+      .map(action => {
+        const after = action.after ?? {};
+        const startDate = typeof after.startDate === 'string' ? after.startDate : undefined;
+        const dueDate = typeof after.dueDate === 'string' ? after.dueDate : undefined;
+        if (startDate === undefined && dueDate === undefined) return null;
+
+        const title = typeof after.title === 'string' && after.title.trim().length > 0
+          ? after.title
+          : (action.entityId ?? 'Task');
+
+        const parts: string[] = [];
+        if (startDate !== undefined) {
+          parts.push(`${t('task.start_date')} ${formatTaskDate(startDate)}`);
+        }
+        if (dueDate !== undefined) {
+          parts.push(`${t('task.due_date')} ${formatTaskDate(dueDate)}`);
+        }
+
+        if (parts.length === 0) return null;
+        return `${title} (${parts.join(', ')})`;
+      })
+      .filter((entry): entry is string => Boolean(entry));
+
+    if (summaries.length === 0) return null;
+    return t('draft.applied_summary', { summary: summaries.join(' | ') });
+  }, [t]);
 
   const refreshDrafts = useCallback(async (): Promise<void> => {
     try {
@@ -108,6 +141,8 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
         await refreshAuditLogs(activeProjectId);
         if (!options.silent) {
           appendSystemMessage(t('draft.applied', { id: applied.draft.id }));
+          const summaryMessage = buildAppliedSummary(applied.results);
+          if (summaryMessage) appendSystemMessage(summaryMessage);
         }
         return applied.draft;
       }
@@ -170,6 +205,8 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
         if (result.draft.status === 'applied') {
           // Simple success: use system message (not rendered)
           appendSystemMessage(t('draft.applied', { id }));
+          const summaryMessage = buildAppliedSummary(result.results);
+          if (summaryMessage) appendSystemMessage(summaryMessage);
         } else if (result.draft.status === 'partial') {
           // Partial success: use AI-style message with Markdown formatting
           const summary = result.draft.summary;
@@ -214,6 +251,8 @@ export const useDrafts = ({ activeProjectId, refreshData, refreshAuditLogs, appe
 
           // Use AI-style rendering for better UX
           appendModelMessage(markdownMessage);
+          const summaryMessage = buildAppliedSummary(result.results);
+          if (summaryMessage) appendSystemMessage(summaryMessage);
         } else if (result.draft.status === 'failed') {
           // Complete failure: use AI-style message with details
           const summary = result.draft.summary;

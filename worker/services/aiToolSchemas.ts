@@ -12,6 +12,7 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { ToolParameterSchema } from './aiToolRegistry';
+import { toDateString } from './utils';
 
 // ============================================================================
 // Common Reusable Schemas
@@ -54,6 +55,13 @@ const coerceBoolean = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
+const coerceDateString = z.preprocess((value) => {
+  if (typeof value === 'string') {
+    return toDateString(value) ?? value;
+  }
+  return value;
+}, z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'));
+
 const paginationSchema = z.object({
   page: coerceInt(z.number().min(1, 'Page number must be at least 1'))
     .optional()
@@ -77,14 +85,8 @@ const taskFieldsSchema = z.object({
     errorMap: () => ({ message: 'Priority must be one of: LOW, MEDIUM, HIGH' }),
   }).optional(),
   wbs: z.string().optional(),
-  startDate: coerceNumber(z.number({
-    required_error: 'Start date is required',
-    invalid_type_error: 'Start date must be a number',
-  }).min(0, 'Start date cannot be negative')).optional().describe('Task start date as Unix timestamp in milliseconds'),
-  dueDate: coerceNumber(z.number({
-    required_error: 'Due date is required',
-    invalid_type_error: 'Due date must be a number',
-  }).min(0, 'Due date cannot be negative')).optional().describe('Task due date as Unix timestamp in milliseconds'),
+  startDate: coerceDateString.optional().describe('Task start date (YYYY-MM-DD)'),
+  dueDate: coerceDateString.optional().describe('Task due date (YYYY-MM-DD)'),
   completion: coerceNumber(
     z.number().min(0, 'Completion cannot be negative').max(100, 'Completion cannot exceed 100')
   ).optional(),
@@ -99,10 +101,10 @@ const taskFilterFieldsSchema = z.object({
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional().describe('Filter by priority'),
   assignee: z.string().optional().describe('Filter by assignee'),
   isMilestone: z.boolean().optional().describe('Filter by milestone tasks'),
-  startDateFrom: coerceNumber(z.number().min(0)).optional().describe('Filter tasks with startDate >= this Unix ms timestamp'),
-  startDateTo: coerceNumber(z.number().min(0)).optional().describe('Filter tasks with startDate <= this Unix ms timestamp'),
-  dueDateFrom: coerceNumber(z.number().min(0)).optional().describe('Filter tasks with dueDate >= this Unix ms timestamp'),
-  dueDateTo: coerceNumber(z.number().min(0)).optional().describe('Filter tasks with dueDate <= this Unix ms timestamp'),
+  startDateFrom: coerceDateString.optional().describe('Filter tasks with startDate >= this date (YYYY-MM-DD)'),
+  startDateTo: coerceDateString.optional().describe('Filter tasks with startDate <= this date (YYYY-MM-DD)'),
+  dueDateFrom: coerceDateString.optional().describe('Filter tasks with dueDate >= this date (YYYY-MM-DD)'),
+  dueDateTo: coerceDateString.optional().describe('Filter tasks with dueDate <= this date (YYYY-MM-DD)'),
   q: z.string().optional().describe('Search query for title/description'),
 });
 
@@ -165,7 +167,7 @@ export const createTaskSchema = z.object({
     // Validate date range: dueDate >= startDate
     const start = data.startDate;
     const due = data.dueDate;
-    if (typeof start === 'number' && typeof due === 'number') {
+    if (typeof start === 'string' && typeof due === 'string') {
       return due >= start;
     }
     return true;
@@ -186,7 +188,7 @@ export const updateTaskSchema = z.object({
     // Validate date range
     const start = data.startDate;
     const due = data.dueDate;
-    if (typeof start === 'number' && typeof due === 'number') {
+    if (typeof start === 'string' && typeof due === 'string') {
       return due >= start;
     }
     return true;

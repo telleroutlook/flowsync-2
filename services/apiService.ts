@@ -266,7 +266,7 @@ export const apiService = {
 
   listProjects: () => fetchJson<Project[]>('/api/projects'),
   getProject: (id: string) => fetchJson<Project>(`/api/projects/${id}`),
-  createProject: (data: { id?: string; name: string; description?: string; icon?: string; createdAt?: number; updatedAt?: number }) =>
+  createProject: (data: { id?: string; name: string; description?: string; icon?: string; createdAt?: string; updatedAt?: string }) =>
     fetchJson<Project>('/api/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -290,10 +290,10 @@ export const apiService = {
     assignee?: string;
     isMilestone?: boolean;
     q?: string;
-    startDateFrom?: number;
-    startDateTo?: number;
-    dueDateFrom?: number;
-    dueDateTo?: number;
+    startDateFrom?: string;
+    startDateTo?: string;
+    dueDateFrom?: string;
+    dueDateTo?: string;
     page?: number;
     pageSize?: number;
   }) => {
@@ -310,14 +310,14 @@ export const apiService = {
     status?: Task['status'];
     priority?: Task['priority'];
     wbs?: string;
-    startDate?: number;
-    dueDate?: number;
+    startDate?: string;
+    dueDate?: string;
     completion?: number;
     assignee?: string;
     isMilestone?: boolean;
     predecessors?: string[];
-    createdAt?: number;
-    updatedAt?: number;
+    createdAt?: string;
+    updatedAt?: string;
   }) =>
     fetchJson<Task>('/api/tasks', {
       method: 'POST',

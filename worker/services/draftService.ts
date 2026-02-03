@@ -5,7 +5,7 @@ import { applyTaskConstraints } from './constraintService';
 import { recordAudit } from './auditService';
 import { createProject, updateProject, deleteProject, getProjectById } from './projectService';
 import { createTask, updateTask, deleteTask, getTaskById } from './taskService';
-import { generateId, now } from './utils';
+import { addDays, dateStringToMs, generateId, now, todayDateString, toDateString } from './utils';
 import type {
   DraftAction,
   DraftRecord,
@@ -102,6 +102,14 @@ function getOptionalNumber(value: unknown): number | null {
 }
 
 /**
+ * Safely extracts an optional date string (YYYY-MM-DD) from unknown input
+ */
+function getOptionalDateString(value: unknown): string | null {
+  const parsed = toDateString(typeof value === 'string' ? value : null);
+  return parsed ?? null;
+}
+
+/**
  * Safely extracts a boolean value from unknown input
  */
 function getBoolean(value: unknown, fallback: boolean): boolean {
@@ -124,14 +132,14 @@ const normalizeTaskInput = (
   fallback: TaskRecord | null,
   projectIdOverride?: string
 ): TaskRecord => {
-  const timestamp = now();
+  const timestamp = todayDateString();
   const projectId = getString(input.projectId ?? '', projectIdOverride ?? fallback?.projectId ?? '');
   const status = toTaskStatus(input.status, fallback?.status ?? 'TODO');
   const priority = toPriority(input.priority, fallback?.priority ?? 'MEDIUM');
-  const createdAt = getOptionalNumber(input.createdAt) ?? fallback?.createdAt ?? timestamp;
-  const updatedAt = getOptionalNumber(input.updatedAt) ?? timestamp;
-  const startDate = getOptionalNumber(input.startDate) ?? fallback?.startDate ?? createdAt;
-  const dueDate = getOptionalNumber(input.dueDate) ?? fallback?.dueDate ?? null;
+  const createdAt = getOptionalDateString(input.createdAt) ?? fallback?.createdAt ?? timestamp;
+  const updatedAt = getOptionalDateString(input.updatedAt) ?? timestamp;
+  const startDate = getOptionalDateString(input.startDate) ?? fallback?.startDate ?? createdAt;
+  const dueDate = getOptionalDateString(input.dueDate) ?? fallback?.dueDate ?? null;
   const completion = getOptionalNumber(input.completion) ?? fallback?.completion ?? 0;
   const predecessors = getStringArray(input.predecessors) ?? fallback?.predecessors ?? [];
 
@@ -159,10 +167,10 @@ const normalizeProjectInput = (
   fallback: ProjectRecord | null,
   workspaceId: string
 ): ProjectRecord => {
-  const timestamp = now();
+  const timestamp = todayDateString();
   const resolvedWorkspaceId = fallback?.workspaceId ?? workspaceId;
-  const createdAt = getOptionalNumber(input.createdAt) ?? fallback?.createdAt ?? timestamp;
-  const updatedAt = getOptionalNumber(input.updatedAt) ?? timestamp;
+  const createdAt = getOptionalDateString(input.createdAt) ?? fallback?.createdAt ?? timestamp;
+  const updatedAt = getOptionalDateString(input.updatedAt) ?? timestamp;
 
   return {
     id: getString(input.id || '', fallback?.id || generateId()),  // Use || to handle empty string
@@ -518,8 +526,8 @@ const handleTaskUpdate: ActionHandler = (action, context) => {
       const warningMessage = [
         `Adjusted task dates: ${startViolated ? 'Start Date' : ''}${startViolated && dueViolated ? ' and ' : ''}${dueViolated ? 'Due Date' : ''} violated predecessor constraints`,
         `Task "${existing.title}" has mandatory predecessors.`,
-        `Requested: ${merged.startDate ? new Date(merged.startDate).toISOString().split('T')[0] : 'N/A'} - ${merged.dueDate ? new Date(merged.dueDate).toISOString().split('T')[0] : 'N/A'}`,
-        `Adjusted to: ${constrainedStart ? new Date(constrainedStart).toISOString().split('T')[0] : 'N/A'} - ${constrainedDue ? new Date(constrainedDue).toISOString().split('T')[0] : 'N/A'}`
+        `Requested: ${merged.startDate ?? 'N/A'} - ${merged.dueDate ?? 'N/A'}`,
+        `Adjusted to: ${constrainedStart ?? 'N/A'} - ${constrainedDue ?? 'N/A'}`
       ].join('. ');
 
       warnings.push(warningMessage);
@@ -933,12 +941,37 @@ export const createDraft = async (
   }
 ): Promise<PlanResult> => {
   const { actions, warnings } = await planActions(db, input.actions, input.workspaceId);
+  let finalActions = actions;
+  let finalWarnings = [...warnings];
+
+  const validation = await validateDraftConstraints(
+    db,
+    {
+      id: 'pending',
+      workspaceId: input.workspaceId,
+      projectId: input.projectId ?? null,
+      status: 'pending',
+      actions,
+      createdAt: now(),
+      createdBy: input.createdBy,
+      reason: input.reason ?? null,
+    },
+    input.workspaceId
+  );
+
+  if (validation.canAutoFix) {
+    const fixed = applyAutoFixesToActions(actions, validation.conflicts);
+    finalActions = fixed.actions;
+    if (fixed.warnings.length) {
+      finalWarnings.push(...fixed.warnings);
+    }
+  }
   const draft: DraftRecord = {
     id: generateId(),
     workspaceId: input.workspaceId,
     projectId: input.projectId ?? null,
     status: 'pending',
-    actions,
+    actions: finalActions,
     createdAt: now(),
     createdBy: input.createdBy,
     reason: input.reason ?? null,
@@ -955,7 +988,7 @@ export const createDraft = async (
     reason: draft.reason,
   });
 
-  return { draft, warnings };
+  return { draft, warnings: finalWarnings };
 };
 
 export const getDraftById = async (
@@ -1183,6 +1216,40 @@ const fetchCurrentTasks = async (
   return rows.map(row => toTaskRecord(row.tasks));
 };
 
+const applyAutoFixesToActions = (
+  actions: DraftAction[],
+  conflicts: ConflictInfo[]
+): { actions: DraftAction[]; warnings: string[] } => {
+  const fixedActions = [...actions];
+  const warnings: string[] = [];
+
+  for (const conflict of conflicts) {
+    if (!conflict.proposedFix) continue;
+
+    const actionIndex = fixedActions.findIndex(
+      a => a.entityId === conflict.entityId && a.entityType === 'task'
+    );
+
+    if (actionIndex >= 0) {
+      const existingAction = fixedActions[actionIndex];
+      if (existingAction) {
+        const warningMessage = `Auto-fixed: ${conflict.message}`;
+        fixedActions[actionIndex] = {
+          ...existingAction,
+          after: conflict.proposedFix,
+          warnings: [
+            ...(existingAction.warnings ?? []),
+            warningMessage,
+          ],
+        };
+        warnings.push(warningMessage);
+      }
+    }
+  }
+
+  return { actions: fixedActions, warnings };
+};
+
 /**
  * Checks if a task's predecessor constraints are satisfied
  * @returns Object indicating satisfaction status, message, and proposed fix if violated
@@ -1222,32 +1289,34 @@ const checkPredecessorConstraints = (
 
   const taskStart = task.startDate ?? task.createdAt;
   let maxPredecessorEnd = taskStart;
-  const violatingPredecessors: Array<{ id: string; title: string; endDate: number }> = [];
+  const violatingPredecessors: Array<{ id: string; title: string; endDate: string }> = [];
 
   for (const predId of task.predecessors) {
     const pred = taskMap.get(predId);
     if (!pred) continue; // Predecessor not found - will be caught separately
 
     const predEnd = pred.dueDate ?? (pred.startDate ?? pred.createdAt);
-    if (predEnd > taskStart) {
+    if (dateStringToMs(predEnd) > dateStringToMs(taskStart)) {
       violatingPredecessors.push({
         id: pred.id,
         title: pred.title,
         endDate: predEnd,
       });
-      maxPredecessorEnd = Math.max(maxPredecessorEnd, predEnd);
+      if (dateStringToMs(predEnd) > dateStringToMs(maxPredecessorEnd)) {
+        maxPredecessorEnd = predEnd;
+      }
     }
   }
 
   if (violatingPredecessors.length > 0) {
     // Calculate proposed fix
-    const duration = (task.dueDate ?? taskStart) - taskStart;
+    const durationMs = dateStringToMs(task.dueDate ?? taskStart) - dateStringToMs(taskStart);
     const fixedStart = maxPredecessorEnd;
-    const fixedEnd = Math.max(fixedStart + 86_400_000, fixedStart + duration);
+    const fixedEnd = addDays(fixedStart, Math.ceil(Math.max(86_400_000, durationMs) / 86_400_000));
 
     return {
       satisfied: false,
-      message: `Task "${task.title}" start date is before predecessor end dates: ${violatingPredecessors.map(p => `${p.title} (${new Date(p.endDate).toISOString().split('T')[0]})`).join(', ')}`,
+      message: `Task "${task.title}" start date is before predecessor end dates: ${violatingPredecessors.map(p => `${p.title} (${p.endDate})`).join(', ')}`,
       fix: {
         ...task,
         startDate: fixedStart,
@@ -1269,14 +1338,14 @@ const checkDateOrder = (
   const start = task.startDate ?? task.createdAt;
   const end = task.dueDate ?? start;
 
-  if (end <= start) {
+  if (dateStringToMs(end) <= dateStringToMs(start)) {
     return {
       satisfied: false,
       message: `Task "${task.title}" due date is before or equal to start date`,
       fix: {
         ...task,
         startDate: start,
-        dueDate: start + 86_400_000, // Add 1 day
+        dueDate: addDays(start, 1),
       },
     };
   }
@@ -1292,16 +1361,16 @@ const checkConcurrentModifications = (
   action: DraftAction,
   current: TaskRecord
 ): { satisfied: boolean; message?: string; details?: Record<string, unknown> } => {
-  const actionUpdatedAt = (action.after as Record<string, unknown>)?.updatedAt as number | undefined;
+  const actionUpdatedAt = (action.after as Record<string, unknown>)?.updatedAt as string | undefined;
 
   // Check if the action was planned based on stale data
-  if (actionUpdatedAt && current.updatedAt > actionUpdatedAt) {
+  if (actionUpdatedAt && dateStringToMs(current.updatedAt) > dateStringToMs(actionUpdatedAt)) {
     return {
       satisfied: false,
       message: `Task was modified after draft was created`,
       details: {
         draftBasedOn: new Date(actionUpdatedAt).toISOString(),
-        currentVersion: new Date(current.updatedAt).toISOString(),
+        currentVersion: current.updatedAt,
       },
     };
   }
@@ -1320,15 +1389,42 @@ const validateDraftConstraints = async (
 ): Promise<ConflictValidationResult> => {
   const conflicts: ConflictInfo[] = [];
 
-  // Collect all task IDs referenced in the draft
-  const affectedTaskIds = draft.actions
-    .filter(a => a.entityType === 'task')
-    .map(a => a.entityId)
-    .filter((id): id is string => Boolean(id));
+  // Collect all task IDs referenced in the draft (including predecessors)
+  const affectedTaskIds = new Set<string>();
+  const predecessorIds = new Set<string>();
+  for (const action of draft.actions) {
+    if (action.entityType !== 'task') continue;
+    if (action.entityId) affectedTaskIds.add(action.entityId);
+    const after = action.after as Record<string, unknown> | undefined;
+    const predecessors = after?.predecessors as string[] | undefined;
+    if (predecessors?.length) {
+      for (const predId of predecessors) {
+        if (predId) predecessorIds.add(predId);
+      }
+    }
+  }
 
-  // Fetch current state of affected tasks
-  const currentTasks = await fetchCurrentTasks(db, affectedTaskIds, workspaceId);
+  const taskIdsToFetch = Array.from(new Set([...affectedTaskIds, ...predecessorIds]));
+  const currentTasks = await fetchCurrentTasks(db, taskIdsToFetch, workspaceId);
   const currentTaskMap = new Map(currentTasks.map(t => [t.id, t]));
+
+  // Ensure we include predecessors from current tasks if after.predecessors was omitted
+  const extraPredecessorIds = new Set<string>();
+  for (const task of currentTasks) {
+    if (!affectedTaskIds.has(task.id)) continue;
+    if (task.predecessors?.length) {
+      for (const predId of task.predecessors) {
+        if (predId && !currentTaskMap.has(predId)) extraPredecessorIds.add(predId);
+      }
+    }
+  }
+  if (extraPredecessorIds.size > 0) {
+    const extraTasks = await fetchCurrentTasks(db, Array.from(extraPredecessorIds), workspaceId);
+    for (const task of extraTasks) {
+      currentTaskMap.set(task.id, task);
+    }
+  }
+  const proposedTaskMap = new Map(currentTaskMap);
 
   // Check each task action for conflicts
   for (const action of draft.actions) {
@@ -1354,7 +1450,7 @@ const validateDraftConstraints = async (
         }
 
         // Build the proposed task state (merge current with changes)
-        const proposedTask: TaskRecord = {
+        let proposedTask: TaskRecord = {
           ...current,
           ...proposedAfter,
           id: action.entityId, // Ensure ID is preserved
@@ -1362,7 +1458,7 @@ const validateDraftConstraints = async (
         };
 
         // Check predecessor constraints
-        const predecessorCheck = checkPredecessorConstraints(proposedTask, currentTaskMap);
+        const predecessorCheck = checkPredecessorConstraints(proposedTask, proposedTaskMap);
         if (!predecessorCheck.satisfied) {
           conflicts.push({
             type: 'PREDECESSOR_CONFLICT',
@@ -1371,6 +1467,9 @@ const validateDraftConstraints = async (
             canAutoFix: !!predecessorCheck.fix, // Can auto-fix only if fix is provided
             ...(predecessorCheck.fix && { proposedFix: predecessorCheck.fix }),
           });
+          if (predecessorCheck.fix) {
+            proposedTask = predecessorCheck.fix;
+          }
         }
 
         // Check date order constraints
@@ -1383,6 +1482,7 @@ const validateDraftConstraints = async (
             canAutoFix: true,
             proposedFix: dateCheck.fix,
           });
+          proposedTask = dateCheck.fix;
         }
 
         // Check for concurrent modifications
@@ -1396,18 +1496,38 @@ const validateDraftConstraints = async (
             details: concurrentCheck.details,
           });
         }
+        proposedTaskMap.set(action.entityId, proposedTask);
       } else if (action.action === 'create') {
-        // For new tasks, only check date order (predecessors will be checked when applied)
-        const dateCheck = checkDateOrder(proposedAfter as TaskRecord);
-        if (!dateCheck.satisfied) {
+        let proposedTask = proposedAfter as TaskRecord;
+        const predecessorCheck = checkPredecessorConstraints(proposedTask, proposedTaskMap);
+        if (!predecessorCheck.satisfied) {
+          conflicts.push({
+            type: 'PREDECESSOR_CONFLICT',
+            entityId: proposedAfter.id ?? 'unknown',
+            message: predecessorCheck.message ?? 'Predecessor constraint violation',
+            canAutoFix: !!predecessorCheck.fix,
+            ...(predecessorCheck.fix && { proposedFix: predecessorCheck.fix }),
+          });
+          if (predecessorCheck.fix) {
+            proposedTask = predecessorCheck.fix;
+          }
+        }
+        const dateCheck = checkDateOrder(proposedTask);
+        if (!dateCheck.satisfied && dateCheck.fix) {
           conflicts.push({
             type: 'DATE_ORDER_CONFLICT',
             entityId: proposedAfter.id ?? 'unknown',
-            message: dateCheck.message!,
+            message: dateCheck.message ?? 'Date order constraint violation',
             canAutoFix: true,
             proposedFix: dateCheck.fix,
           });
+          proposedTask = dateCheck.fix;
         }
+        if (proposedTask.id) {
+          proposedTaskMap.set(proposedTask.id, proposedTask);
+        }
+      } else if (action.action === 'delete' && action.entityId) {
+        proposedTaskMap.delete(action.entityId);
       }
     }
   }
@@ -1430,30 +1550,7 @@ const applyAutoFixes = async (
   draft: DraftRecord,
   conflicts: ConflictInfo[]
 ): Promise<DraftRecord> => {
-  const fixedActions = [...draft.actions];
-
-  for (const conflict of conflicts) {
-    if (!conflict.proposedFix) continue;
-
-    const actionIndex = fixedActions.findIndex(
-      a => a.entityId === conflict.entityId && a.entityType === 'task'
-    );
-
-    if (actionIndex >= 0) {
-      const existingAction = fixedActions[actionIndex];
-      if (existingAction) {
-        // Update the action with the fixed task data
-        fixedActions[actionIndex] = {
-          ...existingAction,
-          after: conflict.proposedFix,
-          warnings: [
-            ...(existingAction.warnings ?? []),
-            `Auto-fixed: ${conflict.message}`,
-          ],
-        };
-      }
-    }
-  }
+  const { actions: fixedActions } = applyAutoFixesToActions(draft.actions, conflicts);
 
   // Update the draft in database
   await db.update(drafts)
@@ -1572,8 +1669,8 @@ export const applyDraft = async (
               name: (action.after.name as string) ?? 'Untitled Project',
               description: (action.after.description as string) ?? undefined,
               icon: (action.after.icon as string) ?? undefined,
-              createdAt: (action.after.createdAt as number) ?? undefined,
-              updatedAt: (action.after.updatedAt as number) ?? undefined,
+              createdAt: (action.after.createdAt as string) ?? undefined,
+              updatedAt: (action.after.updatedAt as string) ?? undefined,
               workspaceId,
             });
 
@@ -1647,8 +1744,8 @@ export const applyDraft = async (
               name: (action.after?.name as string) ?? undefined,
               description: (action.after?.description as string) ?? undefined,
               icon: (action.after?.icon as string) ?? undefined,
-              createdAt: (action.after?.createdAt as number) ?? undefined,
-              updatedAt: (action.after?.updatedAt as number) ?? undefined,
+              createdAt: (action.after?.createdAt as string) ?? undefined,
+              updatedAt: (action.after?.updatedAt as string) ?? undefined,
             }, workspaceId);
 
             if (updated) {
@@ -1799,14 +1896,14 @@ export const applyDraft = async (
               status: toTaskStatus(action.after.status, 'TODO'),
               priority: toPriority(action.after.priority, 'MEDIUM'),
               wbs: (action.after.wbs as string) ?? undefined,
-              startDate: (action.after.startDate as number) ?? undefined,
-              dueDate: (action.after.dueDate as number) ?? undefined,
+              startDate: (action.after.startDate as string) ?? undefined,
+              dueDate: (action.after.dueDate as string) ?? undefined,
               completion: (action.after.completion as number) ?? undefined,
               assignee: (action.after.assignee as string) ?? undefined,
               isMilestone: (action.after.isMilestone as boolean) ?? undefined,
               predecessors: (action.after.predecessors as string[]) ?? undefined,
-              createdAt: (action.after.createdAt as number) ?? undefined,
-              updatedAt: (action.after.updatedAt as number) ?? undefined,
+              createdAt: (action.after.createdAt as string) ?? undefined,
+              updatedAt: (action.after.updatedAt as string) ?? undefined,
             }, workspaceId);
 
             if (!created) {
@@ -1930,8 +2027,8 @@ export const applyDraft = async (
               status: toOptionalTaskStatus(action.after?.status),
               priority: toOptionalPriority(action.after?.priority),
               wbs: (action.after?.wbs as string) ?? undefined,
-              startDate: (action.after?.startDate as number) ?? undefined,
-              dueDate: (action.after?.dueDate as number) ?? undefined,
+              startDate: (action.after?.startDate as string) ?? undefined,
+              dueDate: (action.after?.dueDate as string) ?? undefined,
               completion: (action.after?.completion as number) ?? undefined,
               assignee: (action.after?.assignee as string) ?? undefined,
               isMilestone: (action.after?.isMilestone as boolean) ?? undefined,

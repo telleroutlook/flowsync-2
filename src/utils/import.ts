@@ -11,6 +11,7 @@ import {
   normalizeStatus,
   normalizePriority,
 } from './export';
+import { todayDateString } from './date';
 
 export type ImportTask = Task & { projectName?: string };
 
@@ -187,7 +188,7 @@ export function parseTaskRecord(
     status: normalizeStatus(typeof record.status === 'string' ? record.status : undefined),
     priority: normalizePriority(typeof record.priority === 'string' ? record.priority : undefined),
     wbs: typeof record.wbs === 'string' ? record.wbs : undefined,
-    createdAt: parseNumeric(record.createdAt) ?? Date.now(),
+      createdAt: parseNumeric(record.createdAt) ?? todayDateString(),
     updatedAt: parseNumeric(record.updatedAt),
     startDate: parseNumeric(record.startDate),
     dueDate: parseNumeric(record.dueDate),

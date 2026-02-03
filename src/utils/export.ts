@@ -2,11 +2,93 @@ import type { Task, Project } from '../../types';
 import { TaskStatus, Priority } from '../../types';
 import { getTaskStart, getTaskEnd, formatExportDate, parseDateFlexible } from './index';
 
+export type ExportRow = {
+  rowType: 'project' | 'task';
+  projectId: string;
+  project: string;
+  projectDescription: string;
+  projectIcon: string;
+  projectCreatedAt: string;
+  projectUpdatedAt: string;
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  assignee: string;
+  wbs: string;
+  startDate: string;
+  dueDate: string;
+  completion: number | string;
+  isMilestone: string;
+  predecessors: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DisplayRow = {
+  project: string;
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  assignee: string;
+  wbs: string;
+  startDate: string;
+  dueDate: string;
+  completion: number | string;
+  isMilestone: string;
+  predecessors: string;
+  description: string;
+  createdAt: string;
+};
+
+export const EXPORT_HEADERS = [
+  'rowType',
+  'projectId',
+  'project',
+  'projectDescription',
+  'projectIcon',
+  'projectCreatedAt',
+  'projectUpdatedAt',
+  'id',
+  'title',
+  'status',
+  'priority',
+  'assignee',
+  'wbs',
+  'startDate',
+  'dueDate',
+  'completion',
+  'isMilestone',
+  'predecessors',
+  'description',
+  'createdAt',
+  'updatedAt',
+] as const;
+
+export const DISPLAY_HEADERS = [
+  'project',
+  'id',
+  'title',
+  'status',
+  'priority',
+  'assignee',
+  'wbs',
+  'startDate',
+  'dueDate',
+  'completion',
+  'isMilestone',
+  'predecessors',
+  'description',
+  'createdAt',
+] as const;
+
 export const clampCompletion = (value: number) => Math.min(100, Math.max(0, value));
 
-export const formatExportTimestamp = (value?: number) => {
-  if (value === undefined || value === null) return '';
-  return new Date(value).toISOString();
+export const formatExportTimestamp = (value?: string | null) => {
+  if (!value) return '';
+  return value;
 };
 
 export const makeSafeFileName = (value: string) => {
@@ -23,6 +105,113 @@ export const formatCsvValue = (value: string, delimiter: string) => {
     return `"${escaped}"`;
   }
   return escaped;
+};
+
+export const triggerDownload = (blob: Blob, fileName: string) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+const resolveProjectForTask = (
+  task: Task,
+  projects: Project[],
+  activeProject?: Project
+): Project | undefined => {
+  const match = projects.find((project) => project.id === task.projectId);
+  if (match) return match;
+  if (activeProject && activeProject.id === task.projectId) return activeProject;
+  return activeProject;
+};
+
+export const buildExportRows = (
+  tasks: Task[],
+  projects: Project[],
+  activeProject?: Project
+): ExportRow[] => {
+  const projectRows: ExportRow[] = projects.map((project) => ({
+    rowType: 'project',
+    projectId: project.id,
+    project: project.name,
+    projectDescription: project.description ?? '',
+    projectIcon: project.icon ?? '',
+    projectCreatedAt: formatExportTimestamp(project.createdAt),
+    projectUpdatedAt: formatExportTimestamp(project.updatedAt),
+    id: '',
+    title: '',
+    status: '',
+    priority: '',
+    assignee: '',
+    wbs: '',
+    startDate: '',
+    dueDate: '',
+    completion: '',
+    isMilestone: '',
+    predecessors: '',
+    description: '',
+    createdAt: '',
+    updatedAt: '',
+  }));
+
+  const taskRows: ExportRow[] = tasks.map((task) => {
+    const project = resolveProjectForTask(task, projects, activeProject);
+    return {
+      rowType: 'task',
+      projectId: task.projectId,
+      project: project?.name ?? '',
+      projectDescription: project?.description ?? '',
+      projectIcon: project?.icon ?? '',
+      projectCreatedAt: formatExportTimestamp(project?.createdAt),
+      projectUpdatedAt: formatExportTimestamp(project?.updatedAt),
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      priority: task.priority,
+      assignee: task.assignee ?? '',
+      wbs: task.wbs ?? '',
+      startDate: formatExportDate(getTaskStart(task)),
+      dueDate: formatExportDate(getTaskEnd(task)),
+      completion: task.completion ?? 0,
+      isMilestone: String(task.isMilestone ?? false),
+      predecessors: (task.predecessors ?? []).join(','),
+      description: task.description ?? '',
+      createdAt: formatExportTimestamp(task.createdAt),
+      updatedAt: formatExportTimestamp(task.updatedAt),
+    };
+  });
+
+  return [...projectRows, ...taskRows];
+};
+
+export const buildDisplayRows = (
+  tasks: Task[],
+  projects: Project[],
+  activeProject?: Project
+): DisplayRow[] => {
+  return tasks.map((task) => {
+    const project = resolveProjectForTask(task, projects, activeProject);
+    return {
+      project: project?.name ?? '',
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      priority: task.priority,
+      assignee: task.assignee ?? '',
+      wbs: task.wbs ?? '',
+      startDate: formatExportDate(getTaskStart(task)),
+      dueDate: formatExportDate(getTaskEnd(task)),
+      completion: task.completion ?? 0,
+      isMilestone: String(task.isMilestone ?? false),
+      predecessors: (task.predecessors ?? []).join(','),
+      description: task.description ?? '',
+      createdAt: formatExportTimestamp(task.createdAt),
+    };
+  });
 };
 
 export const normalizeStatus = (value?: string): TaskStatus => {
@@ -58,7 +247,7 @@ export const parseBoolean = (value?: string) => {
 };
 
 export const parseNumeric = (value: unknown) => {
-  if (typeof value === 'number' && !Number.isNaN(value)) return value;
+  if (typeof value === 'number' && !Number.isNaN(value)) return parseDateFlexible(String(value));
   if (typeof value === 'string') return parseDateFlexible(value);
   return undefined;
 };
@@ -118,146 +307,3 @@ export const parseDelimitedContent = (content: string) => {
   });
   return { headers, records };
 };
-
-export const buildProjectLookup = (projects: Project[]) => {
-  return projects.reduce<Record<string, Project>>((acc, project) => {
-    acc[project.id] = project;
-    return acc;
-  }, {});
-};
-
-export const buildDisplayRows = (sourceTasks: Task[], exportProjects: Project[], activeProject: Project) => {
-  const projectLookup = buildProjectLookup(exportProjects);
-  return sourceTasks.map(task => {
-    const project = projectLookup[task.projectId] || activeProject;
-    return {
-      project: project.name,
-      id: task.id,
-      title: task.title,
-      status: task.status,
-      priority: task.priority,
-      assignee: task.assignee || '',
-      wbs: task.wbs || '',
-      startDate: formatExportDate(getTaskStart(task)),
-      dueDate: formatExportDate(getTaskEnd(task)),
-      completion: task.completion ?? 0,
-      isMilestone: task.isMilestone ? 'yes' : 'no',
-      predecessors: (task.predecessors || []).join(','),
-      description: task.description || '',
-      createdAt: formatExportDate(task.createdAt),
-    };
-  });
-};
-
-export const buildExportRows = (sourceTasks: Task[], exportProjects: Project[], activeProject: Project) => {
-  const projectLookup = buildProjectLookup(exportProjects);
-  const projectRows = exportProjects.map(project => ({
-    rowType: 'project',
-    projectId: project.id,
-    project: project.name,
-    projectDescription: project.description || '',
-    projectIcon: project.icon || '',
-    projectCreatedAt: formatExportTimestamp(project.createdAt),
-    projectUpdatedAt: formatExportTimestamp(project.updatedAt),
-    id: '',
-    title: '',
-    status: '',
-    priority: '',
-    assignee: '',
-    wbs: '',
-    startDate: '',
-    dueDate: '',
-    completion: '',
-    isMilestone: '',
-    predecessors: '',
-    description: '',
-    createdAt: '',
-    updatedAt: '',
-  }));
-  const taskRows = sourceTasks.map(task => {
-    const project = projectLookup[task.projectId] || activeProject;
-    return {
-      rowType: 'task',
-      projectId: project.id,
-      project: project.name,
-      projectDescription: project.description || '',
-      projectIcon: project.icon || '',
-      projectCreatedAt: formatExportTimestamp(project.createdAt),
-      projectUpdatedAt: formatExportTimestamp(project.updatedAt),
-      id: task.id,
-      title: task.title,
-      status: task.status,
-      priority: task.priority,
-      assignee: task.assignee || '',
-      wbs: task.wbs || '',
-      startDate: formatExportTimestamp(task.startDate),
-      dueDate: formatExportTimestamp(task.dueDate),
-      completion: task.completion ?? 0,
-      isMilestone: task.isMilestone ? 'true' : 'false',
-      predecessors: (task.predecessors || []).join(','),
-      description: task.description || '',
-      createdAt: formatExportTimestamp(task.createdAt),
-      updatedAt: formatExportTimestamp(task.updatedAt),
-    };
-  });
-  return [...projectRows, ...taskRows];
-};
-
-export const EXPORT_HEADERS = [
-  'rowType',
-  'projectId',
-  'project',
-  'projectDescription',
-  'projectIcon',
-  'projectCreatedAt',
-  'projectUpdatedAt',
-  'id',
-  'title',
-  'status',
-  'priority',
-  'assignee',
-  'wbs',
-  'startDate',
-  'dueDate',
-  'completion',
-  'isMilestone',
-  'predecessors',
-  'description',
-  'createdAt',
-  'updatedAt',
-] as const;
-
-export const DISPLAY_HEADERS = [
-  'project',
-  'id',
-  'title',
-  'status',
-  'priority',
-  'assignee',
-  'wbs',
-  'startDate',
-  'dueDate',
-  'completion',
-  'isMilestone',
-  'predecessors',
-  'description',
-  'createdAt',
-] as const;
-
-/**
- * Triggers a file download by creating a temporary anchor element
- * @param blob - The file content as a Blob
- * @param filename - The name of the file to download
- */
-export function triggerDownload(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.rel = 'noopener';
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 100);
-}

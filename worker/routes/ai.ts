@@ -312,10 +312,11 @@ CRITICAL WORKFLOW RULES - FOLLOW THESE IN ORDER
 
 💡 STEP 4 - PROVIDE DATA-DRIVEN SPECIFIC SUGGESTIONS (Always Last):
 - At the VERY END of your response, add a code block with 3 suggestions
-- CRITICAL: Use EXACT format below (no variations):
+- CRITICAL: Use the EXACT structure below (no variations to the code block or JSON array).
+- The suggestion strings themselves MUST be in the user's language:
   \`\`\`suggestions
-["具体建议1", "具体建议2", "具体建议3"]
-\`\`\`
+["<suggestion 1>", "<suggestion 2>", "<suggestion 3>"]
+  \`\`\`
 
 ⚠️ **CRITICAL RULE - ALWAYS USE ACTUAL DATA**:
 - You MUST call listTasks/listProjects FIRST to get REAL data before suggesting
@@ -410,15 +411,13 @@ BATCH UPDATE 5+ TASKS (Preferred):
 ═══════════════════════════════════════════════════════════════
 DATE FORMAT - CRITICAL
 ═══════════════════════════════════════════════════════════════
-- All dates are Unix MILLISECONDS (not seconds!)
-- Date.UTC(2025, 4, 19) = May 19, 2025 (month is 0-indexed: 0=Jan, 4=May)
-- Current timestamp: ${Date.now()}
+- All dates are strings in YYYY-MM-DD format (no time, no timezone)
 - Today: ${today}
 
 DATE CALCULATIONS:
-- Add 1 day: current + 86400000
-- Add 1 week: current + (7 * 86400000)
-- Preserve duration: newDueDate = newStartDate + (oldDueDate - oldStartDate)
+- Add 1 day: next date string (YYYY-MM-DD)
+- Add 1 week: next date string (YYYY-MM-DD)
+- Preserve duration: keep the same day-span between start and due
 
 ═══════════════════════════════════════════════════════════════
 RESPONSE GUIDELINES
@@ -438,7 +437,7 @@ COMMON MISTAKES TO AVOID
 ❌ Updating tasks without reading current values
 ❌ Forgetting to provide suggestions at the end
 ❌ Making up data instead of using tool results
-❌ Using seconds instead of milliseconds for dates
+❌ Using non-YYYY-MM-DD formats for dates
 ❌ Responding in a different language than the user's question
 ❌ Providing suggestions in wrong language (match user's language!)
 ❌ Calling updateTask 17 times individually (EXCEEDS 30-call limit!)

@@ -1,7 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { projects, tasks } from '../db/schema';
 import { toProjectRecord } from './serializers';
-import { generateId, now } from './utils';
+import { generateId, now, todayDateString } from './utils';
 import type { ProjectRecord } from './types';
 import { seedProjects } from '../db/seed';
 import { retryOnce } from './dbHelpers';
@@ -35,8 +35,8 @@ export const listProjects = async (
         name: project.name,
         description: project.description ?? null,
         icon: project.icon ?? null,
-        createdAt: now(),
-        updatedAt: now(),
+        createdAt: todayDateString(),
+        updatedAt: todayDateString(),
       }));
     }
     throw error;
@@ -63,11 +63,11 @@ export const getProjectById = async (
 
 export const createProject = async (
   db: ReturnType<typeof import('../db').getDb>,
-  data: { id?: string; name: string; description?: string; icon?: string; createdAt?: number; updatedAt?: number; workspaceId: string }
+  data: { id?: string; name: string; description?: string; icon?: string; createdAt?: string; updatedAt?: string; workspaceId: string }
 ): Promise<ProjectRecord> => {
-  const timestamp = now();
-  const createdAt = typeof data.createdAt === 'number' && !Number.isNaN(data.createdAt) ? data.createdAt : timestamp;
-  const updatedAt = typeof data.updatedAt === 'number' && !Number.isNaN(data.updatedAt) ? data.updatedAt : createdAt;
+  const timestamp = todayDateString();
+  const createdAt = data.createdAt ?? timestamp;
+  const updatedAt = data.updatedAt ?? createdAt;
   // Use || instead of ?? to handle empty string as missing ID
   const id = data.id || generateId();
   const record = {
@@ -87,7 +87,7 @@ export const createProject = async (
 export const updateProject = async (
   db: ReturnType<typeof import('../db').getDb>,
   id: string,
-  data: { name?: string; description?: string; icon?: string; createdAt?: number; updatedAt?: number },
+  data: { name?: string; description?: string; icon?: string; createdAt?: string; updatedAt?: string },
   workspaceId: string
 ): Promise<ProjectRecord | null> => {
   const existingRows = await db
@@ -103,7 +103,7 @@ export const updateProject = async (
     description: data.description ?? existing.description,
     icon: data.icon ?? existing.icon,
     createdAt: data.createdAt ?? existing.createdAt,
-    updatedAt: data.updatedAt ?? now(),
+    updatedAt: data.updatedAt ?? todayDateString(),
   };
 
   await db.update(projects).set(next).where(eq(projects.id, id));
@@ -143,8 +143,8 @@ export const deleteProject = async (
       name: 'New Project',
       description: 'Auto-created project',
       icon: '🧭',
-      createdAt: now(),
-      updatedAt: now(),
+      createdAt: todayDateString(),
+      updatedAt: todayDateString(),
     });
   }
   projectCache.delete(workspaceId);

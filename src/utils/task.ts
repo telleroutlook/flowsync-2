@@ -1,5 +1,5 @@
 import type { Task } from '../../types';
-import { getTaskStart, getTaskEnd } from './date';
+import { dateStringToMs, getTaskEnd, getTaskStart } from './date';
 
 /**
  * Check if a task has a predecessor conflict
@@ -17,7 +17,7 @@ export const hasPredecessorConflict = (task: Task, allTasks: Task[]): boolean =>
     if (!predecessor) return false;
 
     const predecessorEnd = getTaskEnd(predecessor);
-    return predecessorEnd > taskStart;
+    return dateStringToMs(predecessorEnd) > dateStringToMs(taskStart);
   });
 };
 

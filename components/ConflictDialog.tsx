@@ -44,9 +44,7 @@ export const ConflictDialog = memo<ConflictDialogProps>(({
     }
   };
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toISOString().split('T')[0];
-  };
+  const formatDate = (value: string) => value;
 
   return (
     <motion.div

@@ -45,8 +45,8 @@ export const projects = sqliteTable('projects', {
   name: text('name').notNull(),
   description: text('description'),
   icon: text('icon'),
-  createdAt: integer('created_at', { mode: 'number' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'number' }).notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
 });
 
 export const tasks = sqliteTable('tasks', {
@@ -57,14 +57,14 @@ export const tasks = sqliteTable('tasks', {
   status: text('status').notNull(),
   priority: text('priority').notNull(),
   wbs: text('wbs'),
-  createdAt: integer('created_at', { mode: 'number' }).notNull(),
-  startDate: integer('start_date', { mode: 'number' }),
-  dueDate: integer('due_date', { mode: 'number' }),
+  createdAt: text('created_at').notNull(),
+  startDate: text('start_date'),
+  dueDate: text('due_date'),
   completion: integer('completion', { mode: 'number' }),
   assignee: text('assignee'),
   isMilestone: integer('is_milestone', { mode: 'boolean' }).notNull().default(false),
   predecessors: text('predecessors', { mode: 'json' }).$type<string[] | null>(),
-  updatedAt: integer('updated_at', { mode: 'number' }).notNull(),
+  updatedAt: text('updated_at').notNull(),
 });
 
 export const drafts = sqliteTable('drafts', {

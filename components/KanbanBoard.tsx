@@ -4,6 +4,7 @@ import { useI18n } from '../src/i18n';
 import { getPriorityShortLabel, getStatusLabel } from '../src/i18n/labels';
 import { cn } from '../src/utils/cn';
 import { getTasksWithConflicts } from '../src/utils/task';
+import { dateStringToMs, formatDisplayDate, todayDateString } from '../src/utils/date';
 import { ClipboardList, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from './ui/Card';
 import { Badge } from './ui/Badge';
@@ -130,12 +131,12 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect, ha
         {task.dueDate && (
           <div className={cn(
             "flex items-center gap-1 text-xs font-medium shrink-0 ml-2",
-             task.dueDate < Date.now() && task.status !== TaskStatus.DONE
+             dateStringToMs(task.dueDate) < dateStringToMs(todayDateString()) && task.status !== TaskStatus.DONE
               ? 'text-negative bg-negative/10 px-1.5 py-0.5 rounded'
               : 'text-text-secondary'
           )}>
             <Calendar className="w-3.5 h-3.5" />
-            {new Date(task.dueDate).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })}
+            {formatDisplayDate(task.dueDate, locale)}
           </div>
         )}
       </CardFooter>

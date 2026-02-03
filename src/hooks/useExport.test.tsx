@@ -23,7 +23,7 @@ const mockTasks: Task[] = [
     title: 'Task One',
     status: TaskStatus.TODO,
     priority: Priority.MEDIUM,
-    createdAt: 1,
+    createdAt: '2026-01-01',
   },
 ];
 

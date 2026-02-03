@@ -1,62 +1,81 @@
 import type { Task } from '../../types';
 
-const DAY_MS = 86400000;
+const DAY_MS = 86_400_000;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Format a timestamp for display in task context
- * Returns ISO date format (YYYY-MM-DD) or 'N/A' if no timestamp
+ * Format a date string for display in task context
+ * Returns ISO date format (YYYY-MM-DD) or 'N/A' if no date
  */
-export function formatTaskDate(ts: number | null | undefined): string {
-  if (ts === null || ts === undefined) return 'N/A';
-  const parts = new Date(ts).toISOString().split('T');
-  return parts[0] ?? 'N/A';
+export function formatTaskDate(value: string | null | undefined): string {
+  if (!value) return 'N/A';
+  return value;
 }
 
-export function getTaskStart(task: Task): number {
+export const isDateString = (value?: string | null): value is string =>
+  typeof value === 'string' && DATE_RE.test(value);
+
+export const dateStringToMs = (value: string): number => {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return NaN;
+  return Date.UTC(year, month - 1, day);
+};
+
+export const toDateString = (value?: string | null): string | undefined => {
+  if (value === null || value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (DATE_RE.test(trimmed)) return trimmed;
+  return undefined;
+};
+
+export const msToDateString = (value: number): string | undefined => {
+  if (!Number.isFinite(value)) return undefined;
+  return new Date(value).toISOString().slice(0, 10);
+};
+
+export const addDays = (value: string, days: number): string => {
+  const ms = dateStringToMs(value) + days * DAY_MS;
+  return new Date(ms).toISOString().slice(0, 10);
+};
+
+export function getTaskStart(task: Task): string {
   return task.startDate ?? task.createdAt;
 }
 
-export function getTaskEnd(task: Task): number {
+export function getTaskEnd(task: Task): string {
   const start = getTaskStart(task);
-  const end = task.dueDate ?? start + DAY_MS;
-  return end <= start ? start + DAY_MS : end;
+  const end = task.dueDate ?? addDays(start, 1);
+  if (dateStringToMs(end) <= dateStringToMs(start)) return addDays(start, 1);
+  return end;
 }
 
-export function formatExportDate(value?: number): string {
+export function formatExportDate(value?: string | null): string {
   if (!value) return '';
-  return new Date(value).toISOString().slice(0, 10);
+  return value;
 }
 
-export function formatDateInput(value?: number): string {
+export function formatDateInput(value?: string | null): string {
   if (!value) return '';
-  const date = new Date(value);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return value;
 }
 
-export function parseDateInput(value: string): number | undefined {
-  if (!value) return undefined;
-  const parts = value.split('-').map(Number);
-  if (parts.length !== 3 || parts.some(isNaN)) return undefined;
-  const [year, month, day] = parts;
-  if (!year || !month || !day) return undefined;
-  return new Date(year, month - 1, day).getTime();
-}
-
-export function parseDateFlexible(value?: string): number | undefined {
+export function parseDateInput(value: string): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
   if (!trimmed) return undefined;
-
-  if (/^\d+$/.test(trimmed)) {
-    const numeric = Number(trimmed);
-    if (!Number.isNaN(numeric)) return numeric;
-  }
-
-  const parsed = Date.parse(trimmed);
-  if (!Number.isNaN(parsed)) return parsed;
-
-  return undefined;
+  if (!DATE_RE.test(trimmed)) return undefined;
+  return trimmed;
 }
+
+export function parseDateFlexible(value?: string): string | undefined {
+  return toDateString(value);
+}
+
+export const isBeforeDate = (value: string, compareTo: string): boolean =>
+  dateStringToMs(value) < dateStringToMs(compareTo);
+
+export const formatDisplayDate = (value: string, locale: string): string =>
+  new Date(`${value}T00:00:00`).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
+
+export const todayDateString = (): string => new Date().toISOString().slice(0, 10);

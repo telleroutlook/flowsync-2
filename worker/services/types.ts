@@ -33,14 +33,14 @@ export type TaskRecord = {
   status: TaskStatus;
   priority: Priority;
   wbs: string | null;
-  createdAt: number;
-  startDate: number | null;
-  dueDate: number | null;
+  createdAt: string;
+  startDate: string | null;
+  dueDate: string | null;
   completion: number | null;
   assignee: string | null;
   isMilestone: boolean;
   predecessors: string[];
-  updatedAt: number;
+  updatedAt: string;
 };
 
 export type ProjectRecord = {
@@ -49,8 +49,8 @@ export type ProjectRecord = {
   name: string;
   description: string | null;
   icon: string | null;
-  createdAt: number;
-  updatedAt: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 // Stricter types for DraftAction data to improve type safety
@@ -62,14 +62,14 @@ export type TaskActionData = {
   status?: TaskStatus;
   priority?: Priority;
   wbs?: string | null;
-  startDate?: number | null;
-  dueDate?: number | null;
+  startDate?: string | null;
+  dueDate?: string | null;
   completion?: number | null;
   assignee?: string | null;
   isMilestone?: boolean;
   predecessors?: string[];
-  createdAt?: number;
-  updatedAt?: number;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type ProjectActionData = {
@@ -78,8 +78,8 @@ export type ProjectActionData = {
   name?: string;
   description?: string | null;
   icon?: string | null;
-  createdAt?: number;
-  updatedAt?: number;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type DraftActionData = TaskActionData | ProjectActionData;

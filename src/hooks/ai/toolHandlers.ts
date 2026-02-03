@@ -8,7 +8,7 @@
 import type { DraftAction } from '../../../types';
 import type { ApiClient } from './types';
 import type { TFunction } from '../../i18n/types';
-import { formatTaskDate as formatTaskDateUtil } from '../../utils/date';
+import { dateStringToMs, formatTaskDate as formatTaskDateUtil, toDateString } from '../../utils/date';
 
 // Context passed to tool handlers
 export interface ToolHandlerContext {
@@ -36,7 +36,7 @@ type ToolHandlerFunction = (
 ) => Promise<ToolExecutionResult> | ToolExecutionResult;
 
 // Helper to format task dates consistently using shared utility
-const formatTaskDate = (ts: number | null | undefined, t: TFunction) => {
+const formatTaskDate = (ts: string | null | undefined, t: TFunction) => {
   const formatted = formatTaskDateUtil(ts);
   return formatted === 'N/A' ? t('common.na') : formatted;
 };
@@ -60,17 +60,130 @@ const getNumberParam = (args: Record<string, unknown>, key: string): number | un
     if (!trimmed) return undefined;
     const numeric = Number(trimmed);
     if (Number.isFinite(numeric)) return numeric;
-    const parsed = Date.parse(trimmed);
-    return Number.isNaN(parsed) ? undefined : parsed;
   }
   return undefined;
 };
 
-// Date params sometimes come through as 0 from the model; treat 0 as "not provided"
-const getDateParam = (args: Record<string, unknown>, key: string): number | undefined => {
-  const value = getNumberParam(args, key);
+const getDateParam = (args: Record<string, unknown>, key: string): string | undefined => {
+  const value = args[key];
   if (value === 0) return undefined;
-  return value;
+  return typeof value === 'string' ? toDateString(value) : undefined;
+};
+
+const DAY_MS = 86_400_000;
+
+const parseReasonDate = (reason?: string): string | undefined => {
+  if (!reason) return undefined;
+  const trimmed = reason.trim();
+  if (!trimmed) return undefined;
+
+  const isoChange = trimmed.match(/(?:改为|调整为|设为|to|after|->)\s*(\d{4})-(\d{1,2})-(\d{1,2})/i);
+  if (isoChange) {
+    const year = Number(isoChange[1]);
+    const month = Number(isoChange[2]);
+    const day = Number(isoChange[3]);
+    if (year && month && day) return new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10);
+  }
+
+  const cnChange = trimmed.match(/(?:改为|调整为|设为)\s*(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (cnChange) {
+    const year = Number(cnChange[1]);
+    const month = Number(cnChange[2]);
+    const day = Number(cnChange[3]);
+    if (year && month && day) return new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10);
+  }
+
+  const enChange = trimmed.match(/(?:to|after|->)\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})(?:,)?\s+(\d{4})/i);
+  if (enChange) {
+    const monthToken = enChange[1]?.toLowerCase();
+    if (!monthToken) return undefined;
+    const monthMap: Record<string, number> = {
+      jan: 1, january: 1,
+      feb: 2, february: 2,
+      mar: 3, march: 3,
+      apr: 4, april: 4,
+      may: 5,
+      jun: 6, june: 6,
+      jul: 7, july: 7,
+      aug: 8, august: 8,
+      sep: 9, sept: 9, september: 9,
+      oct: 10, october: 10,
+      nov: 11, november: 11,
+      dec: 12, december: 12,
+    };
+    const month = monthMap[monthToken];
+    const day = Number(enChange[2]);
+    const year = Number(enChange[3]);
+    if (!month) return undefined;
+    if (year && day) return new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10);
+  }
+
+  const isoMatches = [...trimmed.matchAll(/(\d{4})-(\d{1,2})-(\d{1,2})/g)];
+  if (isoMatches.length > 0) {
+    const last = isoMatches[isoMatches.length - 1];
+    if (!last) return undefined;
+    const year = Number(last[1]);
+    const month = Number(last[2]);
+    const day = Number(last[3]);
+    if (year && month && day) return new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10);
+  }
+
+  const cnMatches = [...trimmed.matchAll(/(\d{4})年(\d{1,2})月(\d{1,2})日/g)];
+  if (cnMatches.length > 0) {
+    const last = cnMatches[cnMatches.length - 1];
+    if (!last) return undefined;
+    const year = Number(last[1]);
+    const month = Number(last[2]);
+    const day = Number(last[3]);
+    if (year && month && day) return new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10);
+  }
+
+  const enMatches = [...trimmed.matchAll(/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})(?:,)?\s+(\d{4})\b/gi)];
+  if (enMatches.length > 0) {
+    const last = enMatches[enMatches.length - 1];
+    if (!last) return undefined;
+    const monthToken = String(last[1]).toLowerCase();
+    const monthMap: Record<string, number> = {
+      jan: 1, january: 1,
+      feb: 2, february: 2,
+      mar: 3, march: 3,
+      apr: 4, april: 4,
+      may: 5,
+      jun: 6, june: 6,
+      jul: 7, july: 7,
+      aug: 8, august: 8,
+      sep: 9, sept: 9, september: 9,
+      oct: 10, october: 10,
+      nov: 11, november: 11,
+      dec: 12, december: 12,
+    };
+    const month = monthMap[monthToken];
+    const day = Number(last[2]);
+    const year = Number(last[3]);
+    if (!month) return undefined;
+    if (year && day) return new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10);
+  }
+
+  return undefined;
+};
+
+const shouldTrustReasonDate = (reason?: string): boolean => {
+  if (!reason) return false;
+  return /start\s*date|start|开始|起始|开工/.test(reason);
+};
+
+const normalizeStartDateFromReason = (
+  startDate: string | undefined,
+  reason?: string
+): { value: string | undefined; corrected: boolean } => {
+  if (!reason || startDate === undefined) return { value: startDate, corrected: false };
+  if (!shouldTrustReasonDate(reason)) return { value: startDate, corrected: false };
+
+  const reasonDate = parseReasonDate(reason);
+  if (!reasonDate) return { value: startDate, corrected: false };
+  if (Math.abs(dateStringToMs(reasonDate) - dateStringToMs(startDate)) <= DAY_MS) return { value: startDate, corrected: false };
+
+  return { value: reasonDate, corrected: true };
 };
 
 const normalizeStatus = (value?: string): string | undefined => {
@@ -323,6 +436,9 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
   createTask: async (args, { api, activeProjectId, generateId, t }) => {
     const requestedProjectId = getStringParam(args, 'projectId');
     const corrected = !!activeProjectId && !!requestedProjectId && requestedProjectId !== activeProjectId;
+    const reason = getStringParam(args, 'reason');
+    const normalizedStart = normalizeStartDateFromReason(getDateParam(args, 'startDate'), reason);
+    const correctedStartDate = normalizedStart.corrected;
 
     // Build ID map to fix truncated predecessors
     const projectIds = new Set<string>();
@@ -345,8 +461,8 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         status: normalizeStatus(getStringParam(args, 'status')),
         priority: normalizePriority(getStringParam(args, 'priority')),
         wbs: args.wbs,
-        startDate: args.startDate,
-        dueDate: args.dueDate,
+        startDate: normalizedStart.value,
+        dueDate: getDateParam(args, 'dueDate'),
         completion: args.completion,
         assignee: args.assignee,
         isMilestone: args.isMilestone,
@@ -361,11 +477,14 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     if (correctedPredecessors) {
       outputParts.push(t('tool.warning.predecessors_corrected'));
     }
+    if (correctedStartDate) {
+      outputParts.push(t('tool.warning.start_date_corrected'));
+    }
 
     return {
       output: outputParts.join(' '),
       draftActions,
-      draftReason: getStringParam(args, 'reason'),
+      draftReason: reason,
     };
   },
 
@@ -376,6 +495,10 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     if (!taskId && !wbs) {
       return { output: t('tool.error.invalid_task_id') };
     }
+
+    const reason = getStringParam(args, 'reason');
+    const normalizedStart = normalizeStartDateFromReason(getDateParam(args, 'startDate'), reason);
+    const correctedStartDate = normalizedStart.corrected;
 
     let fixedTaskId = taskId;
     let correctedTaskId = false;
@@ -422,8 +545,8 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         status: normalizeStatus(getStringParam(args, 'status')),
         priority: normalizePriority(getStringParam(args, 'priority')),
         wbs: args.wbs, // Preserve WBS for backend resolution
-        startDate: args.startDate,
-        dueDate: args.dueDate,
+        startDate: normalizedStart.value,
+        dueDate: getDateParam(args, 'dueDate'),
         completion: args.completion,
         assignee: args.assignee,
         isMilestone: args.isMilestone,
@@ -438,11 +561,14 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     if (correctedPredecessors) {
       outputParts.push(t('tool.warning.predecessors_corrected'));
     }
+    if (correctedStartDate) {
+      outputParts.push(t('tool.warning.start_date_corrected'));
+    }
 
     return {
       output: outputParts.join(' '),
       draftActions,
-      draftReason: getStringParam(args, 'reason'),
+      draftReason: reason,
     };
   },
 

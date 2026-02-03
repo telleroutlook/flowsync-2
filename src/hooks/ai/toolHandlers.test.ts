@@ -32,7 +32,7 @@ describe('toolHandlers listTasks', () => {
         status: '进行中',
         priority: '高',
         startDateFrom: '2026-06-27',
-        dueDateTo: '1767225600000',
+        dueDateTo: '2026-01-01',
       },
       context
     );
@@ -44,10 +44,10 @@ describe('toolHandlers listTasks', () => {
       assignee: undefined,
       isMilestone: undefined,
       q: undefined,
-      startDateFrom: Date.parse('2026-06-27'),
+      startDateFrom: '2026-06-27',
       startDateTo: undefined,
       dueDateFrom: undefined,
-      dueDateTo: 1767225600000,
+      dueDateTo: '2026-01-01',
       page: undefined,
       pageSize: undefined,
     });
@@ -80,5 +80,71 @@ describe('toolHandlers listTasks', () => {
       page: undefined,
       pageSize: undefined,
     });
+  });
+});
+
+describe('toolHandlers updateTask', () => {
+  it('corrects startDate when reason date conflicts', async () => {
+    const context = buildContext();
+    context.api.getTask = vi.fn().mockResolvedValue({
+      id: 't4',
+      projectId: 'project-1',
+      title: 'Main Structure',
+      status: 'TODO',
+      priority: 'HIGH',
+      createdAt: '2026-01-01',
+      startDate: '2026-06-10',
+      dueDate: '2026-06-11',
+      completion: 0,
+      assignee: 'General Contractor',
+      isMilestone: false,
+      predecessors: [],
+    });
+    context.api.listTasks = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 50 });
+    const startDate = '2024-07-19';
+
+    const result = await executeToolCall(
+      'updateTask',
+      {
+        id: 't4',
+        startDate,
+        reason: 'Align start date to Aug 19, 2027',
+      },
+      context
+    );
+
+    expect(result.draftActions?.[0]?.after?.startDate).toBe('2027-08-19');
+  });
+
+  it('prefers the revised start date in complex reason strings', async () => {
+    const context = buildContext();
+    context.api.getTask = vi.fn().mockResolvedValue({
+      id: 't4',
+      projectId: 'project-1',
+      title: 'Main Structure',
+      status: 'TODO',
+      priority: 'HIGH',
+      createdAt: '2026-01-01',
+      startDate: '2024-07-19',
+      dueDate: '2027-11-29',
+      completion: 0,
+      assignee: 'General Contractor',
+      isMilestone: false,
+      predecessors: [],
+    });
+    context.api.listTasks = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 50 });
+
+    const result = await executeToolCall(
+      'updateTask',
+      {
+        id: 't4',
+        startDate: '2024-07-19',
+        dueDate: '2027-11-29',
+        reason: '修复开始日期，从2024-07-19改为2026-12-09，并将截止日期延长至2027-11-29',
+      },
+      context
+    );
+
+    expect(result.draftActions?.[0]?.after?.startDate).toBe('2026-12-09');
   });
 });

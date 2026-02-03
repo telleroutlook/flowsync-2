@@ -1,12 +1,11 @@
 import type { TaskRecord } from './types';
-
-const day = 86_400_000;
+import { addDays, dateStringToMs } from './utils';
 
 const getTaskStart = (task: TaskRecord) => task.startDate ?? task.createdAt;
 const getTaskEnd = (task: TaskRecord) => {
   const start = getTaskStart(task);
-  const end = task.dueDate ?? start + day;
-  return end <= start ? start + day : end;
+  const end = task.dueDate ?? addDays(start, 1);
+  return dateStringToMs(end) <= dateStringToMs(start) ? addDays(start, 1) : end;
 };
 
 export type ConstraintResult = {
@@ -18,11 +17,11 @@ export type ConstraintResult = {
 export const enforceDateOrder = (task: TaskRecord): ConstraintResult => {
   const start = getTaskStart(task);
   const end = getTaskEnd(task);
-  if (end > start) {
+  if (dateStringToMs(end) > dateStringToMs(start)) {
     return { task, warnings: [], changed: false };
   }
   return {
-    task: { ...task, startDate: start, dueDate: start + day },
+    task: { ...task, startDate: start, dueDate: addDays(start, 1) },
     warnings: ['Adjusted task dates to ensure due date is after start date.'],
     changed: true,
   };
@@ -46,14 +45,16 @@ export const resolveDependencyConflicts = (task: TaskRecord, allTasks: TaskRecor
   for (const ref of task.predecessors) {
     const match = taskMap.get(ref);
     if (match) {
-      maxEnd = Math.max(maxEnd, getTaskEnd(match));
+      if (dateStringToMs(getTaskEnd(match)) > dateStringToMs(maxEnd)) {
+        maxEnd = getTaskEnd(match);
+      }
     }
   }
 
-  if (maxEnd <= start) return { task, warnings: [], changed: false };
-  const duration = Math.max(day, end - start);
+  if (dateStringToMs(maxEnd) <= dateStringToMs(start)) return { task, warnings: [], changed: false };
+  const durationMs = Math.max(86_400_000, dateStringToMs(end) - dateStringToMs(start));
   const nextStart = maxEnd;
-  const nextEnd = Math.max(nextStart + day, nextStart + duration);
+  const nextEnd = addDays(nextStart, Math.ceil(durationMs / 86_400_000));
   return {
     task: { ...task, startDate: nextStart, dueDate: nextEnd },
     warnings: ['Adjusted task dates to satisfy predecessor dependencies.'],

@@ -14,10 +14,10 @@ export interface ApiClient {
     assignee?: string;
     isMilestone?: boolean;
     q?: string;
-    startDateFrom?: number;
-    startDateTo?: number;
-    dueDateFrom?: number;
-    dueDateTo?: number;
+  startDateFrom?: string;
+  startDateTo?: string;
+  dueDateFrom?: string;
+  dueDateTo?: string;
     page?: number;
     pageSize?: number;
   }): Promise<{ data: Task[]; total: number; page: number; pageSize: number }>;

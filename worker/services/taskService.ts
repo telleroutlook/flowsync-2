@@ -2,7 +2,7 @@ import { and, eq, gte, like, lte, or, sql } from 'drizzle-orm';
 import type { SQLWrapper } from 'drizzle-orm';
 import { projects, tasks } from '../db/schema';
 import { toTaskRecord } from './serializers';
-import { clampNumber, generateId, now } from './utils';
+import { clampNumber, generateId, now, todayDateString } from './utils';
 import type { Priority, TaskRecord, TaskStatus } from './types';
 import { seedTasks } from '../db/seed';
 import { retryOnce } from './dbHelpers';
@@ -15,10 +15,10 @@ export type TaskFilters = {
   assignee?: string;
   isMilestone?: boolean;
   q?: string;
-  startDateFrom?: number;
-  startDateTo?: number;
-  dueDateFrom?: number;
-  dueDateTo?: number;
+  startDateFrom?: string;
+  startDateTo?: string;
+  dueDateFrom?: string;
+  dueDateTo?: string;
   page?: number;
   pageSize?: number;
 };
@@ -190,14 +190,14 @@ export const createTask = async (
     status: TaskStatus;
     priority: Priority;
     wbs?: string;
-    startDate?: number;
-    dueDate?: number;
+    startDate?: string;
+    dueDate?: string;
     completion?: number;
     assignee?: string;
     isMilestone?: boolean;
     predecessors?: string[];
-    createdAt?: number;
-    updatedAt?: number;
+    createdAt?: string;
+    updatedAt?: string;
   },
   workspaceId: string
 ): Promise<TaskRecord | null> => {
@@ -208,7 +208,7 @@ export const createTask = async (
     .limit(1);
   if (projectRows.length === 0) return null;
 
-  const timestamp = now();
+  const timestamp = todayDateString();
   const createdAt = data.createdAt ?? timestamp;
   const updatedAt = data.updatedAt ?? timestamp;
   // Use || instead of ?? to handle empty string as missing ID
@@ -244,8 +244,8 @@ export const updateTask = async (
     status: TaskStatus;
     priority: Priority;
     wbs: string;
-    startDate: number;
-    dueDate: number;
+    startDate: string;
+    dueDate: string;
     completion: number;
     assignee: string;
     isMilestone: boolean;
@@ -268,7 +268,7 @@ export const updateTask = async (
     assignee: data.assignee ?? existing.assignee,
     isMilestone: data.isMilestone === undefined ? existing.isMilestone : data.isMilestone,
     predecessors: data.predecessors ?? existing.predecessors,
-    updatedAt: now(),
+    updatedAt: todayDateString(),
   };
 
   await db.update(tasks).set(next).where(eq(tasks.id, id));
@@ -383,16 +383,16 @@ const buildSeedTaskList = (filters: TaskFilters) => {
     filtered = filtered.filter((task) => task.isMilestone === filters.isMilestone);
   }
   if (filters.startDateFrom !== undefined) {
-    filtered = filtered.filter((task) => (task.startDate ?? 0) >= filters.startDateFrom!);
+    filtered = filtered.filter((task) => (task.startDate ?? '') >= filters.startDateFrom!);
   }
   if (filters.startDateTo !== undefined) {
-    filtered = filtered.filter((task) => (task.startDate ?? 0) <= filters.startDateTo!);
+    filtered = filtered.filter((task) => (task.startDate ?? '') <= filters.startDateTo!);
   }
   if (filters.dueDateFrom !== undefined) {
-    filtered = filtered.filter((task) => (task.dueDate ?? 0) >= filters.dueDateFrom!);
+    filtered = filtered.filter((task) => (task.dueDate ?? '') >= filters.dueDateFrom!);
   }
   if (filters.dueDateTo !== undefined) {
-    filtered = filtered.filter((task) => (task.dueDate ?? 0) <= filters.dueDateTo!);
+    filtered = filtered.filter((task) => (task.dueDate ?? '') <= filters.dueDateTo!);
   }
   if (filters.q) {
     const q = filters.q.toLowerCase();

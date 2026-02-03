@@ -5,6 +5,7 @@ import { cn } from '../src/utils/cn';
 import { getTasksWithConflicts } from '../src/utils/task';
 import { AlertTriangle, Calendar, Loader2 } from 'lucide-react';
 import { DAY_MS, GANTT_VIEW_SETTINGS, type GanttViewMode } from '../src/constants/gantt';
+import { addDays, dateStringToMs, msToDateString } from '../src/utils/date';
 import { getTaskColorClass } from '../shared/constants/colors';
 import { EmptyState } from './ui/EmptyState';
 
@@ -15,7 +16,7 @@ interface GanttChartProps {
   onViewModeChange?: (mode: GanttViewMode) => void;
   selectedTaskId?: string | null;
   onSelectTask?: (id: string) => void;
-  onUpdateTaskDates?: (id: string, startDate: number, dueDate: number) => void;
+  onUpdateTaskDates?: (id: string, startDate: string, dueDate: string) => void;
   loading?: boolean;
   isMobile?: boolean;
 }
@@ -123,10 +124,12 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
     if (tasks.length === 0) return [];
     return tasks
       .map(task => {
-        const start = task.startDate ?? task.createdAt;
-        const end = task.dueDate ?? start + DAY_MS;
-        const safeEnd = end <= start ? start + DAY_MS : end;
-        return { ...task, startMs: start, endMs: safeEnd };
+        const startDate = task.startDate ?? task.createdAt;
+        const endDate = task.dueDate ?? addDays(startDate, 1);
+        const startMs = dateStringToMs(startDate);
+        const endMs = dateStringToMs(endDate);
+        const safeEnd = endMs <= startMs ? startMs + DAY_MS : endMs;
+        return { ...task, startMs, endMs: safeEnd };
       })
       .sort((a, b) => a.startMs - b.startMs);
   }, [tasks]);
@@ -320,7 +323,11 @@ export const GanttChart: React.FC<GanttChartProps> = memo(({
         nextEnd = Math.max(dragState.originStart + DAY_MS, dragState.originEnd + appliedDelta);
       }
 
-      onUpdateTaskDates?.(dragState.id, nextStart, nextEnd);
+      const nextStartDate = msToDateString(nextStart);
+      const nextEndDate = msToDateString(nextEnd);
+      if (nextStartDate && nextEndDate) {
+        onUpdateTaskDates?.(dragState.id, nextStartDate, nextEndDate);
+      }
       setDragState(null);
       setDragDeltaMs(0);
       dragDeltaRef.current = 0;

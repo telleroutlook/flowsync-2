@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { projects, tasks } from '../db/schema';
 import { seedProjects, seedTasks } from '../db/seed';
-import { now } from './utils';
+import { todayDateString } from './utils';
 import { ensurePublicWorkspace } from './workspaceService';
 
 export const ensureSeedData = async (db: ReturnType<typeof import('../db').getDb>) => {
@@ -10,7 +10,7 @@ export const ensureSeedData = async (db: ReturnType<typeof import('../db').getDb
   const count = countResult[0]?.count ?? 0;
   if (count > 0) return;
 
-  const timestamp = now();
+  const timestamp = todayDateString();
   await db.insert(projects).values(
     seedProjects.map((project) => ({
       id: project.id,

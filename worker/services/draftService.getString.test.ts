@@ -47,7 +47,7 @@ describe('getString function', () => {
 
   // The key test case: simulating the original bug
   it('should preserve original title when input only has dates', () => {
-    const input = { startDate: 1234567890, dueDate: 1234567890 };
+    const input = { startDate: '2026-01-01', dueDate: '2026-01-01' };
     const existingTask = { title: 'Original Chinese Title', description: 'Original Description' };
 
     // Simulating the behavior in normalizeTaskInput

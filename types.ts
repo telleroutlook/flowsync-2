@@ -16,8 +16,8 @@ export interface Project {
   name: string;
   description?: string;
   icon?: string; // Emoji or simple string char
-  createdAt?: number;
-  updatedAt?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Task {
@@ -30,10 +30,10 @@ export interface Task {
   
   // WBS & Scheduling
   wbs?: string; // e.g., "1.1", "2.0"
-  createdAt: number;
-  updatedAt?: number;
-  startDate?: number; // Planned Start
-  dueDate?: number; // Planned Finish / Deadline
+  createdAt: string;
+  updatedAt?: string;
+  startDate?: string; // Planned Start
+  dueDate?: string; // Planned Finish / Deadline
   
   // Progress & Responsibility
   completion?: number; // 0 to 100
@@ -193,8 +193,8 @@ export interface TaskActionArgs {
   status?: string;
   priority?: string;
   wbs?: string;
-  startDate?: number;
-  dueDate?: number;
+  startDate?: string;
+  dueDate?: string;
   completion?: number;
   assignee?: string;
   isMilestone?: boolean;

@@ -11,6 +11,7 @@ tasksRoute.use('*', workspaceMiddleware);
 
 const statusEnum = z.enum(['TODO', 'IN_PROGRESS', 'DONE']);
 const priorityEnum = z.enum(['LOW', 'MEDIUM', 'HIGH']);
+const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const booleanQuery = z.preprocess((value) => {
   if (value === 'true' || value === true) return true;
   if (value === 'false' || value === false) return false;
@@ -25,8 +26,8 @@ const taskInputSchema = z.object({
   status: statusEnum.default('TODO'),
   priority: priorityEnum.default('MEDIUM'),
   wbs: z.string().optional(),
-  startDate: z.number().optional(),
-  dueDate: z.number().optional(),
+  startDate: dateString.optional(),
+  dueDate: dateString.optional(),
   completion: z.number().min(0).max(100).optional(),
   assignee: z.string().optional(),
   isMilestone: z.boolean().optional(),
@@ -40,8 +41,8 @@ const taskUpdateSchema = z.object({
   status: statusEnum.optional(),
   priority: priorityEnum.optional(),
   wbs: z.string().optional(),
-  startDate: z.number().optional(),
-  dueDate: z.number().optional(),
+  startDate: dateString.optional(),
+  dueDate: dateString.optional(),
   completion: z.number().min(0).max(100).optional(),
   assignee: z.string().optional(),
   isMilestone: z.boolean().optional(),
@@ -55,10 +56,10 @@ const listQuerySchema = z.object({
   assignee: z.string().optional(),
   isMilestone: booleanQuery.optional(),
   q: z.string().optional(),
-  startDateFrom: z.coerce.number().optional(),
-  startDateTo: z.coerce.number().optional(),
-  dueDateFrom: z.coerce.number().optional(),
-  dueDateTo: z.coerce.number().optional(),
+  startDateFrom: dateString.optional(),
+  startDateTo: dateString.optional(),
+  dueDateFrom: dateString.optional(),
+  dueDateTo: dateString.optional(),
   page: z.coerce.number().optional(),
   pageSize: z.coerce.number().optional(),
 });

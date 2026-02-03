@@ -24,7 +24,7 @@ const task = (overrides: Partial<Task>): Task => ({
   title: 'Task',
   status: TaskStatus.TODO,
   priority: Priority.MEDIUM,
-  createdAt: 1,
+  createdAt: '2026-01-01',
   ...overrides,
 });
 

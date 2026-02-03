@@ -9,6 +9,7 @@
 import type { Context } from 'hono';
 import type { Bindings, Variables } from '../types';
 import { PUBLIC_WORKSPACE_ID } from './workspaceService';
+import { toDateString } from './utils';
 
 // ============================================================================
 // Type Definitions
@@ -82,14 +83,12 @@ const commonSchemas = {
     priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH'], description: 'Task priority' },
     wbs: { type: 'string' },
     startDate: {
-      type: 'number',
-      description: 'Task start date as Unix timestamp in milliseconds',
-      minimum: 0,
+      type: 'date',
+      description: 'Task start date (YYYY-MM-DD)',
     },
     dueDate: {
-      type: 'number',
-      description: 'Task due date as Unix timestamp in milliseconds',
-      minimum: 0,
+      type: 'date',
+      description: 'Task due date (YYYY-MM-DD)',
     },
     completion: { type: 'number', minimum: 0, maximum: 100 },
     assignee: { type: 'string' },
@@ -103,24 +102,20 @@ const commonSchemas = {
     assignee: { type: 'string', description: 'Filter by assignee' },
     isMilestone: { type: 'boolean', description: 'Filter by milestone tasks' },
     startDateFrom: {
-      type: 'number',
-      description: 'Filter tasks with startDate >= this Unix ms timestamp',
-      minimum: 0,
+      type: 'date',
+      description: 'Filter tasks with startDate >= this date (YYYY-MM-DD)',
     },
     startDateTo: {
-      type: 'number',
-      description: 'Filter tasks with startDate <= this Unix ms timestamp',
-      minimum: 0,
+      type: 'date',
+      description: 'Filter tasks with startDate <= this date (YYYY-MM-DD)',
     },
     dueDateFrom: {
-      type: 'number',
-      description: 'Filter tasks with dueDate >= this Unix ms timestamp',
-      minimum: 0,
+      type: 'date',
+      description: 'Filter tasks with dueDate >= this date (YYYY-MM-DD)',
     },
     dueDateTo: {
-      type: 'number',
-      description: 'Filter tasks with dueDate <= this Unix ms timestamp',
-      minimum: 0,
+      type: 'date',
+      description: 'Filter tasks with dueDate <= this date (YYYY-MM-DD)',
     },
     q: { type: 'string', description: 'Search query for title/description' },
   },
@@ -145,6 +140,11 @@ const normalizeValue = (schema: JsonSchema | undefined, value: unknown): unknown
   if (schemaType === 'number' && typeof value === 'string') {
     const parsed = Number(value);
     if (!Number.isNaN(parsed)) return parsed;
+  }
+
+  if (schemaType === 'date') {
+    const parsed = toDateString(typeof value === 'string' ? value : null);
+    if (parsed) return parsed;
   }
 
   if (schemaType === 'boolean' && typeof value === 'string') {
@@ -197,6 +197,7 @@ const validateValueType = (schema: JsonSchema | undefined, value: unknown): bool
   if (schemaType === 'string') return typeof value === 'string';
   if (schemaType === 'number') return typeof value === 'number' && !Number.isNaN(value);
   if (schemaType === 'boolean') return typeof value === 'boolean';
+  if (schemaType === 'date') return typeof value === 'string';
   if (schemaType === 'array') {
     if (!Array.isArray(value)) return false;
     const itemSchema = isPlainObject(schema.items) ? schema.items : undefined;
@@ -256,21 +257,21 @@ const validateArgs = (schema: ToolParameterSchema, args: Record<string, unknown>
     }
   }
 
-  if (typeof args.startDate === 'number' && typeof args.dueDate === 'number' && args.dueDate < args.startDate) {
+  if (typeof args.startDate === 'string' && typeof args.dueDate === 'string' && args.dueDate < args.startDate) {
     return { ok: false as const, error: 'dueDate must be greater than or equal to startDate.' };
   }
 
   if (
-    typeof args.startDateFrom === 'number' &&
-    typeof args.startDateTo === 'number' &&
+    typeof args.startDateFrom === 'string' &&
+    typeof args.startDateTo === 'string' &&
     args.startDateTo < args.startDateFrom
   ) {
     return { ok: false as const, error: 'startDateTo must be greater than or equal to startDateFrom.' };
   }
 
   if (
-    typeof args.dueDateFrom === 'number' &&
-    typeof args.dueDateTo === 'number' &&
+    typeof args.dueDateFrom === 'string' &&
+    typeof args.dueDateTo === 'string' &&
     args.dueDateTo < args.dueDateFrom
   ) {
     return { ok: false as const, error: 'dueDateTo must be greater than or equal to dueDateFrom.' };
@@ -426,16 +427,16 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
         if (typeof args.isMilestone === 'boolean') {
           conditions.push(eq(tasks.isMilestone, args.isMilestone));
         }
-        if (typeof args.startDateFrom === 'number') {
+        if (typeof args.startDateFrom === 'string') {
           conditions.push(gte(tasks.startDate, args.startDateFrom));
         }
-        if (typeof args.startDateTo === 'number') {
+        if (typeof args.startDateTo === 'string') {
           conditions.push(lte(tasks.startDate, args.startDateTo));
         }
-        if (typeof args.dueDateFrom === 'number') {
+        if (typeof args.dueDateFrom === 'string') {
           conditions.push(gte(tasks.dueDate, args.dueDateFrom));
         }
-        if (typeof args.dueDateTo === 'number') {
+        if (typeof args.dueDateTo === 'string') {
           conditions.push(lte(tasks.dueDate, args.dueDateTo));
         }
         if (args.q) {
@@ -511,16 +512,16 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
         if (typeof args.isMilestone === 'boolean') {
           conditions.push(eq(tasks.isMilestone, args.isMilestone));
         }
-        if (typeof args.startDateFrom === 'number') {
+        if (typeof args.startDateFrom === 'string') {
           conditions.push(gte(tasks.startDate, args.startDateFrom));
         }
-        if (typeof args.startDateTo === 'number') {
+        if (typeof args.startDateTo === 'string') {
           conditions.push(lte(tasks.startDate, args.startDateTo));
         }
-        if (typeof args.dueDateFrom === 'number') {
+        if (typeof args.dueDateFrom === 'string') {
           conditions.push(gte(tasks.dueDate, args.dueDateFrom));
         }
-        if (typeof args.dueDateTo === 'number') {
+        if (typeof args.dueDateTo === 'string') {
           conditions.push(lte(tasks.dueDate, args.dueDateTo));
         }
         if (args.q) {

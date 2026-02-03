@@ -1,6 +1,6 @@
 import { useMemo, memo, useCallback } from 'react';
 import { Task, TaskStatus, Priority } from '../types';
-import { getTaskStart, getTaskEnd, formatDateInput, parseDateInput } from '../src/utils';
+import { addDays, dateStringToMs, formatDateInput, getTaskEnd, getTaskStart, parseDateInput, todayDateString } from '../src/utils';
 import { useI18n } from '../src/i18n';
 import { getPriorityLabel, getStatusLabel } from '../src/i18n/labels';
 import { Button } from './ui/Button';
@@ -9,16 +9,7 @@ import { Textarea } from './ui/Textarea';
 import { cn } from '../src/utils/cn';
 import { X, AlertTriangle, Check, Calendar, Flag, Link, Unlink, Link2 } from 'lucide-react';
 
-const DAY_MS = 86400000;
 const clampCompletion = (value: number) => Math.min(100, Math.max(0, value));
-
-function isValidTimestamp(timestamp: number): boolean {
-  return (
-    Number.isFinite(timestamp) &&
-    timestamp > 0 &&
-    timestamp < 4000000000000 // Year 2096+ sanity check
-  );
-}
 
 interface TaskDetailPanelProps {
   selectedTask: Task | null;
@@ -45,7 +36,7 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
       if (!match) {
         return { ref, task: null, conflict: false };
       }
-      const conflict = getTaskEnd(match) > getTaskStart(selectedTask);
+      const conflict = dateStringToMs(getTaskEnd(match)) > dateStringToMs(getTaskStart(selectedTask));
       return { ref, task: match, conflict };
     });
   }, [selectedTask, tasks]);
@@ -53,9 +44,8 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
   const isOverdue = useMemo(() => {
     if (!selectedTask) return false;
     if (!selectedTask.dueDate) return false;
-    if (!isValidTimestamp(selectedTask.dueDate)) return false;
     if (selectedTask.status === TaskStatus.DONE) return false;
-    return selectedTask.dueDate < Date.now();
+    return dateStringToMs(selectedTask.dueDate) < dateStringToMs(todayDateString());
   }, [selectedTask]);
 
   const hasPredecessorConflicts = predecessorDetails.some(item => item.conflict);
@@ -90,13 +80,14 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
     if (!selectedTask) return;
     const maxEnd = predecessorDetails.reduce((acc, item) => {
       if (!item.task) return acc;
-      return Math.max(acc, getTaskEnd(item.task));
+      const end = getTaskEnd(item.task);
+      return dateStringToMs(end) > dateStringToMs(acc) ? end : acc;
     }, getTaskStart(selectedTask));
     const currentStart = getTaskStart(selectedTask);
     const currentEnd = getTaskEnd(selectedTask);
-    const duration = Math.max(DAY_MS, currentEnd - currentStart);
+    const durationMs = Math.max(86_400_000, dateStringToMs(currentEnd) - dateStringToMs(currentStart));
     const nextStart = maxEnd;
-    const nextEnd = Math.max(nextStart + DAY_MS, nextStart + duration);
+    const nextEnd = addDays(nextStart, Math.ceil(durationMs / 86_400_000));
     onUpdate(selectedTask.id, { startDate: nextStart, dueDate: nextEnd });
   }, [onUpdate, selectedTask, predecessorDetails]);
 

@@ -4,6 +4,7 @@
 
 import type { Task } from '../../types';
 import { DAY_MS, type GanttViewMode } from '../constants/gantt';
+import { addDays, dateStringToMs } from './date';
 
 export type ViewMode = 'BOARD' | 'LIST' | 'GANTT';
 
@@ -43,11 +44,13 @@ export const DEFAULT_ZOOM_META: ZoomMetaState = {
 export function computeGanttTimelineRange(tasks: Task[], viewMode: GanttViewMode): { startMs: number; endMs: number } | null {
   if (tasks.length === 0) return null;
 
-  const starts = tasks.map((task) => task.startDate ?? task.createdAt);
+  const starts = tasks.map((task) => dateStringToMs(task.startDate ?? task.createdAt));
   const ends = tasks.map((task) => {
-    const start = task.startDate ?? task.createdAt;
-    const end = task.dueDate ?? start + DAY_MS;
-    return end <= start ? start + DAY_MS : end;
+    const startDate = task.startDate ?? task.createdAt;
+    const endDate = task.dueDate ?? addDays(startDate, 1);
+    const startMs = dateStringToMs(startDate);
+    const endMs = dateStringToMs(endDate);
+    return endMs <= startMs ? startMs + DAY_MS : endMs;
   });
 
   const rawStart = Math.min(...starts);

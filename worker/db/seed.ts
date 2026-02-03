@@ -13,18 +13,23 @@ export type SeedTask = {
   status: string;
   priority: string;
   wbs?: string;
-  createdAt: number;
-  startDate?: number;
-  dueDate?: number;
+  createdAt: string;
+  startDate?: string;
+  dueDate?: string;
   completion?: number;
   assignee?: string;
   isMilestone?: boolean;
   predecessors?: string[];
 };
 
-const day = 86_400_000;
-const base = new Date('2026-01-01T00:00:00Z').getTime();
-const createDate = (offsetDays: number) => base + offsetDays * day;
+const base = '2026-01-01';
+const createDate = (offsetDays: number) => {
+  const [year, month, day] = base.split('-').map(Number);
+  if (!year || !month || !day) return base;
+  const baseDate = new Date(Date.UTC(year, month - 1, day));
+  baseDate.setUTCDate(baseDate.getUTCDate() + offsetDays);
+  return baseDate.toISOString().slice(0, 10);
+};
 
 export const seedProjects: SeedProject[] = [
   { id: 'p3', name: 'Construction Phase 1', description: 'Main Building Construction WBS', icon: '🏗️' },
@@ -152,9 +157,9 @@ export const seedTasks: SeedTask[] = [
     wbs: '1.0',
     status: 'DONE',
     priority: 'HIGH',
-    createdAt: base - day * 3,
-    startDate: base - day * 3,
-    dueDate: base - day,
+    createdAt: createDate(-3),
+    startDate: createDate(-3),
+    dueDate: createDate(-1),
     completion: 100,
     assignee: 'Design Team',
   },

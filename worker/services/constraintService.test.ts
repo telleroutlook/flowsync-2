@@ -10,20 +10,20 @@ const baseTask = (overrides: Partial<TaskRecord>): TaskRecord => ({
   status: 'TODO',
   priority: 'LOW',
   wbs: null,
-  createdAt: 0,
-  startDate: 0,
-  dueDate: 0,
+  createdAt: '2026-01-01',
+  startDate: '2026-01-01',
+  dueDate: '2026-01-01',
   completion: 0,
   assignee: null,
   isMilestone: false,
   predecessors: [],
-  updatedAt: 0,
+  updatedAt: '2026-01-01',
   ...overrides,
 });
 
 describe('constraintService', () => {
   it('adjusts dates when due date is before start', () => {
-    const task = baseTask({ startDate: 1000, dueDate: 500 });
+    const task = baseTask({ startDate: '2026-01-03', dueDate: '2026-01-02' });
     const result = applyTaskConstraints(task, [task]);
 
     expect(result.changed).toBe(false);
@@ -31,12 +31,12 @@ describe('constraintService', () => {
   });
 
   it('pushes start after predecessors', () => {
-    const dependency = baseTask({ id: 't0', startDate: 1000, dueDate: 2000 });
-    const task = baseTask({ startDate: 500, dueDate: 600, predecessors: ['t0'] });
+    const dependency = baseTask({ id: 't0', startDate: '2026-01-02', dueDate: '2026-01-05' });
+    const task = baseTask({ startDate: '2026-01-01', dueDate: '2026-01-02', predecessors: ['t0'] });
     const result = applyTaskConstraints(task, [dependency, task]);
 
     expect(result.changed).toBe(true);
-    expect((result.task.startDate ?? 0)).toBeGreaterThanOrEqual(2000);
+    expect((result.task.startDate ?? '') >= '2026-01-05').toBe(true);
     expect(result.warnings.length).toBeGreaterThan(0);
   });
 });
