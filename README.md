@@ -78,6 +78,15 @@ npm run db:studio
 - Direct write APIs still exist for `/api/projects` and `/api/tasks` (POST/PATCH/DELETE) and are audited,
   but do not go through the draft approval flow.
 
+## Rate Limits
+Defaults can be overridden via environment variables:
+- `RATE_LIMIT_AUTH_MAX_REQUESTS` (default: 5)
+- `RATE_LIMIT_AUTH_WINDOW_MS` (default: 900000, 15 minutes)
+- `RATE_LIMIT_GENERAL_MAX_REQUESTS` (default: 100)
+- `RATE_LIMIT_GENERAL_WINDOW_MS` (default: 60000, 1 minute)
+- `RATE_LIMIT_AI_MAX_REQUESTS` (default: 20)
+- `RATE_LIMIT_AI_WINDOW_MS` (default: 60000, 1 minute)
+
 ## Data Export & Import
 
 ### Export

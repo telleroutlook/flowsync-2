@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { jsonError, jsonOk, validatedJson } from './helpers';
 import { createSession, createUser, getUserByUsername, parseAuthHeader, revokeSession, verifyPassword } from '../services/authService';
 import { checkRateLimit, getClientIp } from '../services/rateLimitService';
-import type { Variables } from '../types';
+import type { Bindings, Variables } from '../types';
 
-export const authRoute = new Hono<{ Variables: Variables }>();
+export const authRoute = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 /**
  * Custom password validation that checks length and character variety.
@@ -36,7 +36,7 @@ const credentialsSchema = z.object({
 authRoute.post('/register', validatedJson(credentialsSchema), async (c) => {
   // Rate limiting check
   const clientIp = getClientIp(c.req.raw);
-  const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AUTH');
+  const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AUTH', c.env);
 
   if (!rateLimitResult.allowed) {
     return jsonError(
@@ -59,7 +59,7 @@ authRoute.post('/register', validatedJson(credentialsSchema), async (c) => {
 authRoute.post('/login', validatedJson(credentialsSchema), async (c) => {
   // Rate limiting check
   const clientIp = getClientIp(c.req.raw);
-  const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AUTH');
+  const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AUTH', c.env);
 
   if (!rateLimitResult.allowed) {
     return jsonError(

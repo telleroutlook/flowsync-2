@@ -2,21 +2,22 @@ import { eq, and, gt, lt } from 'drizzle-orm';
 import { rateLimits } from '../db/schema';
 import type { DrizzleDB } from '../types';
 import { now as getCurrentTime } from './utils';
+import { getConfig } from '../../shared/config';
+import type { Bindings } from '../types';
 
 /**
- * Rate Limit Configuration
- *
- * Limits are per IP address and endpoint type:
- * - AUTH: 5 attempts per 15 minutes (login, register)
- * - GENERAL: 100 requests per minute
+ * Get rate limit configuration from centralized config
  */
-export const RATE_LIMITS = {
-  AUTH: { maxAttempts: 5, windowMs: 15 * 60 * 1000 }, // 15 minutes
-  GENERAL: { maxAttempts: 100, windowMs: 60 * 1000 }, // 1 minute
-  AI: { maxAttempts: 20, windowMs: 60 * 1000 }, // 1 minute - cost protection
-} as const;
+const getRateLimits = (env?: Bindings) => {
+  const config = getConfig(env as unknown as Record<string, unknown> | undefined).rateLimit;
+  return {
+    AUTH: { maxAttempts: config.auth.maxRequests, windowMs: config.auth.windowMs },
+    GENERAL: { maxAttempts: config.general.maxRequests, windowMs: config.general.windowMs },
+    AI: { maxAttempts: config.ai.maxRequests, windowMs: config.ai.windowMs },
+  } as const;
+};
 
-export type RateLimitType = keyof typeof RATE_LIMITS;
+export type RateLimitType = 'AUTH' | 'GENERAL' | 'AI';
 
 /**
  * Check if request should be rate limited
@@ -29,9 +30,10 @@ export type RateLimitType = keyof typeof RATE_LIMITS;
 export async function checkRateLimit(
   db: DrizzleDB,
   identifier: string,
-  type: RateLimitType
+  type: RateLimitType,
+  env?: Bindings
 ): Promise<{ allowed: boolean; retryAfter?: number }> {
-  const config = RATE_LIMITS[type];
+  const config = getRateLimits(env)[type];
   const currentTime = getCurrentTime();
   const windowStart = currentTime - config.windowMs;
 

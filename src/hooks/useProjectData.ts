@@ -3,10 +3,11 @@ import { apiService } from '../../services/apiService';
 import { storageGet, storageSet } from '../utils/storage';
 import { Project, Task } from '../../types';
 import { useI18n } from '../i18n';
+import { config } from '../../shared/config';
 
-const PAGE_SIZE = 100;
-const PROJECT_CACHE_TTL_MS = 30000;
-const MAX_CACHE_SIZE = 50; // Limit cache size to prevent unbounded growth
+// Pagination and cache configuration - centralized in shared/config.ts
+const { defaultPageSize: PAGE_SIZE } = config.pagination;
+const { ttlMs: PROJECT_CACHE_TTL_MS, maxSize: MAX_CACHE_SIZE } = config.cache.project;
 
 const getProjectStorageKey = (workspaceId: string): string =>
   workspaceId ? `activeProjectId:${workspaceId}` : 'activeProjectId';

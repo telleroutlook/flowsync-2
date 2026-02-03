@@ -4,11 +4,39 @@
  * This module provides a configuration-based system for defining and executing AI tools.
  * Tools are defined with their schemas and handlers, making it easy to extend the system
  * for new domains beyond just project/task management.
+ *
+ * Updated to use Zod for type-safe parameter validation.
  */
 
 import type { Context } from 'hono';
 import type { Bindings, Variables } from '../types';
 import { PUBLIC_WORKSPACE_ID } from './workspaceService';
+import { z } from 'zod';
+import {
+  listProjectsSchema,
+  getProjectSchema,
+  listTasksSchema,
+  searchTasksSchema,
+  getTaskSchema,
+  createProjectSchema,
+  updateProjectSchema,
+  deleteProjectSchema,
+  createTaskSchema,
+  updateTaskSchema,
+  deleteTaskSchema,
+  planChangesSchema,
+  applyChangesSchema,
+  zodToJsonSchemaWrapper,
+  type GetProjectArgs,
+  type GetTaskArgs,
+  type CreateProjectArgs,
+  type UpdateProjectArgs,
+  type DeleteProjectArgs,
+  type CreateTaskArgs,
+  type UpdateTaskArgs,
+  type DeleteTaskArgs,
+  type PlanChangesArgs,
+} from './aiToolSchemas';
 
 // ============================================================================
 // Type Definitions
@@ -35,6 +63,8 @@ export type ToolDefinition = {
   parameters: ToolParameterSchema;
   handler: ToolHandler;
   category?: ToolCategory;
+  // Optional: Zod schema for type-safe validation
+  zodSchema?: z.ZodTypeAny;
 };
 
 export type ToolHandler = (
@@ -49,86 +79,6 @@ export type ToolHandlerContext = {
 
 export type ToolRegistryConfig = {
   tools: ToolDefinition[];
-};
-
-// ============================================================================
-// Default Tool Schemas (reusable components)
-// ============================================================================
-
-const commonSchemas = {
-  entityId: {
-    type: 'string',
-    description: 'The unique identifier of the entity',
-  },
-  projectId: {
-    type: 'string',
-    description: 'The project ID',
-  },
-  reason: {
-    type: 'string',
-    description: 'Reason for this change (optional)',
-  },
-  pagination: {
-    page: { type: 'number', description: 'Page number (1-indexed)', minimum: 1 },
-    pageSize: { type: 'number', description: 'Items per page', minimum: 1, maximum: 100 },
-  },
-  taskTitle: {
-    type: 'string',
-    description: 'Task title',
-  },
-  taskFields: {
-    description: { type: 'string' },
-    status: { type: 'string', enum: ['TODO', 'IN_PROGRESS', 'DONE'], description: 'Task status' },
-    priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH'], description: 'Task priority' },
-    wbs: { type: 'string' },
-    startDate: {
-      type: 'number',
-      description: 'Task start date as Unix timestamp in milliseconds',
-      minimum: 0,
-    },
-    dueDate: {
-      type: 'number',
-      description: 'Task due date as Unix timestamp in milliseconds',
-      minimum: 0,
-    },
-    completion: { type: 'number', minimum: 0, maximum: 100 },
-    assignee: { type: 'string' },
-    isMilestone: { type: 'boolean' },
-    predecessors: { type: 'array', items: { type: 'string' } },
-  },
-  taskFilterFields: {
-    projectId: { type: 'string', description: 'Filter by project ID' },
-    status: { type: 'string', enum: ['TODO', 'IN_PROGRESS', 'DONE'], description: 'Filter by status' },
-    priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH'], description: 'Filter by priority' },
-    assignee: { type: 'string', description: 'Filter by assignee' },
-    isMilestone: { type: 'boolean', description: 'Filter by milestone tasks' },
-    startDateFrom: {
-      type: 'number',
-      description: 'Filter tasks with startDate >= this Unix ms timestamp',
-      minimum: 0,
-    },
-    startDateTo: {
-      type: 'number',
-      description: 'Filter tasks with startDate <= this Unix ms timestamp',
-      minimum: 0,
-    },
-    dueDateFrom: {
-      type: 'number',
-      description: 'Filter tasks with dueDate >= this Unix ms timestamp',
-      minimum: 0,
-    },
-    dueDateTo: {
-      type: 'number',
-      description: 'Filter tasks with dueDate <= this Unix ms timestamp',
-      minimum: 0,
-    },
-    q: { type: 'string', description: 'Search query for title/description' },
-  },
-  projectFields: {
-    name: { type: 'string' },
-    description: { type: 'string' },
-    icon: { type: 'string' },
-  },
 };
 
 // ============================================================================
@@ -256,28 +206,37 @@ const validateArgs = (schema: ToolParameterSchema, args: Record<string, unknown>
     }
   }
 
-  if (typeof args.startDate === 'number' && typeof args.dueDate === 'number' && args.dueDate < args.startDate) {
-    return { ok: false as const, error: 'dueDate must be greater than or equal to startDate.' };
-  }
-
-  if (
-    typeof args.startDateFrom === 'number' &&
-    typeof args.startDateTo === 'number' &&
-    args.startDateTo < args.startDateFrom
-  ) {
-    return { ok: false as const, error: 'startDateTo must be greater than or equal to startDateFrom.' };
-  }
-
-  if (
-    typeof args.dueDateFrom === 'number' &&
-    typeof args.dueDateTo === 'number' &&
-    args.dueDateTo < args.dueDateFrom
-  ) {
-    return { ok: false as const, error: 'dueDateTo must be greater than or equal to dueDateFrom.' };
-  }
+  // Note: Date range validation (startDate/dueDate) is now handled by Zod schemas
+  // This fallback validation is kept for backward compatibility with tools not yet migrated
 
   return { ok: true as const };
 };
+
+// ============================================================================
+// Zod Validation Helper (for type-safe tools)
+// ============================================================================
+
+/**
+ * Validate arguments using a Zod schema
+ * Returns normalized, validated data or an error message
+ */
+function validateWithZod<T extends z.ZodTypeAny>(
+  schema: T,
+  args: Record<string, unknown>
+): { ok: true; data: z.infer<T> } | { ok: false; error: string } {
+  try {
+    const data = schema.parse(args);
+    return { ok: true, data };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const formattedError = error.errors
+        .map((e) => `${e.path.join('.')}: ${e.message}`)
+        .join(', ');
+      return { ok: false, error: formattedError || 'Validation failed' };
+    }
+    return { ok: false, error: 'Validation error' };
+  }
+}
 
 class AIToolRegistry {
   private tools = new Map<string, ToolDefinition>();
@@ -335,12 +294,26 @@ class AIToolRegistry {
       return `Unknown tool: ${toolName}`;
     }
     try {
-      const normalizedArgs = normalizeArgs(tool.parameters, context.args);
-      const validation = validateArgs(tool.parameters, normalizedArgs);
-      if (!validation.ok) {
-        return `Error: ${validation.error}`;
+      // Use Zod validation if available, otherwise fall back to legacy validation
+      let validatedArgs: Record<string, unknown>;
+
+      if (tool.zodSchema) {
+        const zodValidation = validateWithZod(tool.zodSchema, context.args);
+        if (!zodValidation.ok) {
+          return `Error: ${zodValidation.error}`;
+        }
+        validatedArgs = zodValidation.data as Record<string, unknown>;
+      } else {
+        // Legacy validation path
+        const normalizedArgs = normalizeArgs(tool.parameters, context.args);
+        const validation = validateArgs(tool.parameters, normalizedArgs);
+        if (!validation.ok) {
+          return `Error: ${validation.error}`;
+        }
+        validatedArgs = normalizedArgs;
       }
-      return await tool.handler({ ...context, args: normalizedArgs });
+
+      return await tool.handler({ ...context, args: validatedArgs });
     } catch (error) {
       return `Error: ${error instanceof Error ? error.message : String(error)}`;
     }
@@ -351,14 +324,17 @@ class AIToolRegistry {
 // Default Tool Definitions for Project/Task Domain
 // ============================================================================
 
-function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variables }>): ToolDefinition[] {
+function createDefaultTools<TVariables extends Variables>(
+  c: Context<{ Bindings: Bindings; Variables: TVariables }>
+): ToolDefinition[] {
   const workspaceId = c.get('workspace')?.id ?? PUBLIC_WORKSPACE_ID;
   return [
     // Read-only tools - Always start with these to understand context
     {
       name: 'listProjects',
       description: 'List ALL available projects to show the user what projects exist. Use this FIRST when the user asks about projects or wants to work with tasks without specifying a project.',
-      parameters: { type: 'object', properties: {} },
+      parameters: zodToJsonSchemaWrapper(listProjectsSchema),
+      zodSchema: listProjectsSchema,
       category: 'read',
       handler: async ({ db }) => {
         const { projects } = await import('../db/schema');
@@ -373,16 +349,14 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     {
       name: 'getProject',
       description: 'Get detailed information about a SPECIFIC project by its ID. Use this after listProjects when the user wants details about a particular project.',
-      parameters: {
-        type: 'object',
-        properties: { id: commonSchemas.entityId },
-        required: ['id'],
-      },
+      parameters: zodToJsonSchemaWrapper(getProjectSchema),
+      zodSchema: getProjectSchema,
       category: 'read',
       handler: async ({ db, args }) => {
         const { projects } = await import('../db/schema');
         const { and, eq } = await import('drizzle-orm');
-        const id = typeof args.id === 'string' ? args.id : '';
+        // Type-safe access thanks to Zod
+        const { id } = args as GetProjectArgs;
         const projectList = await db
           .select()
           .from(projects)
@@ -397,13 +371,8 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     {
       name: 'listTasks',
       description: 'List tasks with filters. Use this to show tasks to the user, analyze project state, or understand task distribution. Supports filtering by status, priority, assignee, dates, and keyword search.',
-      parameters: {
-        type: 'object',
-        properties: {
-          ...commonSchemas.taskFilterFields,
-          ...commonSchemas.pagination,
-        },
-      },
+      parameters: zodToJsonSchemaWrapper(listTasksSchema),
+      zodSchema: listTasksSchema,
       category: 'read',
       handler: async ({ db, args }) => {
         const { tasks, projects } = await import('../db/schema');
@@ -481,13 +450,8 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     {
       name: 'searchTasks',
       description: 'Search for EXISTING tasks before creating or updating. CRITICAL: ALWAYS call this FIRST when the user mentions a task by title or keyword to find if it already exists. Supports the same filters as listTasks.',
-      parameters: {
-        type: 'object',
-        properties: {
-          ...commonSchemas.taskFilterFields,
-          ...commonSchemas.pagination,
-        },
-      },
+      parameters: zodToJsonSchemaWrapper(searchTasksSchema),
+      zodSchema: searchTasksSchema,
       category: 'read',
       // Reuse listTasks handler - they are functionally identical
       handler: async ({ db, args }) => {
@@ -566,17 +530,15 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     {
       name: 'getTask',
       description: 'Get COMPLETE details of a SPECIFIC task by its ID. Use this before updating a task to see its current values. ALWAYS call getTask before updateTask to understand what you are changing.',
-      parameters: {
-        type: 'object',
-        properties: { id: commonSchemas.entityId },
-        required: ['id'],
-      },
+      parameters: zodToJsonSchemaWrapper(getTaskSchema),
+      zodSchema: getTaskSchema,
       category: 'read',
       handler: async ({ db, args }) => {
         const { tasks, projects } = await import('../db/schema');
         const { and, eq } = await import('drizzle-orm');
         const { toTaskRecord } = await import('../services/serializers');
-        const id = typeof args.id === 'string' ? args.id : '';
+        // Type-safe access thanks to Zod
+        const { id } = args as GetTaskArgs;
         const taskList = await db
           .select()
           .from(tasks)
@@ -598,24 +560,16 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     {
       name: 'createProject',
       description: 'Create a NEW project. This creates a DRAFT that requires user approval before taking effect. Only use when the user wants to create an entirely new project.',
-      parameters: {
-        type: 'object',
-        properties: {
-          ...commonSchemas.projectFields,
-          reason: commonSchemas.reason,
-        },
-        required: ['name'],
-      },
+      parameters: zodToJsonSchemaWrapper(createProjectSchema),
+      zodSchema: createProjectSchema,
       category: 'write',
       handler: async ({ args }) => {
+        // Type-safe access thanks to Zod
+        const { name, description, icon } = args as CreateProjectArgs;
         const actions = [{
           entityType: 'project' as const,
           action: 'create' as const,
-          after: {
-            name: args.name,
-            description: args.description,
-            icon: args.icon,
-          },
+          after: { name, description, icon },
         }];
         const summary = actions.map(a => `${a.action} ${a.entityType}`).join(', ');
         return JSON.stringify({
@@ -628,27 +582,17 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     {
       name: 'updateProject',
       description: 'Update an EXISTING project. This creates a DRAFT that requires user approval. Use getProject FIRST to see current values before updating.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: commonSchemas.entityId,
-          ...commonSchemas.projectFields,
-          reason: commonSchemas.reason,
-        },
-        required: ['id'],
-      },
+      parameters: zodToJsonSchemaWrapper(updateProjectSchema),
+      zodSchema: updateProjectSchema,
       category: 'write',
       handler: async ({ args }) => {
-        const id = typeof args.id === 'string' ? args.id : String(args.id);
+        // Type-safe access thanks to Zod
+        const { id, name, description, icon } = args as UpdateProjectArgs;
         const actions = [{
           entityType: 'project' as const,
           action: 'update' as const,
           entityId: id,
-          after: {
-            name: args.name,
-            description: args.description,
-            icon: args.icon,
-          },
+          after: { name, description, icon },
         }];
         const summary = actions.map(a => `${a.action} ${a.entityType}(${id})`).join(', ');
         return JSON.stringify({
@@ -661,17 +605,12 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     {
       name: 'deleteProject',
       description: 'Delete a project and ALL its tasks. This creates a DRAFT that requires user approval. WARNING: This is destructive - confirm with the user before using.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: commonSchemas.entityId,
-          reason: commonSchemas.reason,
-        },
-        required: ['id'],
-      },
+      parameters: zodToJsonSchemaWrapper(deleteProjectSchema),
+      zodSchema: deleteProjectSchema,
       category: 'write',
       handler: async ({ args }) => {
-        const id = typeof args.id === 'string' ? args.id : String(args.id);
+        // Type-safe access thanks to Zod
+        const { id } = args as DeleteProjectArgs;
         const actions = [{
           entityType: 'project' as const,
           action: 'delete' as const,
@@ -688,37 +627,18 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     {
       name: 'createTask',
       description: 'Create a NEW task that does NOT exist yet. CRITICAL RULE: You MUST call searchTasks FIRST to verify the task does not exist. If the user says "this task" or refers to an existing task, use updateTask instead. Creates a DRAFT requiring approval.',
-      parameters: {
-        type: 'object',
-        properties: {
-          projectId: {
-            ...commonSchemas.projectId,
-            description: 'The project ID for this task. Use the Active Project ID from the system context.',
-          },
-          title: commonSchemas.taskTitle,
-          ...commonSchemas.taskFields,
-          reason: commonSchemas.reason,
-        },
-        required: ['projectId', 'title'],
-      },
+      parameters: zodToJsonSchemaWrapper(createTaskSchema),
+      zodSchema: createTaskSchema,
       category: 'write',
       handler: async ({ args }) => {
+        // Type-safe access thanks to Zod
+        const { projectId, title, description, status, priority, wbs, startDate, dueDate, completion, assignee, isMilestone, predecessors } = args as CreateTaskArgs;
         const actions = [{
           entityType: 'task' as const,
           action: 'create' as const,
           after: {
-            projectId: args.projectId,
-            title: args.title,
-            description: args.description,
-            status: args.status,
-            priority: args.priority,
-            wbs: args.wbs,
-            startDate: args.startDate,
-            dueDate: args.dueDate,
-            completion: args.completion,
-            assignee: args.assignee,
-            isMilestone: args.isMilestone,
-            predecessors: args.predecessors,
+            projectId, title, description, status, priority, wbs,
+            startDate, dueDate, completion, assignee, isMilestone, predecessors,
           },
         }];
         const summary = actions.map(a => `${a.action} ${a.entityType}`).join(', ');
@@ -732,35 +652,19 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     {
       name: 'updateTask',
       description: 'Update an EXISTING task. Use when the user says "this task", "the task", or wants to change attributes of a task they mentioned. CRITICAL: ALWAYS call getTask FIRST to see current values. Creates a DRAFT requiring approval.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: commonSchemas.entityId,
-          title: commonSchemas.taskTitle,
-          ...commonSchemas.taskFields,
-          reason: commonSchemas.reason,
-        },
-        required: ['id'],
-      },
+      parameters: zodToJsonSchemaWrapper(updateTaskSchema),
+      zodSchema: updateTaskSchema,
       category: 'write',
       handler: async ({ args }) => {
-        const id = typeof args.id === 'string' ? args.id : String(args.id);
+        // Type-safe access thanks to Zod
+        const { id, title, description, status, priority, wbs, startDate, dueDate, completion, assignee, isMilestone, predecessors } = args as UpdateTaskArgs;
         const actions = [{
           entityType: 'task' as const,
           action: 'update' as const,
           entityId: id,
           after: {
-            title: args.title,
-            description: args.description,
-            status: args.status,
-            priority: args.priority,
-            wbs: args.wbs,
-            startDate: args.startDate,
-            dueDate: args.dueDate,
-            completion: args.completion,
-            assignee: args.assignee,
-            isMilestone: args.isMilestone,
-            predecessors: args.predecessors,
+            title, description, status, priority, wbs,
+            startDate, dueDate, completion, assignee, isMilestone, predecessors,
           },
         }];
         const summary = actions.map(a => `${a.action} ${a.entityType}(${id})`).join(', ');
@@ -774,17 +678,12 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     {
       name: 'deleteTask',
       description: 'Delete a task permanently. Creates a DRAFT that requires user approval. WARNING: Destructive action - use updateTask to set status to DONE instead if appropriate.',
-      parameters: {
-        type: 'object',
-        properties: {
-          id: commonSchemas.entityId,
-          reason: commonSchemas.reason,
-        },
-        required: ['id'],
-      },
+      parameters: zodToJsonSchemaWrapper(deleteTaskSchema),
+      zodSchema: deleteTaskSchema,
       category: 'write',
       handler: async ({ args }) => {
-        const id = typeof args.id === 'string' ? args.id : String(args.id);
+        // Type-safe access thanks to Zod
+        const { id } = args as DeleteTaskArgs;
         const actions = [{
           entityType: 'task' as const,
           action: 'delete' as const,
@@ -801,42 +700,18 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     {
       name: 'planChanges',
       description: 'Create MULTIPLE related changes in a SINGLE draft for batch approval. Use this when making several task/project changes together that should be approved as a group. More efficient than multiple individual create/update/delete calls.\n\nFor UPDATE and DELETE actions, you can provide EITHER:\n1. entityId (exact UUID or first 8 characters)\n2. Title in the after object (system will match by title)\n3. WBS code in the after object\n\nThe system uses intelligent matching to find the correct entity even with partial information.',
-      parameters: {
-        type: 'object',
-        properties: {
-          projectId: commonSchemas.projectId,
-          reason: commonSchemas.reason,
-          actions: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                entityType: { type: 'string', enum: ['task', 'project'] },
-                action: { type: 'string', enum: ['create', 'update', 'delete'] },
-                entityId: {
-                  type: 'string',
-                  description: 'Optional: The ID of the entity (for update/delete). Can be exact UUID or first 8 chars. If not provided, system will match by title/WBS.',
-                },
-                after: {
-                  type: 'object',
-                  description: 'The new state. Required for create/update. For update/delete, include title/WBS for fuzzy matching if entityId is omitted.',
-                },
-              },
-              required: ['entityType', 'action'],
-            },
-          },
-        },
-        required: ['actions'],
-      },
+      parameters: zodToJsonSchemaWrapper(planChangesSchema),
+      zodSchema: planChangesSchema,
       category: 'write',
       handler: async ({ args }) => {
-        const actions = Array.isArray(args.actions) ? (args.actions as Array<Record<string, unknown>>) : [];
+        // Type-safe access thanks to Zod
+        const { actions } = args as PlanChangesArgs;
         const summary = actions.map((action) => {
-          const type = typeof action.entityType === 'string' ? action.entityType : 'unknown';
-          const op = typeof action.action === 'string' ? action.action : 'unknown';
-          const after = action.after as Record<string, unknown> | undefined;
-          const id = typeof action.entityId === 'string' ? action.entityId :
-                    (typeof after?.title === 'string' ? `"${after.title}"` : 'new');
+          const type = action.entityType;
+          const op = action.action;
+          const title = action.after?.title;
+          const id = action.entityId ||
+                    (typeof title === 'string' ? `"${title}"` : 'new');
           return `${op} ${type}(${id})`;
         }).join(', ');
         return JSON.stringify({
@@ -851,14 +726,8 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
     {
       name: 'applyChanges',
       description: 'Apply a previously created draft by its ID. This executes the draft actions. Only use when the user explicitly approves or says "apply", "approve", "confirm".',
-      parameters: {
-        type: 'object',
-        properties: {
-          draftId: { type: 'string' },
-          actor: { type: 'string', enum: ['user', 'agent', 'system'] },
-        },
-        required: ['draftId'],
-      },
+      parameters: zodToJsonSchemaWrapper(applyChangesSchema),
+      zodSchema: applyChangesSchema,
       category: 'action',
       handler: async () => {
         return JSON.stringify({ success: true, message: 'Draft applied successfully.' });
@@ -871,8 +740,8 @@ function createDefaultTools(c: Context<{ Bindings: Bindings; Variables: Variable
 // Factory Function
 // ============================================================================
 
-export function createToolRegistry(
-  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+export function createToolRegistry<TVariables extends Variables>(
+  c: Context<{ Bindings: Bindings; Variables: TVariables }>,
   additionalTools?: ToolDefinition[]
 ): AIToolRegistry {
   const registry = new AIToolRegistry();
