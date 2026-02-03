@@ -8,7 +8,7 @@ import { createToolRegistry } from '../services/aiToolRegistry';
 import { checkRateLimit, getClientIp } from '../services/rateLimitService';
 import type { Bindings, Variables } from '../types';
 import type { Context } from 'hono';
-import { MAX_HISTORY_PART_CHARS } from '../../shared/aiLimits';
+import { MAX_HISTORY_PART_CHARS } from '../../shared/config';
 
 export const aiRoute = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 aiRoute.use('*', workspaceMiddleware);

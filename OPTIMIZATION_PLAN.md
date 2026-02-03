@@ -242,22 +242,7 @@ handler: async ({ db, args }) => {
   // ...
 }
 
-// 转换为 JSON Schema for OpenAI
-const parameters = zodToJsonSchema(listTasksSchema);
 ```
-
-**优势：**
-- ✅ 编译时类型检查
-- ✅ 运行时验证与类型定义同一来源
-- ✅ 更好的 IDE 支持
-- ✅ 自动错误消息
-
-**实施计划：**
-1. 安装 `zod` 和 `zod-to-json-schema`
-2. 重构 `aiToolRegistry.ts`，为每个工具定义 Zod schema
-3. 更新工具注册逻辑，使用 `zodToJsonSchema` 生成 OpenAI 格式
-
----
 
 ### 🟢 2. 硬编码配置集中化 - 高优先级
 
@@ -269,7 +254,6 @@ const parameters = zodToJsonSchema(listTasksSchema);
 |------|------|------|
 | `worker/routes/ai.ts` | `MAX_HISTORY_MESSAGES=30`, `MAX_MESSAGE_CHARS=4000`, 等共 11 个 | 16-24 |
 | `src/hooks/useProjectData.ts` | `PAGE_SIZE=100`, `PROJECT_CACHE_TTL_MS=30000`, `MAX_CACHE_SIZE=50` | 7-9 |
-| `shared/aiLimits.ts` | `MAX_HISTORY_PART_CHARS=2000` | 1 |
 
 **改进方案：** 创建集中配置文件
 
@@ -378,14 +362,7 @@ export const config = {
 - [ ] 创建 `shared/config.ts`
 - [ ] 迁移 `ai.ts` 的 11 个常量
 - [ ] 迁移 `useProjectData.ts` 的 3 个常量
-- [ ] 迁移 `aiLimits.ts` 的 1 个常量
 - [ ] 更新所有引用
-
-#### 1.2 AI 工具类型安全
-- [ ] 安装依赖：`zod`, `zod-to-json-schema`
-- [ ] 为每个工具定义 Zod schema
-- [ ] 更新 `createToolRegistry` 使用 Zod 验证
-- [ ] 添加测试确保工具验证正确
 
 ### 阶段 2：低优先级优化（可选）
 
@@ -405,7 +382,6 @@ export const config = {
 
 **立即实施（高价值/低成本）：**
 1. ✅ 配置集中化 - 1-2 小时，立即提升可维护性
-2. ✅ AI 工具类型安全 - 3-4 小时，提升类型安全
 
 **暂缓（需验证需求）：**
 1. ⏸️ 聊天消息虚拟化 - 等待用户反馈或性能数据

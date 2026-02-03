@@ -5,7 +5,7 @@ import { ChatMessage, ChatAttachment, DraftAction, Project, Task, Draft, Actiona
 import { generateId } from '../utils';
 import { processToolCalls, READ_ONLY_TOOLS, type ApiClient, type ProcessingStep } from './ai';
 import { useI18n } from '../i18n';
-import { MAX_HISTORY_PART_CHARS } from '../../shared/aiLimits';
+import { MAX_HISTORY_PART_CHARS } from '../../shared/config';
 
 const MAX_RETRIES = 3;
 const MAX_HISTORY_MESSAGES = 10;
