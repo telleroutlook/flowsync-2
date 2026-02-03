@@ -418,8 +418,8 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
       transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       className={cn(
         "flex flex-col bg-surface relative z-20 shrink-0 overflow-hidden",
-        isMobile 
-          ? "h-full border-none rounded-none shadow-none" 
+        isMobile
+          ? "h-full w-full border-none rounded-none shadow-none"
           : "h-[calc(100vh-2rem)] my-4 rounded-2xl border border-border-subtle/50 shadow-float ring-1 ring-black/5"
       )}
     >
