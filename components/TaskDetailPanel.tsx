@@ -127,6 +127,24 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
       </div>
       <div className="flex-1 overflow-y-auto p-3.5 space-y-4 custom-scrollbar">
 
+        {/* Task Identifiers - ID and WBS */}
+        <div className="flex items-center gap-3 text-[10px] text-text-secondary">
+          <div className="flex items-center gap-1.5">
+            <span className="font-semibold uppercase">ID:</span>
+            <code className="bg-muted px-1.5 py-0.5 rounded text-[9px] font-mono">
+              {(selectedTask.id?.substring(0, 8) ?? 'unknown')}…
+            </code>
+          </div>
+          {selectedTask.wbs && (
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold uppercase">WBS:</span>
+              <code className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold">
+                {selectedTask.wbs}
+              </code>
+            </div>
+          )}
+        </div>
+
         {/* Title */}
         <div className="space-y-1.5">
           <label className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider" htmlFor="task-title">{t('task.title')}</label>

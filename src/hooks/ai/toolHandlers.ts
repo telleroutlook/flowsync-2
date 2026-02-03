@@ -317,30 +317,45 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
 
   updateTask: async (args, { api, activeProjectId, generateId, pushProcessingStep, t }) => {
     const taskId = getStringParam(args, 'id');
-    if (!taskId) {
+    const wbs = getStringParam(args, 'wbs'); // Get WBS parameter
+
+    if (!taskId && !wbs) {
       return { output: t('tool.error.invalid_task_id') };
     }
 
-    // Build ID map to fix truncated IDs (both for taskId and predecessors)
-    const projectIds = new Set<string>();
-    if (activeProjectId) projectIds.add(activeProjectId);
-    const idMap = await buildIdMap(api, projectIds);
+    let fixedTaskId = taskId;
+    let correctedTaskId = false;
+    let correctedPredecessors = false;
+    let fixedPredecessors: string[] = [];
 
-    // Fix taskId (AI may have truncated it)
-    const fixedTaskId = fixTaskId(taskId, idMap) || taskId;
+    if (taskId) {
+      // Build ID map to fix truncated IDs (both for taskId and predecessors)
+      const projectIds = new Set<string>();
+      if (activeProjectId) projectIds.add(activeProjectId);
+      const idMap = await buildIdMap(api, projectIds);
 
-    pushProcessingStep?.(t('processing.reading_task_details'));
-    const task = await api.getTask(fixedTaskId);
-    if (activeProjectId && task.projectId !== activeProjectId) {
-      return { output: t('tool.error.task_not_in_active_project') };
+      // Fix taskId (AI may have truncated it)
+      fixedTaskId = fixTaskId(taskId, idMap) || taskId;
+      correctedTaskId = fixedTaskId !== taskId;
+
+      pushProcessingStep?.(t('processing.reading_task_details'));
+      if (!fixedTaskId) {
+        return { output: t('tool.error.invalid_task_id') };
+      }
+      const task = await api.getTask(fixedTaskId);
+      if (activeProjectId && task.projectId !== activeProjectId) {
+        return { output: t('tool.error.task_not_in_active_project') };
+      }
+
+      // Fix predecessors array
+      fixedPredecessors = fixPredecessors(args.predecessors, idMap);
+      correctedPredecessors = args.predecessors != null &&
+        JSON.stringify(fixedPredecessors) !== JSON.stringify(args.predecessors);
     }
 
-    // Fix predecessors array
-    const fixedPredecessors = fixPredecessors(args.predecessors, idMap);
-    const correctedPredecessors = args.predecessors != null &&
-      JSON.stringify(fixedPredecessors) !== JSON.stringify(args.predecessors);
-
-    const correctedTaskId = fixedTaskId !== taskId;
+    if (!taskId) {
+      fixedPredecessors = Array.isArray(args.predecessors) ? args.predecessors : [];
+    }
 
     const draftActions: DraftAction[] = [{
       id: generateId(),
@@ -352,7 +367,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         description: args.description,
         status: args.status,
         priority: args.priority,
-        wbs: args.wbs,
+        wbs: args.wbs, // Preserve WBS for backend resolution
         startDate: args.startDate,
         dueDate: args.dueDate,
         completion: args.completion,
@@ -379,31 +394,41 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
 
   deleteTask: async (args, { api, activeProjectId, generateId, pushProcessingStep, t }) => {
     const taskId = getStringParam(args, 'id');
-    if (!taskId) {
+    const wbs = getStringParam(args, 'wbs'); // Get WBS parameter
+
+    if (!taskId && !wbs) {
       return { output: t('tool.error.invalid_task_id') };
     }
 
-    // Build ID map to fix truncated IDs
-    const projectIds = new Set<string>();
-    if (activeProjectId) projectIds.add(activeProjectId);
-    const idMap = await buildIdMap(api, projectIds);
+    let fixedTaskId = taskId;
+    let correctedTaskId = false;
 
-    // Fix taskId (AI may have truncated it)
-    const fixedTaskId = fixTaskId(taskId, idMap) || taskId;
+    if (taskId) {
+      // Build ID map to fix truncated IDs
+      const projectIds = new Set<string>();
+      if (activeProjectId) projectIds.add(activeProjectId);
+      const idMap = await buildIdMap(api, projectIds);
 
-    pushProcessingStep?.(t('processing.reading_task_details'));
-    const task = await api.getTask(fixedTaskId);
-    if (activeProjectId && task.projectId !== activeProjectId) {
-      return { output: t('tool.error.task_not_in_active_project') };
+      // Fix taskId (AI may have truncated it)
+      fixedTaskId = fixTaskId(taskId, idMap) || taskId;
+      correctedTaskId = fixedTaskId !== taskId;
+
+      pushProcessingStep?.(t('processing.reading_task_details'));
+      if (!fixedTaskId) {
+        return { output: t('tool.error.invalid_task_id') };
+      }
+      const task = await api.getTask(fixedTaskId);
+      if (activeProjectId && task.projectId !== activeProjectId) {
+        return { output: t('tool.error.task_not_in_active_project') };
+      }
     }
-
-    const correctedTaskId = fixedTaskId !== taskId;
 
     const draftActions: DraftAction[] = [{
       id: generateId(),
       entityType: 'task',
       action: 'delete',
       entityId: fixedTaskId,
+      after: wbs ? { wbs } : undefined, // Store WBS for backend fallback
     }];
 
     return {

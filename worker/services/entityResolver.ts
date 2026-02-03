@@ -3,6 +3,13 @@
  *
  * Multi-strategy entity resolution for AI-generated actions
  * Provides robust fallback matching when AI provides incomplete/incorrect IDs
+ *
+ * Matching priority (for tasks):
+ * 1. Full UUID (36 chars) - confidence 1.0
+ * 2. WBS Code - confidence 0.95 (more reliable than truncated ID)
+ * 3. Truncated ID (8 chars) - confidence 0.9
+ * 4. Title exact match - confidence 0.9
+ * 5. Fuzzy title match - confidence 0.7
  */
 
 import { eq, and, sql } from 'drizzle-orm';
@@ -22,6 +29,14 @@ const TITLE_EXACT_WITH_ASSIGNEE_CONFIDENCE = 0.85;
 const FUZZY_MATCH_CONFIDENCE = 0.7;
 const TASK_FUZZY_SEARCH_LIMIT = 50;
 const PROJECT_FUZZY_SEARCH_LIMIT = 50;
+
+// Match tracking for observability
+interface MatchAttempt {
+  strategy: string;
+  success: boolean;
+  confidence?: number;
+  reason?: string;
+}
 
 export interface EntityReference {
   entityType: EntityType;
@@ -44,6 +59,34 @@ export interface ResolutionResult<T = TaskRecord | ProjectRecord> {
   confidence: number;
   warnings?: string[];
   error?: string;
+}
+
+/**
+ * Log match attempts to observability logs
+ */
+async function logMatchAttempts(
+  db: ReturnType<typeof import('../db').getDb>,
+  attempts: MatchAttempt[],
+  entityType: EntityType
+): Promise<void> {
+  try {
+    const { observabilityLogs } = await import('../db/schema');
+    const { generateId, now } = await import('./utils');
+
+    await db.insert(observabilityLogs).values({
+      id: generateId(),
+      kind: 'entity_resolution',
+      createdAt: now(),
+      payload: {
+        entityType,
+        attempts,
+        timestamp: now(),
+      } as Record<string, unknown>,
+    });
+  } catch (error) {
+    // Fail silently - logging shouldn't break resolution
+    console.error('[entityResolver] Failed to log match attempts:', error);
+  }
 }
 
 const normalize = (s: string | undefined | null): string =>
@@ -100,6 +143,7 @@ export async function resolveTask(
   }
 
   const warnings: string[] = [];
+  const matchAttempts: MatchAttempt[] = [];
   const title = normalize(ref.fallbackRef?.title || (ref.after?.title as string));
   const wbs = ref.fallbackRef?.wbs || (ref.after?.wbs as string);
   const projectId = ref.fallbackRef?.projectId ||
@@ -127,6 +171,8 @@ export async function resolveTask(
       .limit(1);
 
     if (rows[0]?.tasks) {
+      matchAttempts.push({ strategy: 'exact_id', success: true, confidence: 1.0 });
+      await logMatchAttempts(db, matchAttempts, 'task');
       return {
         success: true,
         entity: toTaskRecord(rows[0].tasks),
@@ -138,6 +184,8 @@ export async function resolveTask(
 
     // Complete UUID provided but not found - fail fast
     // Do NOT try other strategies as they might match to wrong tasks
+    matchAttempts.push({ strategy: 'exact_id', success: false, reason: 'ID not found' });
+    await logMatchAttempts(db, matchAttempts, 'task');
     return {
       success: false,
       confidence: 0,
@@ -146,8 +194,35 @@ export async function resolveTask(
     };
   }
 
-  // Strategy 2: Truncated ID (first 8 characters)
+  // Strategy 2: WBS code match (higher priority than truncated ID)
+  // WBS is more reliable than truncated UUID as it's project-specific and shorter
+  if (wbs && projectId) {
+    matchAttempts.push({ strategy: 'wbs', success: false }); // Tentative
+    const { tasks } = await import('../db/schema');
+    const { toTaskRecord } = await import('./serializers');
+
+    const rows = await db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.wbs, wbs), eq(tasks.projectId, projectId!)))
+      .limit(1);
+
+    if (rows[0]) {
+      matchAttempts[matchAttempts.length - 1] = { strategy: 'wbs', success: true, confidence: WBS_CONFIDENCE };
+      await logMatchAttempts(db, matchAttempts, 'task');
+      return {
+        success: true,
+        entity: toTaskRecord(rows[0]),
+        entityId: rows[0].id,
+        method: 'wbs',
+        confidence: WBS_CONFIDENCE,
+      };
+    }
+  }
+
+  // Strategy 3: Truncated ID (first 8 characters)
   if (ref.entityId && ref.entityId.length >= UUID_PREFIX_LENGTH) {
+    matchAttempts.push({ strategy: 'truncated_id', success: false });
     const { tasks, projects } = await import('../db/schema');
     const { toTaskRecord } = await import('./serializers');
     const prefix = ref.entityId.substring(0, UUID_PREFIX_LENGTH);
@@ -165,6 +240,8 @@ export async function resolveTask(
       .limit(10);
 
     if (rows.length === 1 && rows[0]?.tasks) {
+      matchAttempts[matchAttempts.length - 1] = { strategy: 'truncated_id', success: true, confidence: TRUNCATED_ID_CONFIDENCE };
+      await logMatchAttempts(db, matchAttempts, 'task');
       return {
         success: true,
         entity: toTaskRecord(rows[0].tasks),
@@ -180,6 +257,8 @@ export async function resolveTask(
         r => r.tasks && normalize(r.tasks.title) === title
       );
       if (match?.tasks) {
+        matchAttempts[matchAttempts.length - 1] = { strategy: 'truncated_id', success: true, confidence: TRUNCATED_ID_WITH_TITLE_CONFIDENCE };
+        await logMatchAttempts(db, matchAttempts, 'task');
         return {
           success: true,
           entity: toTaskRecord(match.tasks),
@@ -191,30 +270,9 @@ export async function resolveTask(
     }
   }
 
-  // Strategy 3: WBS code match
-  if (wbs && projectId) {
-    const { tasks } = await import('../db/schema');
-    const { toTaskRecord } = await import('./serializers');
-
-    const rows = await db
-      .select()
-      .from(tasks)
-      .where(and(eq(tasks.wbs, wbs), eq(tasks.projectId, projectId!)))
-      .limit(1);
-
-    if (rows[0]) {
-      return {
-        success: true,
-        entity: toTaskRecord(rows[0]),
-        entityId: rows[0].id,
-        method: 'wbs',
-        confidence: WBS_CONFIDENCE,
-      };
-    }
-  }
-
   // Strategy 4: Title + Project exact match
   if (title && projectId) {
+    matchAttempts.push({ strategy: 'title_exact', success: false });
     const { tasks } = await import('../db/schema');
     const { toTaskRecord } = await import('./serializers');
 
@@ -230,6 +288,8 @@ export async function resolveTask(
       .limit(10);
 
     if (rows.length === 1) {
+      matchAttempts[matchAttempts.length - 1] = { strategy: 'title_exact', success: true, confidence: TITLE_EXACT_CONFIDENCE };
+      await logMatchAttempts(db, matchAttempts, 'task');
       return {
         success: true,
         entity: toTaskRecord(rows[0]!),
@@ -242,6 +302,8 @@ export async function resolveTask(
     if (rows.length > 1 && assignee) {
       const match = rows.find(r => r.assignee === assignee);
       if (match) {
+        matchAttempts[matchAttempts.length - 1] = { strategy: 'title_exact', success: true, confidence: TITLE_EXACT_WITH_ASSIGNEE_CONFIDENCE };
+        await logMatchAttempts(db, matchAttempts, 'task');
         return {
           success: true,
           entity: toTaskRecord(match),
@@ -255,6 +317,7 @@ export async function resolveTask(
 
   // Strategy 5: Fuzzy title match
   if (title && projectId) {
+    matchAttempts.push({ strategy: 'title_fuzzy', success: false });
     const { tasks } = await import('../db/schema');
     const { toTaskRecord } = await import('./serializers');
 
@@ -276,6 +339,8 @@ export async function resolveTask(
     }
 
     if (bestMatch) {
+      matchAttempts[matchAttempts.length - 1] = { strategy: 'title_fuzzy', success: true, confidence: FUZZY_MATCH_CONFIDENCE };
+      await logMatchAttempts(db, matchAttempts, 'task');
       return {
         success: true,
         entity: toTaskRecord(bestMatch),
@@ -290,6 +355,7 @@ export async function resolveTask(
   }
 
   // All strategies failed
+  await logMatchAttempts(db, matchAttempts, 'task');
   return {
     success: false,
     confidence: 0,

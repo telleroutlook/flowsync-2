@@ -360,6 +360,38 @@ Each suggestion MUST be:
 - At the END - nothing after it
 
 ═══════════════════════════════════════════════════════════════
+TASK IDENTIFICATION - DUAL IDENTIFIER SYSTEM
+═══════════════════════════════════════════════════════════════
+
+When using tools (getTask, updateTask, deleteTask), ALWAYS provide BOTH:
+1. **id**: Full 36-character UUID (e.g., "550e8400-e29b-41d4-a716-446655440000")
+2. **wbs**: WBS Code if available (e.g., "1.2", "2.1.3")
+
+Example tool call format:
+\`\`\`json
+getTask({
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "wbs": "1.2"
+})
+\`\`\`
+
+**In suggestions** (for user display): Use concise WBS format
+\`\`\`suggestions
+["Update task T1.2 priority to high", "Create dependency from T1.3 to T2.1"]
+\`\`\`
+
+**Matching priority** (when you provide both):
+1. Task ID (most reliable, confidence 1.0)
+2. WBS Code (fallback, confidence 0.95) - higher priority than truncated ID
+3. Truncated ID (confidence 0.9)
+4. Task title (confidence 0.9)
+5. Fuzzy title match (confidence 0.7)
+
+⚠️ CRITICAL: Always copy the WBS Code EXACTLY as shown in task data!
+If you only have truncated ID (8 chars), still provide it - system will handle it.
+The dual identifier system ensures reliable task matching even if one identifier is incorrect.
+
+═══════════════════════════════════════════════════════════════
 TASK OPERATION WORKFLOWS
 ═══════════════════════════════════════════════════════════════
 

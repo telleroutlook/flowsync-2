@@ -1865,16 +1865,36 @@ export const applyDraft = async (
             stats.failed++;
           }
 
-        } else if (action.action === 'update' && action.entityId) {
+        } else if (action.action === 'update' && (action.entityId || action.after?.wbs)) {
           try {
-            const before = await getTaskById(db, action.entityId, workspaceId);
+            let before = action.entityId ? await getTaskById(db, action.entityId, workspaceId) : null;
+            let resolvedEntityId = action.entityId;
 
-            if (!before) {
+            // Fallback: Try WBS match if ID not found and WBS provided
+            if (!before && action.after?.wbs && draftProjectId) {
+              const { resolveTask } = await import('./entityResolver');
+              const wbsResult = await resolveTask(
+                db,
+                { entityId: undefined, entityType: 'task', action: 'update', fallbackRef: { wbs: action.after.wbs as string, projectId: draftProjectId } },
+                workspaceId,
+                draftProjectId
+              );
+
+              if (wbsResult.success && wbsResult.entity) {
+                before = wbsResult.entity;
+                resolvedEntityId = wbsResult.entityId!;
+                // Add warning about ID correction
+                if (!action.warnings) action.warnings = [];
+                action.warnings.push(`Task ID corrected using WBS "${action.after.wbs}"`);
+              }
+            }
+
+            if (!before || !resolvedEntityId) {
               // Task not found - treat as skipped
               results.push({
                 ...action,
                 status: 'skipped',
-                error: `Task not found: ${action.entityId}. The task may have been deleted or the draft is outdated.`,
+                error: `Task not found: ${action.entityId ?? action.after?.wbs ?? 'unknown'}. The task may have been deleted or the draft is outdated.`,
               });
               stats.skipped++;
               continue;
@@ -1892,10 +1912,11 @@ export const applyDraft = async (
             }
 
             if (!action.after) {
-              throw new Error(`Invalid draft: No update data provided for task ${action.entityId}. This draft may be corrupted.`);
+              const refLabel = resolvedEntityId ?? action.entityId ?? 'unknown';
+              throw new Error(`Invalid draft: No update data provided for task ${refLabel}. This draft may be corrupted.`);
             }
 
-            const updated = await updateTask(db, action.entityId, {
+            const updated = await updateTask(db, resolvedEntityId, {
               title: (action.after?.title as string) ?? undefined,
               description: (action.after?.description as string) ?? undefined,
               status: toOptionalTaskStatus(action.after?.status),
@@ -1970,9 +1991,40 @@ export const applyDraft = async (
             stats.failed++;
           }
 
-        } else if (action.action === 'delete' && action.entityId) {
+        } else if (action.action === 'delete' && (action.entityId || action.after?.wbs)) {
           try {
-            const before = await getTaskById(db, action.entityId, workspaceId);
+            let before = action.entityId ? await getTaskById(db, action.entityId, workspaceId) : null;
+            let resolvedEntityId = action.entityId;
+
+            // Fallback: Try WBS match if ID not found and WBS provided
+            if (!before && action.after?.wbs && draftProjectId) {
+              const { resolveTask } = await import('./entityResolver');
+              const wbsResult = await resolveTask(
+                db,
+                { entityId: undefined, entityType: 'task', action: 'delete', fallbackRef: { wbs: action.after.wbs as string, projectId: draftProjectId } },
+                workspaceId,
+                draftProjectId
+              );
+
+              if (wbsResult.success && wbsResult.entity) {
+                before = wbsResult.entity;
+                resolvedEntityId = wbsResult.entityId!;
+                // Add warning about ID correction
+                if (!action.warnings) action.warnings = [];
+                action.warnings.push(`Task ID corrected using WBS "${action.after.wbs}"`);
+              }
+            }
+
+            if (!resolvedEntityId) {
+              results.push({
+                ...action,
+                status: 'skipped',
+                error: 'Task not found or delete failed',
+              });
+              stats.skipped++;
+              continue;
+            }
+
             if (before && draftProjectId && before.projectId !== draftProjectId) {
               results.push({
                 ...action,
@@ -1985,7 +2037,7 @@ export const applyDraft = async (
               continue;
             }
 
-            const deleted = await deleteTask(db, action.entityId, workspaceId);
+            const deleted = await deleteTask(db, resolvedEntityId, workspaceId);
 
             results.push({
               ...action,
