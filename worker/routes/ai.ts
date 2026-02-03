@@ -271,11 +271,32 @@ class ApiError extends Error {
   }
 }
 
-const buildSystemInstruction = (systemContext?: string) => {
+const detectUserLanguage = (message: string): 'en' | 'zh' => {
+  // Simple heuristic: if message contains CJK characters, treat as Chinese.
+  // This keeps behavior aligned with the user's question language.
+  return /[\u4e00-\u9fff]/.test(message) ? 'zh' : 'en';
+};
+
+const buildSystemInstruction = (systemContext?: string, userLanguage: 'en' | 'zh' = 'en') => {
   const today = new Date().toISOString().split('T')[0];
+  const languageLine = userLanguage === 'zh'
+    ? 'User language: Chinese (zh).'
+    : 'User language: English (en).';
+  const suggestionExamples = userLanguage === 'zh'
+    ? `✅ **GOOD Examples** (based on actual data):
+- "查看电商平台项目中本周到期的3个高优先级任务"
+- "将张三负责的5个已完成任务标记为DONE"
+- "分析移动端APP项目的完成率（当前65%，8个任务待完成）"`
+    : `✅ **GOOD Examples** (based on actual data):
+- "Review 3 high-priority tasks due this week in the Ecommerce Platform project"
+- "Mark 5 completed tasks owned by Alice as DONE"
+- "Analyze Mobile App project completion (65% complete, 8 tasks remaining)"`;
   return `You are FlowSync AI, a project management assistant. Help users manage tasks and projects efficiently.
 
 ${systemContext || ''}
+
+${languageLine}
+Language rule (CRITICAL): Respond and provide suggestions ONLY in the user's language above. Do NOT mix languages.
 
 ACTIVE PROJECT SCOPE - CRITICAL
 ───────────────────────────────────────────────────────────────
@@ -328,9 +349,7 @@ CRITICAL WORKFLOW RULES - FOLLOW THESE IN ORDER
   * Concrete timeframes (not just "近期")
 
 ✅ **GOOD Examples** (based on actual data):
-- "查看电商平台项目中本周到期的3个高优先级任务"
-- "将张三负责的5个已完成任务标记为DONE"
-- "分析移动端APP项目的完成率（当前65%，8个任务待完成）"
+${suggestionExamples}
 
 ❌ **BAD Examples** (too generic/vague):
 - "查找逾期任务" ❌ (How many? Which project?)
@@ -507,7 +526,8 @@ const runAIRequest = async (
 
   emit?.('stage', { name: 'prepare_request' });
 
-  const systemInstruction = buildSystemInstruction(systemContext);
+  const userLanguage = detectUserLanguage(message);
+  const systemInstruction = buildSystemInstruction(systemContext, userLanguage);
 
   assertNotAborted();
   await recordLog(c.get('db'), 'ai_request', {
