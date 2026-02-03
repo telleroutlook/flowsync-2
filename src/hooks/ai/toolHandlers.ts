@@ -49,9 +49,46 @@ const getStringParam = (args: Record<string, unknown>, key: string): string | un
 const getBoolParam = (args: Record<string, unknown>, key: string): boolean | undefined =>
   typeof args[key] === 'boolean' ? args[key] : undefined;
 
-// Helper to extract number parameter safely
-const getNumberParam = (args: Record<string, unknown>, key: string): number | undefined =>
-  typeof args[key] === 'number' ? args[key] : undefined;
+// Helper to extract finite number parameter safely (accepts number-like strings)
+const getNumberParam = (args: Record<string, unknown>, key: string): number | undefined => {
+  const value = args[key];
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) return numeric;
+    const parsed = Date.parse(trimmed);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+  return undefined;
+};
+
+const normalizeStatus = (value?: string): string | undefined => {
+  if (!value) return undefined;
+  const normalized = value.trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (normalized === 'TODO' || normalized === 'IN_PROGRESS' || normalized === 'DONE') {
+    return normalized;
+  }
+  if (normalized === '待办') return 'TODO';
+  if (normalized === '进行中') return 'IN_PROGRESS';
+  if (normalized === '已完成' || normalized === '完成') return 'DONE';
+  return undefined;
+};
+
+const normalizePriority = (value?: string): string | undefined => {
+  if (!value) return undefined;
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'LOW' || normalized === 'MEDIUM' || normalized === 'HIGH') {
+    return normalized;
+  }
+  if (normalized === '低') return 'LOW';
+  if (normalized === '中') return 'MEDIUM';
+  if (normalized === '高') return 'HIGH';
+  return undefined;
+};
 
 /**
  * Builds a mapping of truncated IDs to full IDs for auto-fixing AI-generated IDs
@@ -148,10 +185,12 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
 
   listTasks: async (args, { api, activeProjectId, pushProcessingStep, t }) => {
     pushProcessingStep?.(t('processing.reading_task_list'));
+    const status = normalizeStatus(getStringParam(args, 'status'));
+    const priority = normalizePriority(getStringParam(args, 'priority'));
     const result = await api.listTasks({
       projectId: activeProjectId,
-      status: getStringParam(args, 'status'),
-      priority: getStringParam(args, 'priority'),
+      status,
+      priority,
       assignee: getStringParam(args, 'assignee'),
       isMilestone: getBoolParam(args, 'isMilestone'),
       q: getStringParam(args, 'q'),
@@ -288,8 +327,8 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         projectId: activeProjectId,
         title: args.title,
         description: args.description,
-        status: args.status,
-        priority: args.priority,
+        status: normalizeStatus(getStringParam(args, 'status')),
+        priority: normalizePriority(getStringParam(args, 'priority')),
         wbs: args.wbs,
         startDate: args.startDate,
         dueDate: args.dueDate,
@@ -365,8 +404,8 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       after: {
         title: args.title,
         description: args.description,
-        status: args.status,
-        priority: args.priority,
+        status: normalizeStatus(getStringParam(args, 'status')),
+        priority: normalizePriority(getStringParam(args, 'priority')),
         wbs: args.wbs, // Preserve WBS for backend resolution
         startDate: args.startDate,
         dueDate: args.dueDate,

@@ -102,9 +102,9 @@ const fetchWithRetry = async (input: RequestInfo, init?: RequestInit): Promise<R
 const buildQueryString = (params: Record<string, string | number | boolean | undefined | null>): string => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      query.set(key, String(value));
-    }
+    if (value === undefined || value === null || value === '') return;
+    if (typeof value === 'number' && !Number.isFinite(value)) return;
+    query.set(key, String(value));
   });
   const suffix = query.toString();
   return suffix ? `?${suffix}` : '';
