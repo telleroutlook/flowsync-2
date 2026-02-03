@@ -4,10 +4,12 @@ import { useI18n } from '../src/i18n';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { User, Lock, AlertCircle, LogIn, UserPlus, Check } from 'lucide-react';
+import type { ValidationErrorDetail } from '../src/utils/error';
 
 interface LoginModalProps {
   isOpen: boolean;
   error?: string | null;
+  errorDetails?: ValidationErrorDetail[] | null;
   onClose: () => void;
   onLogin: (username: string, password: string) => Promise<unknown> | void;
   onRegister: (username: string, password: string) => Promise<unknown> | void;
@@ -16,6 +18,7 @@ interface LoginModalProps {
 export const LoginModal = memo<LoginModalProps>(({
   isOpen,
   error,
+  errorDetails,
   onClose,
   onLogin,
   onRegister,
@@ -65,6 +68,13 @@ export const LoginModal = memo<LoginModalProps>(({
   const toggleMode = useCallback(() => {
     setMode(prev => prev === 'login' ? 'register' : 'login');
   }, []);
+
+  const renderFieldLabel = useCallback((path: string) => {
+    const key = path.split('.').pop() || path;
+    if (key === 'username') return t('auth.username');
+    if (key === 'password') return t('auth.password');
+    return key || t('common.unknown_error');
+  }, [t]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="">
@@ -144,10 +154,23 @@ export const LoginModal = memo<LoginModalProps>(({
           </div>
         </div>
 
-        {error && (
-          <div className="rounded-lg border border-negative/20 bg-negative/10 px-3 py-2.5 text-xs font-medium text-negative flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            {error}
+        {(error || (errorDetails && errorDetails.length > 0)) && (
+          <div className="rounded-lg border border-negative/20 bg-negative/10 px-3 py-2.5 text-xs font-medium text-negative">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{error || t('common.unknown_error')}</span>
+            </div>
+            {errorDetails && errorDetails.length > 0 && (
+              <ul className="mt-2 space-y-1 text-[11px] text-negative/90">
+                {errorDetails.map((detail, index) => (
+                  <li key={`${detail.path}-${index}`}>
+                    <span className="font-semibold">{renderFieldLabel(detail.path)}</span>
+                    <span className="mx-1">·</span>
+                    <span>{detail.message}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 

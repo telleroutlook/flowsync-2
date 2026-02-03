@@ -45,6 +45,11 @@ export class ValidationError extends AppError {
   }
 }
 
+export type ValidationErrorDetail = {
+  path: string;
+  message: string;
+};
+
 export class TimeoutError extends AppError {
   constructor(message: string, timeoutMs?: number, context?: Record<string, unknown>) {
     super('TIMEOUT_ERROR', message, 408, true, { ...context, timeoutMs });
@@ -70,6 +75,17 @@ export function isValidationError(error: unknown): error is ValidationError {
 
 export function isTimeoutError(error: unknown): error is TimeoutError {
   return error instanceof TimeoutError;
+}
+
+export function getValidationDetails(error: unknown): ValidationErrorDetail[] | undefined {
+  if (!isAppError(error)) return undefined;
+  const details = error.context?.details;
+  if (!Array.isArray(details)) return undefined;
+  return details.filter((detail): detail is ValidationErrorDetail => {
+    if (!detail || typeof detail !== 'object') return false;
+    const record = detail as Record<string, unknown>;
+    return typeof record.path === 'string' && typeof record.message === 'string';
+  });
 }
 
 export function isRetryable(error: unknown): boolean {
@@ -108,11 +124,12 @@ export function getErrorStatusCode(error: unknown): number | undefined {
  */
 export function parseApiError(data: unknown): AppError {
   if (data && typeof data === 'object' && 'error' in data) {
-    const errorData = data.error as { code?: string; message?: string; status?: number };
+    const errorData = data.error as { code?: string; message?: string; status?: number; details?: ValidationErrorDetail[] };
     return new ApiError(
       errorData.message || 'Unknown API error',
       errorData.status,
-      errorData.code
+      errorData.code,
+      errorData.details ? { details: errorData.details } : undefined
     );
   }
   return new ApiError('Unknown API error');

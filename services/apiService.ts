@@ -203,7 +203,13 @@ const fetchJson = async <T>(input: RequestInfo, init?: FetchInitWithOptions): Pr
 
       if (!response.ok || !payload.success || payload.data === undefined) {
         const message = payload.error?.message || `Request failed with status ${response.status}`;
-        throw new ApiError(message, response.status, payload.error?.code);
+        const details = payload.error?.details;
+        throw new ApiError(
+          message,
+          response.status,
+          payload.error?.code,
+          Array.isArray(details) ? { details } : undefined
+        );
       }
 
       return payload.data;

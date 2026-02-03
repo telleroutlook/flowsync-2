@@ -109,7 +109,7 @@ function App() {
   // --- HOOKS ---
 
   // 1. Auth & Workspaces
-  const { user, error: authError, login, register, logout, updateProfile } = useAuth();
+  const { user, error: authError, errorDetails: authErrorDetails, login, register, logout, updateProfile } = useAuth();
   
   // Guest Thinking State
   const [guestThinking, setGuestThinking] = useState(() =>
@@ -941,6 +941,7 @@ function App() {
         <LoginModal
           isOpen={isLoginOpen}
           error={authError}
+          errorDetails={authErrorDetails}
           onClose={() => setIsLoginOpen(false)}
           onLogin={login}
           onRegister={register}

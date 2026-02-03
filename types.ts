@@ -125,7 +125,11 @@ export interface AuditLog {
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
-  error?: { code: string; message: string };
+  error?: {
+    code: string;
+    message: string;
+    details?: { path: string; message: string }[];
+  };
 }
 
 export interface User {

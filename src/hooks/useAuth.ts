@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiService } from '../../services/apiService';
 import { storageGet, storageRemove, storageSet } from '../utils/storage';
+import { getValidationDetails } from '../utils/error';
 import type { User } from '../../types';
 
 const TOKEN_KEY = 'authToken';
@@ -9,10 +10,12 @@ export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<ReturnType<typeof getValidationDetails> | null>(null);
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setErrorDetails(null);
     const token = storageGet(TOKEN_KEY);
     if (!token) {
       setUser(null);
@@ -38,6 +41,7 @@ export const useAuth = () => {
   const login = useCallback(async (username: string, password: string) => {
     setIsLoading(true);
     setError(null);
+    setErrorDetails(null);
     try {
       const result = await apiService.login({ username, password });
       storageSet(TOKEN_KEY, result.token);
@@ -46,6 +50,7 @@ export const useAuth = () => {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message);
+      setErrorDetails(getValidationDetails(err) ?? null);
       throw err;
     } finally {
       setIsLoading(false);
@@ -55,6 +60,7 @@ export const useAuth = () => {
   const register = useCallback(async (username: string, password: string) => {
     setIsLoading(true);
     setError(null);
+    setErrorDetails(null);
     try {
       const result = await apiService.register({ username, password });
       storageSet(TOKEN_KEY, result.token);
@@ -63,6 +69,7 @@ export const useAuth = () => {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Registration failed';
       setError(message);
+      setErrorDetails(getValidationDetails(err) ?? null);
       throw err;
     } finally {
       setIsLoading(false);
@@ -72,6 +79,7 @@ export const useAuth = () => {
   const logout = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setErrorDetails(null);
     try {
       await apiService.logout();
     } catch {
@@ -98,6 +106,7 @@ export const useAuth = () => {
     user,
     isLoading,
     error,
+    errorDetails,
     refresh,
     login,
     register,
