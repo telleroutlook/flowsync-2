@@ -33,3 +33,4 @@ test-*.html
 *.sln
 *.sw?
 .wrangler/
+local.db
