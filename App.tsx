@@ -10,6 +10,7 @@ import { UserProfileModal } from './components/UserProfileModal';
 import { ChatInterface } from './components/ChatInterface';
 import { AuditPanel } from './components/AuditPanel';
 import { TaskDetailPanel } from './components/TaskDetailPanel';
+import { DeleteTaskModal } from './components/DeleteTaskModal';
 import { CreateProjectModal } from './components/CreateProjectModal';
 import { EditProjectModal } from './components/EditProjectModal';
 import { DeleteProjectModal } from './components/DeleteProjectModal';
@@ -26,6 +27,7 @@ import { generateId, storageGet, storageSet, storageGetJSON, storageSetJSON, fin
 import { MobileNavBar, MobileTab } from './components/MobileNavBar';
 import { useI18n } from './src/i18n';
 import { Image as ImageIcon } from 'lucide-react';
+import { Modal } from './components/Modal';
 
 // Lazy Load View Components
 const KanbanBoard = React.lazy(() => import('./components/KanbanBoard').then(module => ({ default: module.KanbanBoard })));
@@ -89,6 +91,11 @@ function App() {
   const [isDeleteProjectOpen, setIsDeleteProjectOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
+  const [isDeleteTaskOpen, setIsDeleteTaskOpen] = useState(false);
+  const [deleteTask, setDeleteTask] = useState<Task | null>(null);
+  const [isTaskDetailDirty, setIsTaskDetailDirty] = useState(false);
+  const [isTaskSwitchPromptOpen, setIsTaskSwitchPromptOpen] = useState(false);
+  const [pendingTaskSelection, setPendingTaskSelection] = useState<string | null>(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -97,6 +104,7 @@ function App() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const pendingTaskUpdatesRef = useRef<Record<string, Partial<Task>>>({});
   const taskUpdateTimers = useRef<Map<string, number>>(new Map());
+  const taskDetailSaveRef = useRef<(() => void) | null>(null);
 
   // --- HOOKS ---
 
@@ -136,6 +144,12 @@ function App() {
     rejectRequest,
     removeMember,
   } = useWorkspaces(user);
+
+  useEffect(() => {
+    if (selectedTaskId) return;
+    setIsTaskDetailDirty(false);
+    taskDetailSaveRef.current = null;
+  }, [selectedTaskId]);
 
   // 2. Data
   const {
@@ -393,11 +407,17 @@ function App() {
   }, [handleExportTasks, handleExportImage]);
 
   const handleSelectTask = useCallback((id: string | null) => {
+    if (id === selectedTaskId) return;
+    if (selectedTaskId && isTaskDetailDirty && id) {
+      setPendingTaskSelection(id);
+      setIsTaskSwitchPromptOpen(true);
+      return;
+    }
     setSelectedTaskId(id);
     if (id) {
       setIsSidebarOpen(false);
     }
-  }, []);
+  }, [isTaskDetailDirty, selectedTaskId]);
 
   // Manual Project Actions
   const manualCreateProject = useCallback(() => {
@@ -457,6 +477,27 @@ function App() {
         },
       ],
       { createdBy: 'user', autoApply: true, reason: 'Manual project delete' }
+    );
+  }, [submitDraft, invalidateCache]);
+
+  const handleRequestDeleteTask = useCallback((task: Task) => {
+    setDeleteTask(task);
+    setIsDeleteTaskOpen(true);
+  }, []);
+
+  const handleDeleteTask = useCallback(async (id: string) => {
+    invalidateCache();
+    setSelectedTaskId(prev => (prev === id ? null : prev));
+    await submitDraft(
+      [
+        {
+          id: generateId(),
+          entityType: 'task',
+          action: 'delete',
+          entityId: id,
+        },
+      ],
+      { createdBy: 'user', autoApply: true, reason: 'Manual task delete' }
     );
   }, [submitDraft, invalidateCache]);
 
@@ -834,6 +875,69 @@ function App() {
           onConfirm={handleDeleteProject}
         />
 
+        <DeleteTaskModal
+          isOpen={isDeleteTaskOpen}
+          task={deleteTask}
+          onClose={() => {
+            setIsDeleteTaskOpen(false);
+            setDeleteTask(null);
+          }}
+          onConfirm={handleDeleteTask}
+        />
+
+        <Modal
+          isOpen={isTaskSwitchPromptOpen}
+          onClose={() => setIsTaskSwitchPromptOpen(false)}
+          title={t('task.unsaved_title')}
+        >
+          <p className="text-sm text-text-secondary mb-4">
+            {t('task.unsaved_body')}
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsTaskSwitchPromptOpen(false)}
+              className="h-9"
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setIsTaskSwitchPromptOpen(false);
+                setIsTaskDetailDirty(false);
+                setSelectedTaskId(pendingTaskSelection);
+                if (pendingTaskSelection) {
+                  setIsSidebarOpen(false);
+                }
+                setPendingTaskSelection(null);
+              }}
+              className="h-9"
+            >
+              {t('common.discard')}
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => {
+                taskDetailSaveRef.current?.();
+                setIsTaskSwitchPromptOpen(false);
+                setIsTaskDetailDirty(false);
+                setSelectedTaskId(pendingTaskSelection);
+                if (pendingTaskSelection) {
+                  setIsSidebarOpen(false);
+                }
+                setPendingTaskSelection(null);
+              }}
+              className="h-9"
+            >
+              {t('common.save')}
+            </Button>
+          </div>
+        </Modal>
+
         <LoginModal
           isOpen={isLoginOpen}
           error={authError}
@@ -929,6 +1033,11 @@ function App() {
                     selectedTask={selectedTask}
                     onClose={() => setSelectedTaskId(null)}
                     onUpdate={queueTaskUpdate}
+                    onRequestDelete={handleRequestDeleteTask}
+                    onRegisterSave={(save) => {
+                      taskDetailSaveRef.current = save;
+                    }}
+                    onDirtyChange={setIsTaskDetailDirty}
                     tasks={tasks}
                     isMobile={isMobile}
                   />
