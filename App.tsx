@@ -237,6 +237,24 @@ function App() {
     loadedProjectIdRef.current = activeProjectId;
   }, [activeProjectId, t, initialSuggestionText]);
 
+  // Keep the initial suggestion aligned with the latest task count once tasks are loaded.
+  useEffect(() => {
+    if (!activeProjectId) return;
+    if (isLoadingData || isLoadingTasks) return;
+    if (messages.length !== 1) return;
+    const [welcomeMessage] = messages;
+    if (welcomeMessage.id !== 'welcome') return;
+    const currentSuggestion = welcomeMessage.suggestions?.[0]?.text;
+    if (currentSuggestion === initialSuggestionText) return;
+    setMessages(prev => {
+      if (prev.length !== 1 || prev[0].id !== 'welcome') return prev;
+      return [{
+        ...prev[0],
+        suggestions: [{ text: initialSuggestionText, action: initialSuggestionText }],
+      }];
+    });
+  }, [activeProjectId, initialSuggestionText, isLoadingData, isLoadingTasks, messages]);
+
   const appendSystemMessage = useCallback((text: string) => {
     setMessages(prev => [...prev, {
       id: generateId(),
