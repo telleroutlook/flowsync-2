@@ -1,50 +1,35 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { jsonError, jsonOk } from './helpers';
+import { jsonError, jsonOk, validatedJson } from './helpers';
 import { workspaceMiddleware } from './middleware';
 import { recordLog } from '../services/logService';
 import { getAuthorizationHeader } from '../utils/bigmodelAuth';
 import { createToolRegistry } from '../services/aiToolRegistry';
 import { checkRateLimit, getClientIp } from '../services/rateLimitService';
 import type { Bindings, Variables } from '../types';
-import type { Context, Next } from 'hono';
-import { getConfig, type AiConfig } from '../../shared/config';
+import type { Context } from 'hono';
+import { MAX_HISTORY_PART_CHARS } from '../../shared/aiLimits';
 
-const buildRequestSchema = (aiConfig: AiConfig) => {
-  const historySchema = z.array(
-    z.object({
-      role: z.enum(['user', 'model', 'system']),
-      parts: z.array(
-        z.object({
-          text: z.string().min(1).max(aiConfig.history.maxPartChars),
-        })
-      ),
-    })
-  ).max(100);
-
-  return z.object({
-    history: historySchema,
-    message: z.string().min(1).max(aiConfig.history.maxMessageChars),
-    systemContext: z.string().max(aiConfig.history.maxSystemContextChars).optional(),
-    allowThinking: z.boolean().optional(),
-  });
-};
-
-type AiRequest = z.infer<ReturnType<typeof buildRequestSchema>>;
-type AiVariables = Variables & { aiRequest: AiRequest };
-
-export const aiRoute = new Hono<{ Bindings: Bindings; Variables: AiVariables }>();
+export const aiRoute = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 aiRoute.use('*', workspaceMiddleware);
 
-const getAiConfig = (env: Bindings): AiConfig => getConfig(env as unknown as Record<string, unknown> | undefined).ai;
+const MAX_HISTORY_MESSAGES = 30;
+const MAX_MESSAGE_CHARS = 4000;
+const MAX_SYSTEM_CONTEXT_CHARS = 8000;
+const MAX_TOOL_ARGS_CHARS = 8000;
+const MAX_TOOL_CALLS = 30;
+const MAX_TURNS = 5;
+const REQUEST_TIMEOUT_MS = 60000;
+const MAX_RETRIES = 2;
+const BASE_RETRY_DELAY_MS = 500;
 
 const generateRequestId = () => crypto.randomUUID();
 
 // Rate limiting middleware for AI endpoints
-const checkAIRateLimit = async (c: Context<{ Bindings: Bindings; Variables: AiVariables }>) => {
+const checkAIRateLimit = async (c: Context<{ Bindings: Bindings; Variables: Variables }>) => {
   try {
     const clientIp = getClientIp(c.req.raw);
-    const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AI', c.env);
+    const rateLimitResult = await checkRateLimit(c.get('db'), clientIp, 'AI');
     if (!rateLimitResult.allowed) {
       throw new ApiError(
         'RATE_LIMIT_EXCEEDED',
@@ -78,7 +63,7 @@ const safeJsonParse = (value: string) => {
 const shouldRetryStatus = (status: number) =>
   status === 408 || status === 429 || (status >= 500 && status <= 599);
 
-const getRetryDelay = (attempt: number, baseRetryDelayMs: number, retryAfterHeader?: string | null) => {
+const getRetryDelay = (attempt: number, retryAfterHeader?: string | null) => {
   if (retryAfterHeader) {
     const retryAfterSeconds = Number(retryAfterHeader);
     if (!Number.isNaN(retryAfterSeconds) && retryAfterSeconds > 0) {
@@ -86,7 +71,7 @@ const getRetryDelay = (attempt: number, baseRetryDelayMs: number, retryAfterHead
     }
   }
   const jitter = Math.floor(Math.random() * 150);
-  return baseRetryDelayMs * Math.pow(2, attempt) + jitter;
+  return BASE_RETRY_DELAY_MS * Math.pow(2, attempt) + jitter;
 };
 
 class StreamAbortError extends Error {
@@ -126,7 +111,6 @@ const fetchWithRetry = async (
   options: RequestInit,
   timeoutMs: number,
   maxRetries: number,
-  baseRetryDelayMs: number,
   onRetry?: (info: { attempt: number; delayMs: number; status?: number; error?: string }) => void,
   abortSignal?: AbortSignal
 ): Promise<FetchRetryResult> => {
@@ -165,7 +149,7 @@ const fetchWithRetry = async (
         return { response, attempts: attempt + 1, elapsedMs: totalElapsedMs, retryHistory };
       }
 
-      const delayMs = getRetryDelay(attempt, baseRetryDelayMs, response.headers.get('Retry-After'));
+      const delayMs = getRetryDelay(attempt, response.headers.get('Retry-After'));
       attemptInfo.delayMs = delayMs;
       attemptInfo.retryAfter = response.headers.get('Retry-After');
       onRetry?.({ attempt: attempt + 1, delayMs, status: response.status });
@@ -221,7 +205,7 @@ const fetchWithRetry = async (
       // If the first request fails due to network/handshake, try again immediately.
       const delayMs = lastErrorType === 'network' && attempt === 0
         ? 10 // Almost immediate retry for first network glitch
-        : getRetryDelay(attempt, baseRetryDelayMs);
+        : getRetryDelay(attempt);
 
       attemptInfo.delayMs = delayMs;
       retryHistory.push(attemptInfo);
@@ -240,7 +224,7 @@ const fetchWithRetry = async (
 };
 
 // Helper function to execute tool calls using the registry
-async function executeTool(c: Context<{ Bindings: Bindings; Variables: AiVariables }>, toolName: string, args: Record<string, unknown>): Promise<string> {
+async function executeTool(c: Context<{ Bindings: Bindings; Variables: Variables }>, toolName: string, args: Record<string, unknown>): Promise<string> {
   const registry = createToolRegistry(c);
   const tool = registry.get(toolName);
   if (!tool) {
@@ -256,21 +240,23 @@ async function executeTool(c: Context<{ Bindings: Bindings; Variables: AiVariabl
   });
 }
 
-const validateAiRequest = async (
-  c: Context<{ Bindings: Bindings; Variables: AiVariables }>,
-  next: Next
-) => {
-  const schema = buildRequestSchema(getAiConfig(c.env));
-  const body = await c.req.json();
-  const result = schema.safeParse(body);
-  if (!result.success) {
-    const firstError = result.error.issues[0];
-    const message = firstError?.message || 'Validation failed';
-    return jsonError(c, 'VALIDATION_ERROR', message, 400);
-  }
-  c.set('aiRequest', result.data);
-  await next();
-};
+const historySchema = z.array(
+  z.object({
+    role: z.enum(['user', 'model', 'system']),
+    parts: z.array(
+      z.object({
+        text: z.string().min(1).max(MAX_HISTORY_PART_CHARS),
+      })
+    ),
+  })
+).max(100);
+
+const requestSchema = z.object({
+  history: historySchema,
+  message: z.string().min(1).max(MAX_MESSAGE_CHARS),
+  systemContext: z.string().max(MAX_SYSTEM_CONTEXT_CHARS).optional(),
+  allowThinking: z.boolean().optional(),
+});
 
 type ProgressEmitter = (event: string, data: Record<string, unknown>) => void;
 
@@ -291,12 +277,22 @@ const buildSystemInstruction = (systemContext?: string) => {
 
 ${systemContext || ''}
 
-═══════════════════════════════════════════════════════════════
+ACTIVE PROJECT SCOPE - CRITICAL
+───────────────────────────────────────────────────────────────
+You are operating within a user-selected "active project" context.
+- All task operations MUST be scoped to the active project.
+- If a user asks about tasks without specifying a project, use the active project.
+- If a user specifies a different project by name or ID, you MUST confirm whether to switch active project before proceeding.
+- ONLY use listProjects when the user explicitly asks about projects or wants to create/manage projects.
+- EXCEPTION: If the user explicitly requests to CREATE a new project, you may discuss creation without being limited to the active project.
+
+───────────────────────────────────────────────────────────────
 CRITICAL WORKFLOW RULES - FOLLOW THESE IN ORDER
 ═══════════════════════════════════════════════════════════════
 
 🔍 STEP 1 - UNDERSTAND CONTEXT (Read Tools):
-- Use listProjects → listTasks to understand current state
+- Use listTasks (active project) to understand current state
+- Use listProjects ONLY when the user explicitly asks to create or manage projects
 - Use getTask/getProject for specific entity details
 - NEVER assume - always READ before WRITE
 
@@ -431,7 +427,9 @@ RESPONSE GUIDELINES
 - Keep responses concise (2-3 sentences for simple operations)
 - If you need more info, ask specific questions
 - ALWAYS end with 3 suggestions in JSON format (MANDATORY!)
-- Match user's language (Chinese question → Chinese suggestions)
+- Match the user's language in the main response AND suggestions
+- Chinese question → respond in Chinese and provide Chinese suggestions
+- English question → respond in English and provide English suggestions
 
 ═══════════════════════════════════════════════════════════════
 COMMON MISTAKES TO AVOID
@@ -441,6 +439,7 @@ COMMON MISTAKES TO AVOID
 ❌ Forgetting to provide suggestions at the end
 ❌ Making up data instead of using tool results
 ❌ Using seconds instead of milliseconds for dates
+❌ Responding in a different language than the user's question
 ❌ Providing suggestions in wrong language (match user's language!)
 ❌ Calling updateTask 17 times individually (EXCEEDS 30-call limit!)
 ❌ Not using planChanges for batch updates (inefficient!)
@@ -476,8 +475,8 @@ type ChatMessage = {
 };
 
 const runAIRequest = async (
-  c: Context<{ Bindings: Bindings; Variables: AiVariables }>,
-  input: AiRequest,
+  c: Context<{ Bindings: Bindings; Variables: Variables }>,
+  input: z.infer<typeof requestSchema>,
   requestId: string,
   emit?: ProgressEmitter,
   abortSignal?: AbortSignal
@@ -488,19 +487,6 @@ const runAIRequest = async (
     }
   };
   const { history, message, systemContext, allowThinking } = input;
-  const {
-    history: {
-      maxMessages: maxHistoryMessages,
-      maxToolArgsChars: maxToolArgsChars,
-    },
-    execution: {
-      maxToolCalls: maxToolCalls,
-      maxTurns: maxTurns,
-      requestTimeoutMs: requestTimeoutMs,
-      maxRetries: maxRetries,
-      baseRetryDelayMs: baseRetryDelayMs,
-    },
-  } = getAiConfig(c.env);
   const allowThinkingEnabled = allowThinking === true;
 
   // Create tool registry and get OpenAI-compatible tools
@@ -528,7 +514,7 @@ const runAIRequest = async (
   await recordLog(c.get('db'), 'ai_request', {
     requestId,
     message,
-    history: history.slice(-maxHistoryMessages),
+    history: history.slice(-MAX_HISTORY_MESSAGES),
     messageLength: message.length,
     systemContextLength: systemContext?.length || 0,
     baseUrl,
@@ -537,7 +523,7 @@ const runAIRequest = async (
     allowThinking: allowThinkingEnabled
   });
 
-  const boundedHistory = history.slice(-maxHistoryMessages);
+  const boundedHistory = history.slice(-MAX_HISTORY_MESSAGES);
   let messages: ChatMessage[] = [
     { role: 'system', content: systemInstruction },
     ...boundedHistory.map((item): ChatMessage => ({
@@ -560,7 +546,7 @@ const runAIRequest = async (
     retryHistory: RetryAttemptInfo[];
   }> = [];
 
-  while (currentTurn < maxTurns) {
+  while (currentTurn < MAX_TURNS) {
     assertNotAborted();
     currentTurn++;
 
@@ -597,9 +583,8 @@ const runAIRequest = async (
           headers,
           body: JSON.stringify(requestBody),
         },
-        requestTimeoutMs,
-        maxRetries,
-        baseRetryDelayMs,
+        REQUEST_TIMEOUT_MS,
+        MAX_RETRIES,
         (info) => {
           emit?.('retry', {
             attempt: info.attempt,
@@ -778,11 +763,11 @@ const runAIRequest = async (
 
       emit?.('tool_start', { name: toolName || '' });
 
-      if (totalToolCalls > maxToolCalls) {
+      if (totalToolCalls > MAX_TOOL_CALLS) {
         await recordLog(c.get('db'), 'error', {
           requestId,
           message: 'Tool call limit exceeded.',
-          detail: `Max tool calls: ${maxToolCalls}`,
+          detail: `Max tool calls: ${MAX_TOOL_CALLS}`,
         });
         throw new ApiError('TOOL_LIMIT', 'Too many tool calls in a single request.', 400);
       }
@@ -791,7 +776,7 @@ const runAIRequest = async (
       let parsedArgs: Record<string, unknown> | null = null;
       try {
         assertNotAborted();
-        if (toolArgs.length > maxToolArgsChars) {
+        if (toolArgs.length > MAX_TOOL_ARGS_CHARS) {
           throw new Error('Tool arguments too large.');
         }
         const parsed = safeJsonParse(toolArgs);
@@ -844,9 +829,9 @@ const runAIRequest = async (
   };
 };
 
-aiRoute.post('/api/ai', validateAiRequest, async (c) => {
+aiRoute.post('/api/ai', validatedJson(requestSchema), async (c) => {
   const requestId = generateRequestId();
-  const input = c.get('aiRequest');
+  const input = c.req.valid('json');
 
   try {
     // Check rate limit before processing
@@ -871,9 +856,9 @@ aiRoute.post('/api/ai', validateAiRequest, async (c) => {
   }
 });
 
-aiRoute.post('/api/ai/stream', validateAiRequest, async (c) => {
+aiRoute.post('/api/ai/stream', validatedJson(requestSchema), async (c) => {
   const requestId = generateRequestId();
-  const input = c.get('aiRequest');
+  const input = c.req.valid('json');
   const encoder = new TextEncoder();
   const startTime = Date.now();
   const runAbortController = new AbortController();

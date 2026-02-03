@@ -66,6 +66,13 @@ const getNumberParam = (args: Record<string, unknown>, key: string): number | un
   return undefined;
 };
 
+// Date params sometimes come through as 0 from the model; treat 0 as "not provided"
+const getDateParam = (args: Record<string, unknown>, key: string): number | undefined => {
+  const value = getNumberParam(args, key);
+  if (value === 0) return undefined;
+  return value;
+};
+
 const normalizeStatus = (value?: string): string | undefined => {
   if (!value) return undefined;
   const normalized = value.trim().toUpperCase().replace(/[\s-]+/g, '_');
@@ -194,10 +201,10 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       assignee: getStringParam(args, 'assignee'),
       isMilestone: getBoolParam(args, 'isMilestone'),
       q: getStringParam(args, 'q'),
-      startDateFrom: getNumberParam(args, 'startDateFrom'),
-      startDateTo: getNumberParam(args, 'startDateTo'),
-      dueDateFrom: getNumberParam(args, 'dueDateFrom'),
-      dueDateTo: getNumberParam(args, 'dueDateTo'),
+      startDateFrom: getDateParam(args, 'startDateFrom'),
+      startDateTo: getDateParam(args, 'startDateTo'),
+      dueDateFrom: getDateParam(args, 'dueDateFrom'),
+      dueDateTo: getDateParam(args, 'dueDateTo'),
       page: getNumberParam(args, 'page'),
       pageSize: getNumberParam(args, 'pageSize'),
     });
@@ -224,8 +231,16 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     if (!id) {
       return { output: t('tool.error.invalid_task_id') };
     }
+
+    // Fix truncated task IDs (AI may send 8-char prefixes)
+    let fixedTaskId = id;
+    const projectIds = new Set<string>();
+    if (activeProjectId) projectIds.add(activeProjectId);
+    const idMap = await buildIdMap(api, projectIds);
+    fixedTaskId = fixTaskId(id, idMap) || id;
+
     pushProcessingStep?.(t('processing.reading_task_details'));
-    const task = await api.getTask(id);
+    const task = await api.getTask(fixedTaskId);
     if (activeProjectId && task.projectId !== activeProjectId) {
       return { output: t('tool.error.task_not_in_active_project') };
     }
@@ -675,6 +690,27 @@ export async function executeToolCall(
   try {
     return await handler(args, context);
   } catch (error) {
+    const serializedArgs = (() => {
+      try {
+        return JSON.stringify(args);
+      } catch {
+        return '[unserializable args]';
+      }
+    })();
+    if (error instanceof Error) {
+      console.error('[AI Tool Error]', {
+        tool: toolName,
+        args: serializedArgs,
+        message: error.message,
+        stack: error.stack,
+      });
+    } else {
+      console.error('[AI Tool Error]', {
+        tool: toolName,
+        args: serializedArgs,
+        error,
+      });
+    }
     const errorMessage = error instanceof Error ? error.message : String(error);
     return { output: context.t('tool.error.generic', { error: errorMessage }) };
   }

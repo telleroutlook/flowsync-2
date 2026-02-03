@@ -137,6 +137,22 @@ export async function resolveTask(
   workspaceId: string,
   activeProjectId?: string
 ): Promise<ResolutionResult<TaskRecord>> {
+  console.log('resolveTask:start', {
+    workspaceId,
+    activeProjectId,
+    ref: {
+      entityId: ref.entityId,
+      action: ref.action,
+      entityType: ref.entityType,
+      fallbackRef: ref.fallbackRef,
+      after: ref.after ? {
+        title: (ref.after as { title?: string }).title,
+        wbs: (ref.after as { wbs?: string }).wbs,
+        projectId: (ref.after as { projectId?: string }).projectId,
+        assignee: (ref.after as { assignee?: string }).assignee,
+      } : undefined,
+    },
+  });
   // Create actions don't need resolution
   if (ref.action === 'create') {
     return { success: true, confidence: 1.0 };
@@ -217,6 +233,37 @@ export async function resolveTask(
         method: 'wbs',
         confidence: WBS_CONFIDENCE,
       };
+    }
+  }
+
+  // Strategy 2b: WBS match within workspace when projectId is missing
+  if (wbs && !projectId) {
+    matchAttempts.push({ strategy: 'wbs_workspace', success: false });
+    const { tasks, projects } = await import('../db/schema');
+    const { toTaskRecord } = await import('./serializers');
+
+    const rows = await db
+      .select()
+      .from(tasks)
+      .innerJoin(projects, eq(tasks.projectId, projects.id))
+      .where(and(eq(tasks.wbs, wbs), eq(projects.workspaceId, workspaceId)))
+      .limit(5);
+
+    if (rows.length === 1 && rows[0]?.tasks) {
+      matchAttempts[matchAttempts.length - 1] = { strategy: 'wbs_workspace', success: true, confidence: WBS_CONFIDENCE };
+      await logMatchAttempts(db, matchAttempts, 'task');
+      return {
+        success: true,
+        entity: toTaskRecord(rows[0].tasks),
+        entityId: rows[0].tasks.id,
+        method: 'wbs_workspace',
+        confidence: WBS_CONFIDENCE,
+        warnings: [`Matched by WBS ${wbs} in workspace`],
+      };
+    }
+
+    if (rows.length > 1) {
+      warnings.push(`WBS ${wbs} matches multiple tasks in workspace. Provide projectId to disambiguate.`);
     }
   }
 
@@ -356,6 +403,17 @@ export async function resolveTask(
 
   // All strategies failed
   await logMatchAttempts(db, matchAttempts, 'task');
+  console.warn('resolveTask:failed', {
+    workspaceId,
+    activeProjectId,
+    entityId: ref.entityId,
+    title,
+    wbs,
+    projectId,
+    assignee,
+    matchAttempts,
+    warnings,
+  });
   return {
     success: false,
     confidence: 0,

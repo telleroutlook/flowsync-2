@@ -3,7 +3,7 @@ import { aiService } from '../../services/aiService';
 import { apiService } from '../../services/apiService';
 import { ChatMessage, ChatAttachment, DraftAction, Project, Task, Draft, ActionableSuggestion } from '../../types';
 import { generateId } from '../utils';
-import { processToolCalls, type ApiClient, type ProcessingStep } from './ai';
+import { processToolCalls, READ_ONLY_TOOLS, type ApiClient, type ProcessingStep } from './ai';
 import { useI18n } from '../i18n';
 import { MAX_HISTORY_PART_CHARS } from '../../shared/aiLimits';
 
@@ -27,6 +27,16 @@ interface UseChatProps {
 type AiHistoryItem = {
   role: 'user' | 'model' | 'system';
   parts: { text: string }[];
+};
+
+const isToolListOutput = (output: string): boolean => {
+  const trimmed = output.trim();
+  return (
+    /^Tasks\s*\(\d+\)\s*:/.test(trimmed) ||
+    /^Projects\s*\(\d+\)\s*:/.test(trimmed) ||
+    /^任务（\d+）\s*：/.test(trimmed) ||
+    /^项目（\d+）\s*：/.test(trimmed)
+  );
 };
 
 // Helper: Convert chat role to AI role
@@ -272,12 +282,12 @@ export const useChat = ({
     const taskSnippets = activeTasks.slice(0, TASK_SNIPPET_COUNT);
 
     const selectedTaskInfo = selectedTask
-      ? `User is inspecting: ${selectedTask.title} (ID: ${selectedTask.id.slice(0, 8)}..., Status: ${selectedTask.status})`
+      ? `Current selected task: ${selectedTask.title} (ID: ${selectedTask.id.slice(0, 8)}..., Status: ${selectedTask.status}). Always remind the user of this selected task when responding, unless they explicitly request to create a new project.`
       : '';
 
     return `Active Project: ${activeProject.name || 'None'} (ID: ${activeProject.id || 'N/A'}).
+Scope: Only discuss and operate on the active project. Do NOT mention other projects unless the user explicitly asks to create a new project.
 ${selectedTaskInfo}
-Available Projects: ${projects.length} total.
 Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.map(t => `${t.title} (${t.id.slice(0, 8)})`).join(', ')}.`;
   }, [activeProject.name, activeProject.id, activeTasks, selectedTask, projects, tasksKey]);
 
@@ -383,16 +393,29 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
         if (response.toolCalls && response.toolCalls.length > 0) {
           recordStep(currentT('processing.executing_tool_call'));
 
-          const result = await processToolCalls(
-            response.toolCalls.map((call) => ({ name: call.name, args: (call.args || {}) as Record<string, unknown> })),
-            {
-              api: createApiClient(),
-              activeProjectId,
-              generateId,
-              pushProcessingStep: (step) => recordStep(step),
-              t: currentT,
-            }
-          );
+          const actionableToolCalls = response.toolCalls
+            .filter((call) => !READ_ONLY_TOOLS.has(call.name))
+            .map((call) => ({ name: call.name, args: (call.args || {}) as Record<string, unknown> }));
+
+          const result = actionableToolCalls.length > 0
+            ? await processToolCalls(
+              actionableToolCalls,
+              {
+                api: createApiClient(),
+                activeProjectId,
+                generateId,
+                pushProcessingStep: (step) => recordStep(step),
+                t: currentT,
+              }
+            )
+            : {
+              outputs: [],
+              draftActions: [],
+              draftReason: undefined,
+              shouldRetry: false,
+              retryReason: '',
+              suggestions: [],
+            };
 
           // Only use tool-generated suggestions if AI didn't provide any
           if (suggestions.length === 0 && result.suggestions) {
@@ -440,9 +463,12 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
             recordStep(currentT('processing.generating'));
 
             const validOutputs = result.outputs.filter((o) => o.trim().length > 0);
+            const visibleOutputs = validOutputs.filter((o) => !isToolListOutput(o));
             if (validOutputs.length > 0) {
               hasToolOutputs = true;
-              currentAppendMessage(validOutputs.join(' | '));
+              if (visibleOutputs.length > 0) {
+                currentAppendMessage(visibleOutputs.join(' | '));
+              }
             }
 
             if (!finalText && result.draftActions.length > 0) {

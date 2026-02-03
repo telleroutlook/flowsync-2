@@ -126,8 +126,14 @@ export const listTasksSchema = z.object({
 export const searchTasksSchema = listTasksSchema; // Same as listTasks
 
 export const getTaskSchema = z.object({
-  id: entityIdSchema,
-});
+  id: entityIdSchema.optional(),
+  wbs: z.string().optional(),
+  title: z.string().optional(),
+  projectId: projectIdSchema.optional(),
+}).refine(
+  (data) => Boolean(data.id || data.wbs || data.title),
+  { message: 'At least one of id, wbs, or title is required.' }
+);
 
 export const createProjectSchema = z.object({
   name: z.string().min(1, 'Project name cannot be empty'),

@@ -1890,6 +1890,14 @@ export const applyDraft = async (
             }
 
             if (!before || !resolvedEntityId) {
+              console.warn('draftService:updateTask:notFound', {
+                workspaceId,
+                draftId: draft.id,
+                draftProjectId,
+                actionEntityId: action.entityId,
+                actionWbs: action.after?.wbs,
+                resolvedEntityId,
+              });
               // Task not found - treat as skipped
               results.push({
                 ...action,
@@ -2016,6 +2024,14 @@ export const applyDraft = async (
             }
 
             if (!resolvedEntityId) {
+              console.warn('draftService:deleteTask:notFound', {
+                workspaceId,
+                draftId: draft.id,
+                draftProjectId,
+                actionEntityId: action.entityId,
+                actionWbs: action.after?.wbs,
+                resolvedEntityId,
+              });
               results.push({
                 ...action,
                 status: 'skipped',
