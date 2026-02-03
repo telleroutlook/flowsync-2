@@ -745,12 +745,12 @@ const planActions = async (
   let firstNewProjectId: string | null = null;
 
   for (const action of resolvedActions) {
-    if (action.entityType === 'project' && action.action === 'create' && action.after) {
-      const createdId = (action.after.id as string | undefined) ?? undefined;
-      if (createdId) {
-        newProjectIds.add(createdId);
+    if (action.entityType === 'project' && action.action === 'create') {
+      const projectId = action.after?.id as string | undefined;
+      if (projectId) {
+        newProjectIds.add(projectId);
         if (!firstNewProjectId) {
-          firstNewProjectId = createdId;
+          firstNewProjectId = projectId;
         }
       }
     }
@@ -1563,6 +1563,725 @@ const applyAutoFixes = async (
   };
 };
 
+// ============================================================================
+// Draft Application Helper Types
+// ============================================================================
+
+interface DraftExecutionContext {
+  db: ReturnType<typeof import('../db').getDb>;
+  draft: DraftRecord;
+  actor: DraftRecord['createdBy'];
+  workspaceId: string;
+  transactionLog: CompensatingLogEntry[];
+  sequence: number;
+  stats: {
+    success: number;
+    warning: number;
+    skipped: number;
+    failed: number;
+  };
+}
+
+interface ProjectActionResult {
+  success: boolean;
+  result?: DraftAction;
+  error?: string;
+  skipped?: boolean;
+  logEntry?: CompensatingLogEntry;
+}
+
+interface TaskActionResult {
+  success: boolean;
+  result?: DraftAction;
+  error?: string;
+  skipped?: boolean;
+  logEntry?: CompensatingLogEntry;
+}
+
+// ============================================================================
+// Draft Application - Helper Functions
+// ============================================================================
+
+/**
+ * Resolves a task by WBS if ID lookup fails
+ * Shared helper for executeTaskUpdate and executeTaskDelete
+ */
+const resolveTaskByWBSIfNeeded = async (
+  ctx: DraftExecutionContext,
+  action: DraftAction,
+  draftProjectId: string | null,
+  actionType: 'update' | 'delete'
+): Promise<{ before: TaskRecord | null; resolvedEntityId: string | null; warnings: string[] }> => {
+  let before = action.entityId ? await getTaskById(ctx.db, action.entityId, ctx.workspaceId) : null;
+  let resolvedEntityId = action.entityId;
+  const warnings: string[] = [];
+
+  // Fallback: Try WBS match if ID not found and WBS provided
+  if (!before && action.after?.wbs && draftProjectId) {
+    const { resolveTask } = await import('./entityResolver');
+    const wbsResult = await resolveTask(
+      ctx.db,
+      {
+        entityId: undefined,
+        entityType: 'task',
+        action: actionType,
+        fallbackRef: { wbs: action.after.wbs as string, projectId: draftProjectId }
+      },
+      ctx.workspaceId,
+      draftProjectId
+    );
+
+    if (wbsResult.success && wbsResult.entity && wbsResult.entityId) {
+      before = wbsResult.entity;
+      resolvedEntityId = wbsResult.entityId;
+      warnings.push(`Task ID corrected using WBS "${action.after.wbs}"`);
+    }
+  }
+
+  return { before, resolvedEntityId: resolvedEntityId ?? null, warnings };
+};
+
+/**
+ * Records audit log for task operations
+ * Shared helper to reduce code duplication
+ */
+const recordTaskAudit = async (
+  ctx: DraftExecutionContext,
+  actionType: 'create' | 'update' | 'delete',
+  taskId: string,
+  before: TaskRecord | null,
+  after: TaskRecord | null,
+  projectId: string
+): Promise<{ auditRecorded: boolean }> => {
+  try {
+    await recordAudit(ctx.db, {
+      workspaceId: ctx.workspaceId,
+      entityType: 'task',
+      entityId: taskId,
+      action: actionType,
+      before,
+      after,
+      actor: ctx.actor,
+      reason: ctx.draft.reason ?? null,
+      projectId,
+      taskId,
+      draftId: ctx.draft.id,
+    });
+    return { auditRecorded: true };
+  } catch (auditError) {
+    console.error('Audit logging failed', { error: auditError });
+    return { auditRecorded: false };
+  }
+};
+
+// ============================================================================
+// Draft Application - Project Actions
+// ============================================================================
+
+/**
+ * Executes a project create action
+ */
+const executeProjectCreate = async (
+  ctx: DraftExecutionContext,
+  action: DraftAction
+): Promise<ProjectActionResult> => {
+  if (!action.after) {
+    return { success: false, error: 'Missing action data' };
+  }
+
+  try {
+    const beforeSnapshot = await getProjectById(ctx.db, (action.after.id as string) || '', ctx.workspaceId);
+    const created = await createProject(ctx.db, {
+      id: (action.after.id as string) || undefined,
+      name: (action.after.name as string) ?? 'Untitled Project',
+      description: (action.after.description as string) ?? undefined,
+      icon: (action.after.icon as string) ?? undefined,
+      createdAt: (action.after.createdAt as string) ?? undefined,
+      updatedAt: (action.after.updatedAt as string) ?? undefined,
+      workspaceId: ctx.workspaceId,
+    });
+
+    console.log('[Draft Apply] Project created successfully', {
+      projectId: created.id,
+      projectName: created.name,
+    });
+
+    const result: DraftAction = {
+      ...action,
+      entityId: created.id,
+      after: created,
+      status: action.warnings?.length ? 'warning' : 'success',
+    };
+
+    const currentSequence = ctx.sequence;
+    ctx.sequence += 1;
+    const logEntry: CompensatingLogEntry = {
+      sequence: currentSequence,
+      actionType: 'project.create',
+      entityId: created.id,
+      before: { project: beforeSnapshot ?? undefined },
+      auditRecorded: false,
+      timestamp: now(),
+    };
+
+    // Record audit
+    try {
+      await recordAudit(ctx.db, {
+        workspaceId: ctx.workspaceId,
+        entityType: 'project',
+        entityId: created.id,
+        action: 'create',
+        before: null,
+        after: created,
+        actor: ctx.actor,
+        reason: ctx.draft.reason ?? null,
+        projectId: created.id,
+        taskId: null,
+        draftId: ctx.draft.id,
+      });
+      logEntry.auditRecorded = true;
+    } catch (auditError) {
+      console.error('Audit logging failed', { error: auditError });
+    }
+
+    return { success: true, result, logEntry };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('[Draft Apply] Project creation failed', { error: errorMsg });
+    return { success: false, error: errorMsg };
+  }
+};
+
+/**
+ * Executes a project update action
+ */
+const executeProjectUpdate = async (
+  ctx: DraftExecutionContext,
+  action: DraftAction
+): Promise<ProjectActionResult> => {
+  if (!action.entityId) {
+    return { success: false, error: 'Missing entityId' };
+  }
+
+  try {
+    const before = await getProjectById(ctx.db, action.entityId, ctx.workspaceId);
+    const updated = await updateProject(ctx.db, action.entityId, {
+      name: (action.after?.name as string) ?? undefined,
+      description: (action.after?.description as string) ?? undefined,
+      icon: (action.after?.icon as string) ?? undefined,
+      createdAt: (action.after?.createdAt as string) ?? undefined,
+      updatedAt: (action.after?.updatedAt as string) ?? undefined,
+    }, ctx.workspaceId);
+
+    if (!updated) {
+      return { success: false, error: 'Project not found', skipped: true };
+    }
+
+    const result: DraftAction = {
+      ...action,
+      before: before ?? undefined,
+      after: updated,
+      status: action.warnings?.length ? 'warning' : 'success',
+    };
+
+    const currentSequence = ctx.sequence;
+    ctx.sequence += 1;
+    const logEntry: CompensatingLogEntry = {
+      sequence: currentSequence,
+      actionType: 'project.update',
+      entityId: updated.id,
+      before: { project: before ?? undefined },
+      auditRecorded: false,
+      timestamp: now(),
+    };
+
+    try {
+      await recordAudit(ctx.db, {
+        workspaceId: ctx.workspaceId,
+        entityType: 'project',
+        entityId: updated.id,
+        action: 'update',
+        before: before ?? null,
+        after: updated,
+        actor: ctx.actor,
+        reason: ctx.draft.reason ?? null,
+        projectId: updated.id,
+        taskId: null,
+        draftId: ctx.draft.id,
+      });
+      logEntry.auditRecorded = true;
+    } catch (auditError) {
+      console.error('Audit logging failed', { error: auditError });
+    }
+
+    return { success: true, result, logEntry };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMsg };
+  }
+};
+
+/**
+ * Executes a project delete action
+ */
+const executeProjectDelete = async (
+  ctx: DraftExecutionContext,
+  action: DraftAction
+): Promise<ProjectActionResult> => {
+  if (!action.entityId) {
+    return { success: false, error: 'Missing entityId' };
+  }
+
+  try {
+    const before = await getProjectById(ctx.db, action.entityId, ctx.workspaceId);
+    const { tasks } = await import('../db/schema');
+    const taskRows = await ctx.db.select().from(tasks).where(eq(tasks.projectId, action.entityId));
+    const tasksBefore = taskRows.map(toTaskRecord);
+    const deleted = await deleteProject(ctx.db, action.entityId, ctx.workspaceId);
+
+    const result: DraftAction = {
+      ...action,
+      before: before ?? undefined,
+      after: null,
+      status: 'success',
+    };
+
+    const currentSequence = ctx.sequence;
+    ctx.sequence += 1;
+    const logEntry: CompensatingLogEntry = {
+      sequence: currentSequence,
+      actionType: 'project.delete',
+      entityId: deleted.project?.id || action.entityId,
+      before: {
+        project: before ?? deleted.project ?? undefined,
+        tasks: tasksBefore,
+      },
+      auditRecorded: false,
+      timestamp: now(),
+    };
+
+    if (deleted.project) {
+      try {
+        await recordAudit(ctx.db, {
+          workspaceId: ctx.workspaceId,
+          entityType: 'project',
+          entityId: deleted.project.id,
+          action: 'delete',
+          before: { project: before ?? deleted.project, tasks: tasksBefore },
+          after: null,
+          actor: ctx.actor,
+          reason: ctx.draft.reason ?? null,
+          projectId: deleted.project.id,
+          taskId: null,
+          draftId: ctx.draft.id,
+        });
+        logEntry.auditRecorded = true;
+      } catch (auditError) {
+        console.error('Audit logging failed', { error: auditError });
+      }
+    }
+
+    return { success: true, result, logEntry };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMsg };
+  }
+};
+
+/**
+ * Applies all project actions in a draft
+ */
+async function applyProjectActions(
+  ctx: DraftExecutionContext,
+  actions: DraftAction[]
+): Promise<{ results: DraftAction[]; logEntries: CompensatingLogEntry[] }> {
+  const results: DraftAction[] = [];
+  const logEntries: CompensatingLogEntry[] = [];
+
+  for (const action of actions) {
+    let outcome: ProjectActionResult;
+
+    if (action.action === 'create') {
+      outcome = await executeProjectCreate(ctx, action);
+    } else if (action.action === 'update') {
+      outcome = await executeProjectUpdate(ctx, action);
+    } else if (action.action === 'delete') {
+      outcome = await executeProjectDelete(ctx, action);
+    } else {
+      continue;
+    }
+
+    if (outcome.success) {
+      if (outcome.result) {
+        results.push(outcome.result);
+        ctx.stats.success++;
+      }
+      if (outcome.logEntry) {
+        logEntries.push(outcome.logEntry);
+      }
+    } else {
+      const severity = classifyError(new Error(outcome.error || 'Unknown error'));
+      if (severity === 'FATAL') {
+        throw new Error(outcome.error);
+      }
+      results.push({
+        ...action,
+        status: outcome.skipped ? 'skipped' : 'failed',
+        error: outcome.error,
+      });
+      ctx.stats.failed++;
+    }
+  }
+
+  return { results, logEntries };
+}
+
+// ============================================================================
+// Draft Application - Task Actions
+// ============================================================================
+
+/**
+ * Executes a task create action
+ */
+const executeTaskCreate = async (
+  ctx: DraftExecutionContext,
+  action: DraftAction,
+  draftProjectId: string | null
+): Promise<TaskActionResult> => {
+  if (!action.after) {
+    return { success: false, error: 'Missing action data' };
+  }
+
+  try {
+    const warnings: string[] = [];
+    const actionProjectId = (action.after.projectId as string | undefined) ?? undefined;
+    let resolvedProjectId = actionProjectId ?? draftProjectId ?? '';
+
+    if (draftProjectId && actionProjectId && actionProjectId !== draftProjectId) {
+      warnings.push('Task create projectId did not match the draft project. Using the draft project instead.');
+      resolvedProjectId = draftProjectId;
+    }
+
+    if (!resolvedProjectId) {
+      return { success: false, error: 'Missing projectId for task creation.' };
+    }
+
+    const beforeSnapshot = await getTaskById(ctx.db, (action.after.id as string) || '', ctx.workspaceId);
+    const created = await createTask(ctx.db, {
+      id: (action.after.id as string) || undefined,
+      projectId: resolvedProjectId,
+      title: (action.after.title as string) ?? 'Untitled Task',
+      description: (action.after.description as string) ?? undefined,
+      status: toTaskStatus(action.after.status, 'TODO'),
+      priority: toPriority(action.after.priority, 'MEDIUM'),
+      wbs: (action.after.wbs as string) ?? undefined,
+      startDate: (action.after.startDate as string) ?? undefined,
+      dueDate: (action.after.dueDate as string) ?? undefined,
+      completion: (action.after.completion as number) ?? undefined,
+      assignee: (action.after.assignee as string) ?? undefined,
+      isMilestone: (action.after.isMilestone as boolean) ?? undefined,
+      predecessors: (action.after.predecessors as string[]) ?? undefined,
+      createdAt: (action.after.createdAt as string) ?? undefined,
+      updatedAt: (action.after.updatedAt as string) ?? undefined,
+    }, ctx.workspaceId);
+
+    if (!created) {
+      return { success: false, error: `Invalid project for task creation: ${resolvedProjectId}.` };
+    }
+
+    const hasWarnings = warnings.length > 0 || (action.warnings?.length ?? 0) > 0;
+    const result: DraftAction = {
+      ...action,
+      entityId: created.id,
+      after: created,
+      warnings: warnings.length ? warnings : action.warnings,
+      status: hasWarnings ? 'warning' : 'success',
+    };
+
+    const currentSequence = ctx.sequence;
+    ctx.sequence += 1;
+    const logEntry: CompensatingLogEntry = {
+      sequence: currentSequence,
+      actionType: 'task.create',
+      entityId: created.id,
+      before: { task: beforeSnapshot ?? undefined },
+      auditRecorded: false,
+      timestamp: now(),
+    };
+
+    // Use shared audit recording helper
+    const auditResult = await recordTaskAudit(
+      ctx,
+      'create',
+      created.id,
+      null,
+      created,
+      created.projectId
+    );
+    logEntry.auditRecorded = auditResult.auditRecorded;
+
+    return { success: true, result, logEntry };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMsg };
+  }
+};
+
+/**
+ * Executes a task update action
+ */
+const executeTaskUpdate = async (
+  ctx: DraftExecutionContext,
+  action: DraftAction,
+  draftProjectId: string | null
+): Promise<TaskActionResult> => {
+  if (!action.entityId && !action.after?.wbs) {
+    return { success: false, error: 'Missing entityId and WBS' };
+  }
+
+  try {
+    // Use shared WBS resolution helper
+    const { before, resolvedEntityId, warnings } = await resolveTaskByWBSIfNeeded(
+      ctx,
+      action,
+      draftProjectId,
+      'update'
+    );
+
+    // Merge warnings from WBS resolution
+    if (warnings.length) {
+      if (!action.warnings) action.warnings = [];
+      action.warnings.push(...warnings);
+    }
+
+    if (!before || !resolvedEntityId) {
+      console.warn('draftService:updateTask:notFound', {
+        workspaceId: ctx.workspaceId,
+        draftId: ctx.draft.id,
+        draftProjectId,
+        actionEntityId: action.entityId,
+        actionWbs: action.after?.wbs,
+        resolvedEntityId,
+      });
+      return {
+        success: false,
+        error: `Task not found: ${action.entityId ?? action.after?.wbs ?? 'unknown'}. The task may have been deleted or the draft is outdated.`,
+        skipped: true
+      };
+    }
+
+    if (draftProjectId && before.projectId !== draftProjectId) {
+      return {
+        success: false,
+        error: 'Task update skipped because it targets a different project than the active draft project.',
+        skipped: true
+      };
+    }
+
+    if (!action.after) {
+      const refLabel = resolvedEntityId ?? action.entityId ?? 'unknown';
+      return { success: false, error: `Invalid draft: No update data provided for task ${refLabel}.` };
+    }
+
+    const updated = await updateTask(ctx.db, resolvedEntityId, {
+      title: (action.after?.title as string) ?? undefined,
+      description: (action.after?.description as string) ?? undefined,
+      status: toOptionalTaskStatus(action.after?.status),
+      priority: toOptionalPriority(action.after?.priority),
+      wbs: (action.after?.wbs as string) ?? undefined,
+      startDate: (action.after?.startDate as string) ?? undefined,
+      dueDate: (action.after?.dueDate as string) ?? undefined,
+      completion: (action.after?.completion as number) ?? undefined,
+      assignee: (action.after?.assignee as string) ?? undefined,
+      isMilestone: (action.after?.isMilestone as boolean) ?? undefined,
+      predecessors: (action.after?.predecessors as string[]) ?? undefined,
+    }, ctx.workspaceId);
+
+    if (!updated) {
+      return { success: false, error: 'Task not found or update failed', skipped: true };
+    }
+
+    const hasWarnings = (action.warnings?.length ?? 0) > 0;
+    const result: DraftAction = {
+      ...action,
+      before: before ?? undefined,
+      after: updated,
+      status: hasWarnings ? 'warning' : 'success',
+    };
+
+    const currentSequence = ctx.sequence;
+    ctx.sequence += 1;
+    const logEntry: CompensatingLogEntry = {
+      sequence: currentSequence,
+      actionType: 'task.update',
+      entityId: updated.id,
+      before: { task: before ?? undefined },
+      auditRecorded: false,
+      timestamp: now(),
+    };
+
+    // Use shared audit recording helper
+    const auditResult = await recordTaskAudit(
+      ctx,
+      'update',
+      updated.id,
+      before ?? null,
+      updated,
+      updated.projectId
+    );
+    logEntry.auditRecorded = auditResult.auditRecorded;
+
+    return { success: true, result, logEntry };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMsg };
+  }
+};
+
+/**
+ * Executes a task delete action
+ */
+const executeTaskDelete = async (
+  ctx: DraftExecutionContext,
+  action: DraftAction,
+  draftProjectId: string | null
+): Promise<TaskActionResult> => {
+  if (!action.entityId && !action.after?.wbs) {
+    return { success: false, error: 'Missing entityId and WBS' };
+  }
+
+  try {
+    // Use shared WBS resolution helper
+    const { before, resolvedEntityId, warnings } = await resolveTaskByWBSIfNeeded(
+      ctx,
+      action,
+      draftProjectId,
+      'delete'
+    );
+
+    // Merge warnings from WBS resolution
+    if (warnings.length) {
+      if (!action.warnings) action.warnings = [];
+      action.warnings.push(...warnings);
+    }
+
+    if (!resolvedEntityId) {
+      console.warn('draftService:deleteTask:notFound', {
+        workspaceId: ctx.workspaceId,
+        draftId: ctx.draft.id,
+        draftProjectId,
+        actionEntityId: action.entityId,
+        actionWbs: action.after?.wbs,
+        resolvedEntityId,
+      });
+      return {
+        success: false,
+        error: 'Task not found or delete failed',
+        skipped: true
+      };
+    }
+
+    if (before && draftProjectId && before.projectId !== draftProjectId) {
+      return {
+        success: false,
+        error: 'Task delete skipped because it targets a different project than the active draft project.',
+        skipped: true
+      };
+    }
+
+    const deleted = await deleteTask(ctx.db, resolvedEntityId, ctx.workspaceId);
+
+    const result: DraftAction = {
+      ...action,
+      before: before ?? undefined,
+      after: null,
+      status: 'success',
+    };
+
+    const currentSequence = ctx.sequence;
+    ctx.sequence += 1;
+    const logEntry: CompensatingLogEntry = {
+      sequence: currentSequence,
+      actionType: 'task.delete',
+      entityId: deleted?.id || resolvedEntityId,
+      before: { task: before ?? undefined },
+      auditRecorded: false,
+      timestamp: now(),
+    };
+
+    if (deleted) {
+      // Use shared audit recording helper
+      const auditResult = await recordTaskAudit(
+        ctx,
+        'delete',
+        deleted.id,
+        before ?? null,
+        null,
+        deleted.projectId
+      );
+      logEntry.auditRecorded = auditResult.auditRecorded;
+    }
+
+    return { success: true, result, logEntry };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMsg };
+  }
+};
+
+/**
+ * Applies all task actions in a draft
+ */
+async function applyTaskActions(
+  ctx: DraftExecutionContext,
+  actions: DraftAction[],
+  draftProjectId: string | null
+): Promise<{ results: DraftAction[]; logEntries: CompensatingLogEntry[] }> {
+  const results: DraftAction[] = [];
+  const logEntries: CompensatingLogEntry[] = [];
+
+  for (const action of actions) {
+    let outcome: TaskActionResult;
+
+    if (action.action === 'create') {
+      outcome = await executeTaskCreate(ctx, action, draftProjectId);
+    } else if (action.action === 'update') {
+      outcome = await executeTaskUpdate(ctx, action, draftProjectId);
+    } else if (action.action === 'delete') {
+      outcome = await executeTaskDelete(ctx, action, draftProjectId);
+    } else {
+      continue;
+    }
+
+    if (outcome.success) {
+      if (outcome.result) {
+        results.push(outcome.result);
+        ctx.stats.success++;
+      }
+      if (outcome.logEntry) {
+        logEntries.push(outcome.logEntry);
+      }
+    } else {
+      const severity = classifyError(new Error(outcome.error || 'Unknown error'));
+      if (severity === 'FATAL') {
+        throw new Error(outcome.error);
+      }
+      results.push({
+        ...action,
+        status: outcome.skipped ? 'skipped' : 'failed',
+        error: outcome.error,
+      });
+      ctx.stats.failed++;
+    }
+  }
+
+  return { results, logEntries };
+}
+
+// ============================================================================
+// Draft Application - Main Function
+// ============================================================================
+
 /**
  * Applies a draft with partial success support
  * - FATAL errors trigger full rollback (all-or-nothing)
@@ -1639,583 +2358,41 @@ export const applyDraft = async (
   const results: DraftAction[] = [];
   const draftProjectId = currentDraft.projectId ?? null;
 
-  // Action execution statistics
-  const stats = {
-    success: 0,
-    warning: 0,
-    skipped: 0,
-    failed: 0,
+  // Separate actions by entity type
+  const projectActions = currentDraft.actions.filter(a => a.entityType === 'project');
+  const taskActions = currentDraft.actions.filter(a => a.entityType === 'task');
+
+  // Build execution context
+  const ctx: DraftExecutionContext = {
+    db,
+    draft: currentDraft,
+    actor,
+    workspaceId,
+    transactionLog: [],
+    sequence: 0,
+    stats: { success: 0, warning: 0, skipped: 0, failed: 0 },
   };
 
-  // Compensating transaction log: tracks operations for potential rollback
-  const transactionLog: CompensatingLogEntry[] = [];
-  let sequence = 0;
-  let fatalError: Error | null = null;
-
   try {
-    for (const action of currentDraft.actions) {
-      if (action.entityType === 'project') {
-        if (action.action === 'create' && action.after) {
-          console.log('[Draft Apply] Processing project.create', {
-            projectId: action.after.id,
-            projectName: action.after.name,
-            workspaceId,
-          });
+    // Apply project actions
+    const projectOutcome = await applyProjectActions(ctx, projectActions);
+    results.push(...projectOutcome.results);
+    ctx.transactionLog.push(...projectOutcome.logEntries);
 
-          try {
-            const beforeSnapshot = await getProjectById(db, (action.after.id as string) || '', workspaceId);
-            const created = await createProject(db, {
-              id: (action.after.id as string) || undefined,  // Use || to handle empty string
-              name: (action.after.name as string) ?? 'Untitled Project',
-              description: (action.after.description as string) ?? undefined,
-              icon: (action.after.icon as string) ?? undefined,
-              createdAt: (action.after.createdAt as string) ?? undefined,
-              updatedAt: (action.after.updatedAt as string) ?? undefined,
-              workspaceId,
-            });
-
-            console.log('[Draft Apply] Project created successfully', {
-              projectId: created.id,
-              projectName: created.name,
-            });
-
-            results.push({
-              ...action,
-              entityId: created.id,
-              after: created,
-              status: action.warnings?.length ? 'warning' : 'success',
-            });
-            stats.success++;
-
-            // Log operation for potential rollback
-            const logIndex = transactionLog.push({
-              sequence: sequence++,
-              actionType: 'project.create',
-              entityId: created.id,
-              before: { project: beforeSnapshot ?? undefined },
-              auditRecorded: false,
-              timestamp: now(),
-            }) - 1;
-
-            try {
-              await recordAudit(db, {
-                workspaceId,
-                entityType: 'project',
-                entityId: created.id,
-                action: 'create',
-                before: null,
-                after: created,
-                actor,
-                reason: currentDraft.reason ?? null,
-                projectId: created.id,
-                taskId: null,
-                draftId: currentDraft.id,
-              });
-              transactionLog[logIndex]!.auditRecorded = true;
-            } catch (auditError) {
-              console.error('Audit logging failed', { error: auditError });
-            }
-          } catch (createError) {
-            const severity = classifyError(createError);
-            console.error('[Draft Apply] Project creation failed', {
-              error: createError instanceof Error ? createError.message : String(createError),
-              severity,
-              action: action.after,
-            });
-
-            if (severity === 'FATAL') {
-              fatalError = createError instanceof Error ? createError : new Error(String(createError));
-              throw fatalError; // Trigger full rollback
-            }
-
-            // RECOVERABLE error - log and continue
-            results.push({
-              ...action,
-              status: 'failed',
-              error: createError instanceof Error ? createError.message : String(createError),
-            });
-            stats.failed++;
-          }
-
-        } else if (action.action === 'update' && action.entityId) {
-          try {
-            const before = await getProjectById(db, action.entityId, workspaceId);
-            const updated = await updateProject(db, action.entityId, {
-              name: (action.after?.name as string) ?? undefined,
-              description: (action.after?.description as string) ?? undefined,
-              icon: (action.after?.icon as string) ?? undefined,
-              createdAt: (action.after?.createdAt as string) ?? undefined,
-              updatedAt: (action.after?.updatedAt as string) ?? undefined,
-            }, workspaceId);
-
-            if (updated) {
-              results.push({
-                ...action,
-                before: before ?? undefined,
-                after: updated,
-                status: action.warnings?.length ? 'warning' : 'success',
-              });
-              stats.success++;
-
-              // Log operation for potential rollback
-              const logIndex = transactionLog.push({
-                sequence: sequence++,
-                actionType: 'project.update',
-                entityId: updated.id,
-                before: { project: before ?? undefined },
-                auditRecorded: false,
-                timestamp: now(),
-              }) - 1;
-
-              try {
-                await recordAudit(db, {
-                  workspaceId,
-                  entityType: 'project',
-                  entityId: updated.id,
-                  action: 'update',
-                  before: before ?? null,
-                  after: updated,
-                  actor,
-                  reason: draft.reason ?? null,
-                  projectId: updated.id,
-                  taskId: null,
-                  draftId: draft.id,
-                });
-                transactionLog[logIndex]!.auditRecorded = true;
-              } catch (auditError) {
-                console.error('Audit logging failed', { error: auditError });
-              }
-            } else {
-              // Not found - treat as skipped
-              results.push({
-                ...action,
-                status: 'skipped',
-                error: 'Project not found',
-              });
-              stats.skipped++;
-            }
-          } catch (updateError) {
-            const severity = classifyError(updateError);
-            if (severity === 'FATAL') {
-              fatalError = updateError instanceof Error ? updateError : new Error(String(updateError));
-              throw fatalError;
-            }
-            results.push({
-              ...action,
-              status: 'failed',
-              error: updateError instanceof Error ? updateError.message : String(updateError),
-            });
-            stats.failed++;
-          }
-
-        } else if (action.action === 'delete' && action.entityId) {
-          try {
-            const before = await getProjectById(db, action.entityId, workspaceId);
-            const taskRows = await db.select().from(tasks).where(eq(tasks.projectId, action.entityId));
-            const tasksBefore = taskRows.map(toTaskRecord);
-            const deleted = await deleteProject(db, action.entityId, workspaceId);
-
-            results.push({
-              ...action,
-              before: before ?? undefined,
-              after: null,
-              status: 'success',
-            });
-            stats.success++;
-
-            if (deleted.project) {
-              // Log operation for potential rollback (with cascade tasks)
-              const logIndex = transactionLog.push({
-                sequence: sequence++,
-                actionType: 'project.delete',
-                entityId: deleted.project.id,
-                before: {
-                  project: before ?? deleted.project,
-                  tasks: tasksBefore,
-                },
-                auditRecorded: false,
-                timestamp: now(),
-              }) - 1;
-
-              try {
-                await recordAudit(db, {
-                  workspaceId,
-                  entityType: 'project',
-                  entityId: deleted.project.id,
-                  action: 'delete',
-                  before: { project: before ?? deleted.project, tasks: tasksBefore },
-                  after: null,
-                  actor,
-                  reason: draft.reason ?? null,
-                  projectId: deleted.project.id,
-                  taskId: null,
-                  draftId: draft.id,
-                });
-                transactionLog[logIndex]!.auditRecorded = true;
-              } catch (auditError) {
-                console.error('Audit logging failed', { error: auditError });
-              }
-            }
-          } catch (deleteError) {
-            const severity = classifyError(deleteError);
-            if (severity === 'FATAL') {
-              fatalError = deleteError instanceof Error ? deleteError : new Error(String(deleteError));
-              throw fatalError;
-            }
-            results.push({
-              ...action,
-              status: 'failed',
-              error: deleteError instanceof Error ? deleteError.message : String(deleteError),
-            });
-            stats.failed++;
-          }
-        }
-        continue;
-      }
-
-      if (action.entityType === 'task') {
-        if (action.action === 'create' && action.after) {
-          try {
-            const warnings: string[] = [];
-            const actionProjectId = (action.after.projectId as string | undefined) ?? undefined;
-            let resolvedProjectId = actionProjectId ?? draftProjectId ?? '';
-            if (draftProjectId && actionProjectId && actionProjectId !== draftProjectId) {
-              warnings.push('Task create projectId did not match the draft project. Using the draft project instead.');
-              resolvedProjectId = draftProjectId;
-            }
-            if (!resolvedProjectId) {
-              throw new Error('Missing projectId for task creation.');
-            }
-
-            const beforeSnapshot = await getTaskById(db, (action.after.id as string) || '', workspaceId);
-            const created = await createTask(db, {
-              id: (action.after.id as string) || undefined,  // Use || to handle empty string
-              projectId: resolvedProjectId,
-              title: (action.after.title as string) ?? 'Untitled Task',
-              description: (action.after.description as string) ?? undefined,
-              status: toTaskStatus(action.after.status, 'TODO'),
-              priority: toPriority(action.after.priority, 'MEDIUM'),
-              wbs: (action.after.wbs as string) ?? undefined,
-              startDate: (action.after.startDate as string) ?? undefined,
-              dueDate: (action.after.dueDate as string) ?? undefined,
-              completion: (action.after.completion as number) ?? undefined,
-              assignee: (action.after.assignee as string) ?? undefined,
-              isMilestone: (action.after.isMilestone as boolean) ?? undefined,
-              predecessors: (action.after.predecessors as string[]) ?? undefined,
-              createdAt: (action.after.createdAt as string) ?? undefined,
-              updatedAt: (action.after.updatedAt as string) ?? undefined,
-            }, workspaceId);
-
-            if (!created) {
-              throw new Error(`Invalid project for task creation: ${resolvedProjectId}.`);
-            }
-
-            const hasWarnings = warnings.length > 0 || (action.warnings?.length ?? 0) > 0;
-            results.push({
-              ...action,
-              entityId: created.id,
-              after: created,
-              warnings: warnings.length ? warnings : action.warnings,
-              status: hasWarnings ? 'warning' : 'success',
-            });
-            stats.success++;
-
-            // Log operation for potential rollback
-            const logIndex = transactionLog.push({
-              sequence: sequence++,
-              actionType: 'task.create',
-              entityId: created.id,
-              before: { task: beforeSnapshot ?? undefined },
-              auditRecorded: false,
-              timestamp: now(),
-            }) - 1;
-
-            try {
-              await recordAudit(db, {
-                workspaceId,
-                entityType: 'task',
-                entityId: created.id,
-                action: 'create',
-                before: null,
-                after: created,
-                actor,
-                reason: currentDraft.reason ?? null,
-                projectId: created.projectId,
-                taskId: created.id,
-                draftId: currentDraft.id,
-              });
-              transactionLog[logIndex]!.auditRecorded = true;
-            } catch (auditError) {
-              console.error('Audit logging failed', { error: auditError });
-            }
-          } catch (createError) {
-            const severity = classifyError(createError);
-            if (severity === 'FATAL') {
-              fatalError = createError instanceof Error ? createError : new Error(String(createError));
-              throw fatalError;
-            }
-            results.push({
-              ...action,
-              status: 'failed',
-              error: createError instanceof Error ? createError.message : String(createError),
-            });
-            stats.failed++;
-          }
-
-        } else if (action.action === 'update' && (action.entityId || action.after?.wbs)) {
-          try {
-            let before = action.entityId ? await getTaskById(db, action.entityId, workspaceId) : null;
-            let resolvedEntityId = action.entityId;
-
-            // Fallback: Try WBS match if ID not found and WBS provided
-            if (!before && action.after?.wbs && draftProjectId) {
-              const { resolveTask } = await import('./entityResolver');
-              const wbsResult = await resolveTask(
-                db,
-                { entityId: undefined, entityType: 'task', action: 'update', fallbackRef: { wbs: action.after.wbs as string, projectId: draftProjectId } },
-                workspaceId,
-                draftProjectId
-              );
-
-              if (wbsResult.success && wbsResult.entity) {
-                before = wbsResult.entity;
-                resolvedEntityId = wbsResult.entityId!;
-                // Add warning about ID correction
-                if (!action.warnings) action.warnings = [];
-                action.warnings.push(`Task ID corrected using WBS "${action.after.wbs}"`);
-              }
-            }
-
-            if (!before || !resolvedEntityId) {
-              console.warn('draftService:updateTask:notFound', {
-                workspaceId,
-                draftId: draft.id,
-                draftProjectId,
-                actionEntityId: action.entityId,
-                actionWbs: action.after?.wbs,
-                resolvedEntityId,
-              });
-              // Task not found - treat as skipped
-              results.push({
-                ...action,
-                status: 'skipped',
-                error: `Task not found: ${action.entityId ?? action.after?.wbs ?? 'unknown'}. The task may have been deleted or the draft is outdated.`,
-              });
-              stats.skipped++;
-              continue;
-            }
-            if (draftProjectId && before.projectId !== draftProjectId) {
-              results.push({
-                ...action,
-                before,
-                after: null,
-                status: 'skipped',
-                warnings: ['Task update skipped because it targets a different project than the active draft project.'],
-              });
-              stats.skipped++;
-              continue;
-            }
-
-            if (!action.after) {
-              const refLabel = resolvedEntityId ?? action.entityId ?? 'unknown';
-              throw new Error(`Invalid draft: No update data provided for task ${refLabel}. This draft may be corrupted.`);
-            }
-
-            const updated = await updateTask(db, resolvedEntityId, {
-              title: (action.after?.title as string) ?? undefined,
-              description: (action.after?.description as string) ?? undefined,
-              status: toOptionalTaskStatus(action.after?.status),
-              priority: toOptionalPriority(action.after?.priority),
-              wbs: (action.after?.wbs as string) ?? undefined,
-              startDate: (action.after?.startDate as string) ?? undefined,
-              dueDate: (action.after?.dueDate as string) ?? undefined,
-              completion: (action.after?.completion as number) ?? undefined,
-              assignee: (action.after?.assignee as string) ?? undefined,
-              isMilestone: (action.after?.isMilestone as boolean) ?? undefined,
-              predecessors: (action.after?.predecessors as string[]) ?? undefined,
-            }, workspaceId);
-
-            if (updated) {
-              const hasWarnings = (action.warnings?.length ?? 0) > 0;
-              results.push({
-                ...action,
-                before: before ?? undefined,
-                after: updated,
-                status: hasWarnings ? 'warning' : 'success',
-              });
-              stats.success++;
-
-              // Log operation for potential rollback
-              const logIndex = transactionLog.push({
-                sequence: sequence++,
-                actionType: 'task.update',
-                entityId: updated.id,
-                before: { task: before ?? undefined },
-                auditRecorded: false,
-                timestamp: now(),
-              }) - 1;
-
-              try {
-                await recordAudit(db, {
-                  workspaceId,
-                  entityType: 'task',
-                  entityId: updated.id,
-                  action: 'update',
-                  before: before ?? null,
-                  after: updated,
-                  actor,
-                  reason: draft.reason ?? null,
-                  projectId: updated.projectId,
-                  taskId: updated.id,
-                  draftId: draft.id,
-                });
-                transactionLog[logIndex]!.auditRecorded = true;
-              } catch (auditError) {
-                console.error('Audit logging failed', { error: auditError });
-              }
-            } else {
-              // Update returned null - treat as skipped
-              results.push({
-                ...action,
-                status: 'skipped',
-                error: 'Task not found or update failed',
-              });
-              stats.skipped++;
-            }
-          } catch (updateError) {
-            const severity = classifyError(updateError);
-            if (severity === 'FATAL') {
-              fatalError = updateError instanceof Error ? updateError : new Error(String(updateError));
-              throw fatalError;
-            }
-            results.push({
-              ...action,
-              status: 'failed',
-              error: updateError instanceof Error ? updateError.message : String(updateError),
-            });
-            stats.failed++;
-          }
-
-        } else if (action.action === 'delete' && (action.entityId || action.after?.wbs)) {
-          try {
-            let before = action.entityId ? await getTaskById(db, action.entityId, workspaceId) : null;
-            let resolvedEntityId = action.entityId;
-
-            // Fallback: Try WBS match if ID not found and WBS provided
-            if (!before && action.after?.wbs && draftProjectId) {
-              const { resolveTask } = await import('./entityResolver');
-              const wbsResult = await resolveTask(
-                db,
-                { entityId: undefined, entityType: 'task', action: 'delete', fallbackRef: { wbs: action.after.wbs as string, projectId: draftProjectId } },
-                workspaceId,
-                draftProjectId
-              );
-
-              if (wbsResult.success && wbsResult.entity) {
-                before = wbsResult.entity;
-                resolvedEntityId = wbsResult.entityId!;
-                // Add warning about ID correction
-                if (!action.warnings) action.warnings = [];
-                action.warnings.push(`Task ID corrected using WBS "${action.after.wbs}"`);
-              }
-            }
-
-            if (!resolvedEntityId) {
-              console.warn('draftService:deleteTask:notFound', {
-                workspaceId,
-                draftId: draft.id,
-                draftProjectId,
-                actionEntityId: action.entityId,
-                actionWbs: action.after?.wbs,
-                resolvedEntityId,
-              });
-              results.push({
-                ...action,
-                status: 'skipped',
-                error: 'Task not found or delete failed',
-              });
-              stats.skipped++;
-              continue;
-            }
-
-            if (before && draftProjectId && before.projectId !== draftProjectId) {
-              results.push({
-                ...action,
-                before,
-                after: null,
-                status: 'skipped',
-                warnings: ['Task delete skipped because it targets a different project than the active draft project.'],
-              });
-              stats.skipped++;
-              continue;
-            }
-
-            const deleted = await deleteTask(db, resolvedEntityId, workspaceId);
-
-            results.push({
-              ...action,
-              before: before ?? undefined,
-              after: null,
-              status: 'success',
-            });
-            stats.success++;
-
-            if (deleted) {
-              // Log operation for potential rollback
-              const logIndex = transactionLog.push({
-                sequence: sequence++,
-                actionType: 'task.delete',
-                entityId: deleted.id,
-                before: { task: before ?? undefined },
-                auditRecorded: false,
-                timestamp: now(),
-              }) - 1;
-
-              try {
-                await recordAudit(db, {
-                  workspaceId,
-                  entityType: 'task',
-                  entityId: deleted.id,
-                  action: 'delete',
-                  before: before ?? null,
-                  after: null,
-                  actor,
-                  reason: draft.reason ?? null,
-                  projectId: deleted.projectId,
-                  taskId: deleted.id,
-                  draftId: draft.id,
-                });
-                transactionLog[logIndex]!.auditRecorded = true;
-              } catch (auditError) {
-                console.error('Audit logging failed', { error: auditError });
-              }
-            }
-          } catch (deleteError) {
-            const severity = classifyError(deleteError);
-            if (severity === 'FATAL') {
-              fatalError = deleteError instanceof Error ? deleteError : new Error(String(deleteError));
-              throw fatalError;
-            }
-            results.push({
-              ...action,
-              status: 'failed',
-              error: deleteError instanceof Error ? deleteError.message : String(deleteError),
-            });
-            stats.failed++;
-          }
-        }
-      }
-    }
+    // Apply task actions
+    const taskOutcome = await applyTaskActions(ctx, taskActions, draftProjectId);
+    results.push(...taskOutcome.results);
+    ctx.transactionLog.push(...taskOutcome.logEntries);
 
     // Determine draft status based on execution statistics
     let finalStatus: DraftStatus = 'applied';
-    if (stats.failed > 0 && stats.success === 0) {
+    if (ctx.stats.failed > 0 && ctx.stats.success === 0) {
       // All operations failed
       finalStatus = 'failed';
-    } else if (stats.skipped > 0 && stats.success === 0 && stats.failed === 0) {
+    } else if (ctx.stats.skipped > 0 && ctx.stats.success === 0 && ctx.stats.failed === 0) {
       // All operations were skipped (e.g., tasks not found)
       finalStatus = 'failed';
-    } else if (stats.failed > 0 || stats.warning > 0 || stats.skipped > 0) {
+    } else if (ctx.stats.failed > 0 || ctx.stats.warning > 0 || ctx.stats.skipped > 0) {
       // Partial success with failures, warnings, or skipped operations
       finalStatus = 'partial';
     }
@@ -2226,7 +2403,7 @@ export const applyDraft = async (
       ...currentDraft,
       status: finalStatus,
       actions: results, // Update actions with execution status
-      summary: (finalStatus === 'partial' || finalStatus === 'failed') ? { ...stats } : undefined,
+      summary: (finalStatus === 'partial' || finalStatus === 'failed') ? { ...ctx.stats } : undefined,
     };
 
     await db.update(drafts).set({
@@ -2237,7 +2414,7 @@ export const applyDraft = async (
     console.log('[Draft Apply] Completed with status', {
       draftId: currentDraft.id,
       finalStatus,
-      stats,
+      stats: ctx.stats,
     });
 
     return { draft: updatedDraft, results };
@@ -2246,15 +2423,15 @@ export const applyDraft = async (
     // Only FATAL errors reach here - RECOVERABLE errors are handled inline
     console.error('[Draft Apply] Fatal error, initiating compensating rollback', {
       draftId: currentDraft.id,
-      operationsCompleted: transactionLog.length,
-      stats,
+      operationsCompleted: ctx.transactionLog.length,
+      stats: ctx.stats,
       error: error instanceof Error ? error.message : String(error),
     });
 
     // Rollback in reverse order (LIFO)
     const rollbackErrors: Array<{ entry: CompensatingLogEntry; error: string }> = [];
-    for (let i = transactionLog.length - 1; i >= 0; i--) {
-      const entry = transactionLog[i]!;
+    for (let i = ctx.transactionLog.length - 1; i >= 0; i--) {
+      const entry = ctx.transactionLog[i]!;
       try {
         await rollbackOperation(db, entry, workspaceId);
       } catch (rollbackError) {
@@ -2273,7 +2450,7 @@ export const applyDraft = async (
 
     // Construct comprehensive error message
     const errorMessage = [
-      `Fatal error during draft application after ${transactionLog.length} successful operations.`,
+      `Fatal error during draft application after ${ctx.transactionLog.length} successful operations.`,
       rollbackErrors.length > 0
         ? `Rollback completed with ${rollbackErrors.length} errors.`
         : 'Rollback completed successfully.',
@@ -2283,7 +2460,7 @@ export const applyDraft = async (
 
     console.error('[Draft Apply] Compensating rollback completed', {
       draftId: currentDraft.id,
-      operationsAttempted: transactionLog.length,
+      operationsAttempted: ctx.transactionLog.length,
       rollbackFailures: rollbackErrors.length,
       rollbackErrors,
     });
