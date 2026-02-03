@@ -97,13 +97,13 @@ const WorkspaceModal = ({
         </div>
 
         {/* Tabs */}
-        <div className="flex px-6 border-b border-border-subtle space-x-6 bg-background/50">
+        <div className="flex px-4 sm:px-6 border-b border-border-subtle overflow-x-auto overflow-y-hidden bg-background/50 gap-4 sm:gap-6 no-scrollbar">
           <button
             onClick={() => setActiveTab('list')}
             className={cn(
-              "py-3 text-sm font-medium border-b-2 transition-all",
-              activeTab === 'list' 
-                ? "border-primary text-primary" 
+              "py-3 text-xs sm:text-sm font-medium border-b-2 transition-all shrink-0 whitespace-nowrap",
+              activeTab === 'list'
+                ? "border-primary text-primary"
                 : "border-transparent text-text-secondary hover:text-text-primary"
             )}
           >
@@ -113,9 +113,9 @@ const WorkspaceModal = ({
             <button
               onClick={() => setActiveTab('members')}
               className={cn(
-                "py-3 text-sm font-medium border-b-2 transition-all flex items-center gap-2",
-                activeTab === 'members' 
-                  ? "border-primary text-primary" 
+                "py-3 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 shrink-0 whitespace-nowrap",
+                activeTab === 'members'
+                  ? "border-primary text-primary"
                   : "border-transparent text-text-secondary hover:text-text-primary"
               )}
             >
@@ -130,9 +130,9 @@ const WorkspaceModal = ({
           <button
             onClick={() => setActiveTab('create')}
             className={cn(
-              "py-3 text-sm font-medium border-b-2 transition-all",
-              activeTab === 'create' 
-                ? "border-primary text-primary" 
+              "py-3 text-xs sm:text-sm font-medium border-b-2 transition-all shrink-0 whitespace-nowrap",
+              activeTab === 'create'
+                ? "border-primary text-primary"
                 : "border-transparent text-text-secondary hover:text-text-primary"
             )}
           >

@@ -42,8 +42,8 @@ const LoadingSpinner = memo(({ message }: { message: string }) => (
 LoadingSpinner.displayName = 'LoadingSpinner';
 
 // Layout constants (module-level to avoid recreation on each render)
-const APP_HEADER_HEIGHT = '3.5rem';
-const MOBILE_NAV_HEIGHT = '64px';
+const APP_HEADER_HEIGHT = '3rem';
+const MOBILE_NAV_HEIGHT = '4rem';
 
 function App() {
   const { t } = useI18n();
@@ -497,7 +497,7 @@ function App() {
         "md:block",
         isSidebarOpen ? "md:w-[260px] md:border-r md:border-border-subtle" : "md:w-0 md:border-none",
         // Mobile
-        (isMobile && mobileTab === 'projects') ? "flex-1 w-full border-b border-border-subtle" : (isMobile ? "hidden" : "")
+        isMobile ? (mobileTab === 'projects' ? "flex-1 w-full" : "hidden") : ""
       )}>
         <ProjectSidebar 
           topSlot={(
@@ -530,13 +530,14 @@ function App() {
       {/* 2. Workspace (Middle) */}
       <div className={cn(
         "flex-1 flex flex-col bg-background relative overflow-hidden min-w-0",
+        isMobile ? "h-[calc(100vh-var(--app-mobile-nav-height)-env(safe-area-inset-top))]" : "",
         (isMobile && mobileTab !== 'workspace') ? "hidden" : "flex"
       )}>
         {/* Workspace content wrapper */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {/* Header */}
           <div className={cn(
-            "min-h-[var(--app-header-height)] py-2 border-b border-border-subtle flex items-center flex-wrap gap-2 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0",
+            "min-h-[var(--app-header-height)] py-1.5 sm:py-2 border-b border-border-subtle flex items-center flex-wrap gap-1.5 sm:gap-2 bg-surface/80 backdrop-blur-md z-20 sticky top-0 shrink-0",
             isMobile ? "px-2" : "px-4"
           )}>
           <Button
@@ -550,14 +551,14 @@ function App() {
           </Button>
 
           <div className="flex flex-col justify-center min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-text-primary leading-tight truncate">{activeProject.name}</h2>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h2 className="text-xs sm:text-sm font-bold text-text-primary leading-tight truncate">{activeProject.name}</h2>
               <span className="shrink-0 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-primary/10 text-primary rounded-full border border-primary/20">
                 {t('app.view.' + viewMode.toLowerCase())}
               </span>
             </div>
             {activeProject.description && (
-               <p className="text-[10px] font-medium text-text-secondary truncate">{activeProject.description}</p>
+               <p className="text-[9px] sm:text-[10px] font-medium text-text-secondary truncate hidden sm:block">{activeProject.description}</p>
             )}
           </div>
 

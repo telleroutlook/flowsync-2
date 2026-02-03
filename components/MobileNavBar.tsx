@@ -15,7 +15,7 @@ export const MobileNavBar = memo<MobileNavBarProps>(({ activeTab, onSelectTab, c
   const { t } = useI18n();
 
   return (
-    <div className="md:hidden flex items-center justify-around bg-surface/90 backdrop-blur-lg border-t border-border-subtle min-h-[var(--app-mobile-nav-height)] px-2 pb-[env(safe-area-inset-bottom)] z-50 shrink-0 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+    <div className="fixed bottom-0 left-0 right-0 md:hidden flex items-center justify-around bg-surface/90 backdrop-blur-lg border-t border-border-subtle min-h-[var(--app-mobile-nav-height)] px-2 pb-[env(safe-area-inset-bottom)] z-50 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
       <button
         onClick={() => onSelectTab('projects')}
         className={cn(
