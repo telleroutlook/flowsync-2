@@ -135,7 +135,7 @@ const TaskCard: React.FC<TaskCardProps> = memo(({ task, isSelected, onSelect, ha
               : 'text-text-secondary'
           )}>
             <Calendar className="w-3.5 h-3.5" />
-            {new Date(task.dueDate).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
+            {new Date(task.dueDate).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })}
           </div>
         )}
       </CardFooter>

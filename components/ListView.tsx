@@ -76,7 +76,7 @@ const TaskCardMobile = memo(({ task, isSelected, onSelectTask, hasConflict }: Ta
             task.dueDate < Date.now() && task.status !== TaskStatus.DONE && "text-negative"
           )}>
             <Calendar className="w-3 h-3" />
-            {new Date(task.dueDate).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
+            {new Date(task.dueDate).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })}
           </span>
         )}
       </div>
@@ -180,12 +180,12 @@ const TaskRow = memo(({ task, isSelected, onSelectTask, hasConflict }: TaskRowPr
          </div>
       </td>
       <td className="hidden lg:table-cell py-3 px-4 text-xs text-text-secondary">
-         {task.startDate ? new Date(task.startDate).toLocaleDateString(locale, { month: 'short', day: 'numeric' }) : '-'}
+         {task.startDate ? new Date(task.startDate).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}
       </td>
       <td className="hidden lg:table-cell py-3 px-4 text-xs text-text-secondary font-medium">
          {task.dueDate ? (
            <span className={task.dueDate < Date.now() && task.status !== TaskStatus.DONE ? 'text-negative' : ''}>
-              {new Date(task.dueDate).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
+              {new Date(task.dueDate).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })}
            </span>
          ) : '-'}
       </td>

@@ -18,8 +18,8 @@ export const GANTT_VIEW_SETTINGS: Record<GanttViewMode, {
   pxPerDay: number;
   tickLabelFormat: Intl.DateTimeFormatOptions;
 }> = {
-  Day: { pxPerDay: 60, tickLabelFormat: { day: 'numeric', month: 'short' } },
-  Week: { pxPerDay: 30, tickLabelFormat: { day: 'numeric', month: 'short' } },
+  Day: { pxPerDay: 60, tickLabelFormat: { year: 'numeric', month: 'short', day: 'numeric' } },
+  Week: { pxPerDay: 30, tickLabelFormat: { year: 'numeric', month: 'short', day: 'numeric' } },
   Month: { pxPerDay: 10, tickLabelFormat: { month: 'long', year: 'numeric' } },
   Year: { pxPerDay: 1.5, tickLabelFormat: { year: 'numeric' } },
 } as const;
