@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { draftsRoute } from './drafts';
 import type { Variables } from '../types';
-import { expectError, expectSuccess, readJson } from './testUtils';
+import { expectError, expectSuccess, makeDraftRecord, readJson } from './testUtils';
 
 vi.mock('../services/draftService', () => ({
   listDrafts: vi.fn(),
@@ -56,7 +56,7 @@ describe('draftsRoute', () => {
 
   it('creates a draft and records log', async () => {
     (createDraft as ReturnType<typeof vi.fn>).mockResolvedValue({
-      draft: { id: 'd1', status: 'pending', actions: [], createdAt: 1, createdBy: 'agent', projectId: null, reason: null },
+      draft: makeDraftRecord({ id: 'd1', projectId: null, actions: [] }),
       warnings: [],
     });
 

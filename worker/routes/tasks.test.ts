@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { tasksRoute } from './tasks';
 import type { Variables } from '../types';
-import { expectError, expectSuccess, readJson } from './testUtils';
+import { expectError, expectSuccess, makeTaskRecord, readJson } from './testUtils';
 
 vi.mock('../services/taskService', () => ({
   listTasks: vi.fn(),
@@ -61,7 +61,7 @@ describe('tasksRoute', () => {
   });
 
   it('creates a task and records audit', async () => {
-    (createTask as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 't1', projectId: 'p1' });
+    (createTask as ReturnType<typeof vi.fn>).mockResolvedValue(makeTaskRecord({ id: 't1', projectId: 'p1' }));
     const app = buildApp();
     const res = await app.request('/api/tasks', {
       method: 'POST',

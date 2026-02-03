@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { projectsRoute } from './projects';
 import type { Variables } from '../types';
-import { expectError, expectSuccess, readJson } from './testUtils';
+import { expectError, expectSuccess, makeProjectRecord, readJson } from './testUtils';
 
 vi.mock('../services/projectService', () => ({
   listProjects: vi.fn(),
@@ -65,7 +65,7 @@ describe('projectsRoute', () => {
   });
 
   it('lists projects', async () => {
-    (listProjects as ReturnType<typeof vi.fn>).mockResolvedValue([{ id: 'p1', name: 'Alpha' }]);
+    (listProjects as ReturnType<typeof vi.fn>).mockResolvedValue([makeProjectRecord({ id: 'p1', name: 'Alpha' })]);
     const app = buildApp();
     const res = await app.request('/api/projects');
     const json = await readJson<Array<{ id: string }>>(res);
@@ -87,7 +87,7 @@ describe('projectsRoute', () => {
   });
 
   it('creates a project and records audit', async () => {
-    (createProject as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'p1', name: 'Alpha' });
+    (createProject as ReturnType<typeof vi.fn>).mockResolvedValue(makeProjectRecord({ id: 'p1', name: 'Alpha' }));
     const app = buildApp();
     const res = await app.request('/api/projects', {
       method: 'POST',
@@ -118,8 +118,11 @@ describe('projectsRoute', () => {
   });
 
   it('deletes a project and records audit', async () => {
-    (getProjectById as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'p1', name: 'Alpha' });
-    (deleteProject as ReturnType<typeof vi.fn>).mockResolvedValue({ project: { id: 'p1', name: 'Alpha' }, deletedTasks: 1 });
+    (getProjectById as ReturnType<typeof vi.fn>).mockResolvedValue(makeProjectRecord({ id: 'p1', name: 'Alpha' }));
+    (deleteProject as ReturnType<typeof vi.fn>).mockResolvedValue({
+      project: makeProjectRecord({ id: 'p1', name: 'Alpha' }),
+      deletedTasks: 1,
+    });
     const app = buildApp();
     const res = await app.request('/api/projects/p1', { method: 'DELETE' });
     const json = await readJson<{ project: { id: string } }>(res);
