@@ -148,3 +148,64 @@ describe('toolHandlers updateTask', () => {
     expect(result.draftActions?.[0]?.after?.startDate).toBe('2026-12-09');
   });
 });
+
+describe('toolHandlers planChanges', () => {
+  it('resolves missing task entityId by title within the active project', async () => {
+    const context = buildContext();
+    context.api.listTasks = vi.fn().mockResolvedValue({
+      data: [
+        { id: 'task-1', title: '准备行李物品', wbs: '1.2' },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 50,
+    });
+
+    const result = await executeToolCall(
+      'planChanges',
+      {
+        actions: [
+          {
+            entityType: 'task',
+            action: 'update',
+            after: { title: '准备行李物品', assignee: '妈妈' },
+          },
+        ],
+      },
+      context
+    );
+
+    expect(result.draftActions?.[0]?.entityId).toBe('task-1');
+    expect(result.draftActions?.[0]?.after?.projectId).toBe('project-1');
+  });
+
+  it('flags ambiguous task references by title', async () => {
+    const context = buildContext();
+    context.api.listTasks = vi.fn().mockResolvedValue({
+      data: [
+        { id: 'task-1', title: '准备行李物品', wbs: '1.1' },
+        { id: 'task-2', title: '准备行李物品', wbs: '2.1' },
+      ],
+      total: 2,
+      page: 1,
+      pageSize: 50,
+    });
+
+    const result = await executeToolCall(
+      'planChanges',
+      {
+        actions: [
+          {
+            entityType: 'task',
+            action: 'update',
+            after: { title: '准备行李物品', assignee: '妈妈' },
+          },
+        ],
+      },
+      context
+    );
+
+    expect(result.draftActions?.[0]?.entityId).toBeUndefined();
+    expect(result.output).toContain('tool.warning.entity_id_ambiguous_count');
+  });
+});

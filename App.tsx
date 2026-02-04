@@ -242,14 +242,15 @@ function App() {
     if (!activeProjectId) return;
     if (isLoadingData || isLoadingTasks) return;
     if (messages.length !== 1) return;
-    const [welcomeMessage] = messages;
-    if (welcomeMessage.id !== 'welcome') return;
+    const welcomeMessage = messages[0];
+    if (!welcomeMessage || welcomeMessage.id !== 'welcome') return;
     const currentSuggestion = welcomeMessage.suggestions?.[0]?.text;
     if (currentSuggestion === initialSuggestionText) return;
     setMessages(prev => {
-      if (prev.length !== 1 || prev[0].id !== 'welcome') return prev;
+      const first = prev[0];
+      if (prev.length !== 1 || !first || first.id !== 'welcome') return prev;
       return [{
-        ...prev[0],
+        ...first,
         suggestions: [{ text: initialSuggestionText, action: initialSuggestionText }],
       }];
     });

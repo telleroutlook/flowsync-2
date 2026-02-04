@@ -624,6 +624,12 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
       return { output: t('tool.error.invalid_actions') };
     }
 
+    const normalizeTitle = (value: unknown): string | null => {
+      if (typeof value !== 'string') return null;
+      const normalized = value.trim().toLowerCase().replace(/\s+/g, ' ');
+      return normalized.length > 0 ? normalized : null;
+    };
+
     type RawAction = {
       id?: string;
       entityType?: string;
@@ -636,6 +642,10 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     // AI models may truncate UUIDs to first 8 characters, so we need to fix them
     const idMap = new Map<string, string>();
     const projectIds = new Set<string>();
+    const taskIndexByProject = new Map<string, {
+      byTitle: Map<string, string[]>;
+      byWbs: Map<string, string[]>;
+    }>();
 
     // Collect all project IDs referenced in actions
     for (const action of args.actions) {
@@ -656,6 +666,8 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     for (const projectId of projectIds) {
       try {
         const tasks = await api.listTasks({ projectId });
+        const byTitle = new Map<string, string[]>();
+        const byWbs = new Map<string, string[]>();
         for (const task of tasks.data) {
           // Map both full ID and truncated ID (first 8 chars) to full ID
           idMap.set(task.id, task.id);
@@ -663,7 +675,19 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
             const truncated = task.id.substring(0, 8);
             idMap.set(truncated, task.id);
           }
+          const normalizedTitle = normalizeTitle(task.title);
+          if (normalizedTitle) {
+            const existing = byTitle.get(normalizedTitle) ?? [];
+            existing.push(task.id);
+            byTitle.set(normalizedTitle, existing);
+          }
+          if (task.wbs) {
+            const existing = byWbs.get(task.wbs) ?? [];
+            existing.push(task.id);
+            byWbs.set(task.wbs, existing);
+          }
         }
+        taskIndexByProject.set(projectId, { byTitle, byWbs });
       } catch (error) {
         // Ignore fetch errors - we'll try to match IDs as-is
         console.error('[planChanges] Failed to fetch tasks for ID mapping:', error);
@@ -695,6 +719,8 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
 
     let correctedProjectCount = 0;
     let correctedEntityIdCount = 0;
+    let resolvedEntityIdCount = 0;
+    let ambiguousReferenceCount = 0;
     const draftActions: DraftAction[] = args.actions
       .map((action: unknown) => {
         if (!action || typeof action !== 'object') {
@@ -703,6 +729,14 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         const rawAction = action as RawAction;
 
         const processedAfter = { ...(rawAction.after || {}) };
+        const shouldSeedProjectId = !rawAction.entityId
+          && rawAction.entityType === 'task'
+          && rawAction.action !== 'create'
+          && !processedAfter.projectId
+          && activeProjectId;
+        if (shouldSeedProjectId) {
+          processedAfter.projectId = activeProjectId;
+        }
 
         // Smart projectId assignment for tasks
         if (rawAction.entityType === 'task' && rawAction.action === 'create') {
@@ -732,6 +766,39 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
           if (mappedId && mappedId !== fixedEntityId) {
             fixedEntityId = mappedId;
             correctedEntityIdCount += 1;
+          }
+        }
+
+        // Resolve missing task entityId by WBS/title within the active project
+        if (!fixedEntityId && rawAction.entityType === 'task' && rawAction.action !== 'create') {
+          const lookupProjectId = processedAfter.projectId as string | undefined;
+          const index = lookupProjectId ? taskIndexByProject.get(lookupProjectId) : undefined;
+          if (index) {
+            let resolved = false;
+            const wbs = typeof processedAfter.wbs === 'string' ? processedAfter.wbs : undefined;
+            if (wbs) {
+              const matches = index.byWbs.get(wbs);
+              if (matches?.length === 1) {
+                fixedEntityId = matches[0];
+                resolvedEntityIdCount += 1;
+                resolved = true;
+              } else if (matches && matches.length > 1) {
+                ambiguousReferenceCount += 1;
+                resolved = true;
+              }
+            }
+            if (!resolved) {
+              const title = normalizeTitle(processedAfter.title);
+              if (title) {
+                const matches = index.byTitle.get(title);
+                if (matches?.length === 1) {
+                  fixedEntityId = matches[0];
+                  resolvedEntityIdCount += 1;
+                } else if (matches && matches.length > 1) {
+                  ambiguousReferenceCount += 1;
+                }
+              }
+            }
           }
         }
 
@@ -779,6 +846,12 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     }
     if (correctedEntityIdCount > 0) {
       outputParts.push(t('tool.warning.entity_id_corrected_count', { count: correctedEntityIdCount }));
+    }
+    if (resolvedEntityIdCount > 0) {
+      outputParts.push(t('tool.warning.entity_id_resolved_count', { count: resolvedEntityIdCount }));
+    }
+    if (ambiguousReferenceCount > 0) {
+      outputParts.push(t('tool.warning.entity_id_ambiguous_count', { count: ambiguousReferenceCount }));
     }
     const output = outputParts.join(' ');
 
