@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Project } from '../types';
 import { useI18n } from '../src/i18n';
 import { cn } from '../src/utils/cn';
@@ -158,6 +158,22 @@ export const ProjectSidebar = memo<ProjectSidebarProps>(({
   onClose,
 }) => {
   const { t } = useI18n();
+  const systemHints = useMemo(
+    () => [
+      t('app.sidebar.systemHint.register'),
+      t('app.sidebar.systemHint.public'),
+    ],
+    [t]
+  );
+  const [systemHintIndex, setSystemHintIndex] = useState(0);
+  const previousProjectId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (previousProjectId.current && previousProjectId.current !== activeProjectId) {
+      setSystemHintIndex(prev => (prev + 1) % systemHints.length);
+    }
+    previousProjectId.current = activeProjectId;
+  }, [activeProjectId, systemHints.length]);
 
   return (
     <div className="w-full bg-background/50 flex flex-col h-full shrink-0 shadow-sm z-10 md:bg-background">
@@ -237,10 +253,12 @@ export const ProjectSidebar = memo<ProjectSidebarProps>(({
                 <Lightbulb className="w-4 h-4" />
             </div>
             <div className="flex flex-col">
-                <span className="text-xs font-semibold text-text-primary mb-0.5">{t('app.sidebar.tip')}</span>
-                <span className="text-[10px] text-text-secondary">Click to send feedback</span>
+                <span className="text-xs font-semibold text-text-primary">{t('app.sidebar.tip')}</span>
             </div>
          </a>
+         <div className="mt-2 text-[10px] text-text-secondary">
+            {systemHints[systemHintIndex]}
+         </div>
       </div>
     </div>
   );

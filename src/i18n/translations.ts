@@ -26,6 +26,8 @@ const en = {
   'app.sidebar.delete_confirm': 'Delete project "{name}"?',
   'app.sidebar.tip': 'Have suggestions? Send us feedback.',
   'app.sidebar.tip.subject': 'Suggestions for FlowSync',
+  'app.sidebar.systemHint.register': 'Register to unlock your dedicated workspace.',
+  'app.sidebar.systemHint.public': 'Public workspace data can be edited by anyone.',
 
   'app.view.board': 'Board',
   'app.view.list': 'List',
@@ -429,6 +431,8 @@ const zh: Record<keyof typeof en, string> = {
   'app.sidebar.delete_confirm': '删除项目“{name}”吗？',
   'app.sidebar.tip': '有任何建议？欢迎反馈。',
   'app.sidebar.tip.subject': '关于FlowSync的建议',
+  'app.sidebar.systemHint.register': '注册用户，以使用专属工作区。',
+  'app.sidebar.systemHint.public': '公开工作区数据，任何人都有权修改。',
 
   'app.view.board': '看板',
   'app.view.list': '列表',
