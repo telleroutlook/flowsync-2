@@ -244,19 +244,19 @@ export const ProjectSidebar = memo<ProjectSidebarProps>(({
       </div>
 
       {/* Footer / Tip */}
-      <div className="p-3 border-t border-border-subtle bg-surface/30">
+      <div className="p-2 border-t border-border-subtle bg-surface/30">
          <a 
            href={`mailto:teller.lin@sap.com?subject=${encodeURIComponent(t('app.sidebar.tip.subject'))}`}
-           className="bg-surface rounded-xl p-3 border border-border-subtle shadow-sm flex items-start gap-3 hover:bg-surface-active hover:shadow-md transition-all cursor-pointer group/tip"
+           className="bg-surface rounded-lg p-2 border border-border-subtle shadow-sm flex items-center gap-2 hover:bg-surface-active hover:shadow-md transition-all cursor-pointer group/tip"
          >
-            <div className="p-1.5 rounded-full bg-accent/10 text-accent shrink-0 group-hover/tip:bg-accent group-hover/tip:text-white transition-colors">
-                <Lightbulb className="w-4 h-4" />
+            <div className="p-1 rounded-full bg-accent/10 text-accent shrink-0 group-hover/tip:bg-accent group-hover/tip:text-white transition-colors">
+                <Lightbulb className="w-3.5 h-3.5" />
             </div>
             <div className="flex flex-col">
-                <span className="text-xs font-semibold text-text-primary">{t('app.sidebar.tip')}</span>
+                <span className="text-[11px] font-semibold text-text-primary">{t('app.sidebar.tip')}</span>
             </div>
          </a>
-         <div className="mt-2 text-[10px] text-text-secondary">
+         <div className="mt-1.5 text-[10px] text-text-secondary">
             {systemHints[systemHintIndex]}
          </div>
       </div>
