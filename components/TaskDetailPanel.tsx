@@ -393,7 +393,7 @@ export const TaskDetailPanel = memo<TaskDetailPanelProps>(({
             <Input
               id="task-wbs"
               className="font-mono text-[10px] h-8 px-2"
-              placeholder="1.0"
+              placeholder={t('common.na')}
               value={draft.wbs}
               onChange={(event) => handleDraftChange('wbs', event.target.value)}
             />
