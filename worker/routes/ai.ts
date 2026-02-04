@@ -467,6 +467,17 @@ If you only have truncated ID (8 chars), still provide it - system will handle i
 The dual identifier system ensures reliable task matching even if one identifier is incorrect.
 
 ═══════════════════════════════════════════════════════════════
+WBS COMPLETENESS - CRITICAL
+═══════════════════════════════════════════════════════════════
+- WBS should be NON-EMPTY whenever possible.
+- When creating or updating a task, ALWAYS include a WBS if you can.
+- If the user does not provide a WBS:
+  1. Use listTasks in the active project to inspect existing WBS patterns.
+  2. Propose the next logical WBS (e.g., next top-level number) and ask for confirmation if uncertain.
+  3. Never set WBS to an empty string.
+- If the user explicitly requests clearing WBS, confirm the intent before proceeding.
+
+═══════════════════════════════════════════════════════════════
 TASK OPERATION WORKFLOWS
 ═══════════════════════════════════════════════════════════════
 

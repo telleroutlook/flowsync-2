@@ -5,7 +5,7 @@
  * on the frontend side. It works in conjunction with the backend tool registry.
  */
 
-import type { DraftAction } from '../../../types';
+import type { DraftAction, Task } from '../../../types';
 import type { ApiClient } from './types';
 import type { TFunction } from '../../i18n/types';
 import { dateStringToMs, formatTaskDate as formatTaskDateUtil, toDateString } from '../../utils/date';
@@ -45,8 +45,12 @@ const formatTaskDate = (ts: string | null | undefined, t: TFunction) => {
 const getStringParam = (args: Record<string, unknown>, key: string): string | undefined =>
   typeof args[key] === 'string' ? args[key] : undefined;
 
-const getWbsParam = (args: Record<string, unknown>): string | undefined =>
-  getStringParam(args, 'wbs') ?? getStringParam(args, 'wbsCode') ?? getStringParam(args, 'wbs_code');
+const getWbsParam = (args: Record<string, unknown>): string | undefined => {
+  const raw = getStringParam(args, 'wbs') ?? getStringParam(args, 'wbsCode') ?? getStringParam(args, 'wbs_code');
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  return trimmed ? trimmed : undefined;
+};
 
 // Helper to extract boolean parameter safely
 const getBoolParam = (args: Record<string, unknown>, key: string): boolean | undefined =>
@@ -220,6 +224,20 @@ const normalizePriority = (value?: string): string | undefined => {
  * @param projectIds Project IDs to fetch tasks from
  * @returns Map of truncated (8 chars) and full IDs to full IDs
  */
+const buildIdMapFromTasks = (tasks: Task[]): Map<string, string> => {
+  const idMap = new Map<string, string>();
+  for (const task of tasks) {
+    // Map both full ID and truncated ID (first 8 chars) to full ID
+    idMap.set(task.id, task.id);
+    if (task.id.length >= 8) {
+      const truncated = task.id.substring(0, 8);
+      idMap.set(truncated, task.id);
+    }
+  }
+
+  return idMap;
+};
+
 const buildIdMap = async (
   api: ApiClient,
   projectIds: Set<string>
@@ -229,14 +247,8 @@ const buildIdMap = async (
   for (const projectId of projectIds) {
     try {
       const tasks = await api.listTasks({ projectId });
-      for (const task of tasks.data) {
-        // Map both full ID and truncated ID (first 8 chars) to full ID
-        idMap.set(task.id, task.id);
-        if (task.id.length >= 8) {
-          const truncated = task.id.substring(0, 8);
-          idMap.set(truncated, task.id);
-        }
-      }
+      const projectMap = buildIdMapFromTasks(tasks.data ?? []);
+      for (const [key, value] of projectMap) idMap.set(key, value);
     } catch (error) {
       // Ignore fetch errors - we'll try to match IDs as-is
       console.error('[buildIdMap] Failed to fetch tasks for ID mapping:', error);
@@ -244,6 +256,55 @@ const buildIdMap = async (
   }
 
   return idMap;
+};
+
+const parseWbsSegments = (value: string): number[] | null => {
+  const trimmed = value.trim();
+  if (!/^\d+(?:\.\d+)*$/.test(trimmed)) return null;
+  const parts = trimmed.split('.').map(Number);
+  if (parts.some((part) => !Number.isFinite(part))) return null;
+  return parts;
+};
+
+const extractLeadingWbs = (title?: unknown): string | undefined => {
+  if (typeof title !== 'string') return undefined;
+  const trimmed = title.trim();
+  if (!trimmed) return undefined;
+  const match = trimmed.match(/^(?:[\[\(]?\s*)(\d+(?:\.\d+)*)(?:\s*[\]\)]?)(?:\s+|$)/);
+  return match ? match[1] : undefined;
+};
+
+const buildWbsIndex = (tasks: Task[]) => {
+  const existing = new Set<string>();
+  const siblings = new Map<string, Set<number>>();
+
+  for (const task of tasks) {
+    if (!task.wbs) continue;
+    const segments = parseWbsSegments(task.wbs);
+    if (!segments?.length) continue;
+    existing.add(task.wbs);
+    const parentKey = segments.slice(0, -1).join('.');
+    const last = segments[segments.length - 1];
+    if (typeof last !== 'number' || !Number.isFinite(last)) continue;
+    const set = siblings.get(parentKey) ?? new Set<number>();
+    set.add(last);
+    siblings.set(parentKey, set);
+  }
+
+  return { existing, siblings };
+};
+
+const nextSiblingNumber = (siblings: Set<number> | undefined): number => {
+  if (!siblings || siblings.size === 0) return 1;
+  let candidate = 1;
+  while (siblings.has(candidate)) candidate += 1;
+  return candidate;
+};
+
+const buildNextWbs = (index: ReturnType<typeof buildWbsIndex>, parentSegments?: number[] | null): string => {
+  const parentKey = parentSegments && parentSegments.length ? parentSegments.join('.') : '';
+  const candidate = nextSiblingNumber(index.siblings.get(parentKey));
+  return parentKey ? `${parentKey}.${candidate}` : String(candidate);
 };
 
 /**
@@ -444,14 +505,46 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     const correctedStartDate = normalizedStart.corrected;
 
     // Build ID map to fix truncated predecessors
-    const projectIds = new Set<string>();
-    if (activeProjectId) projectIds.add(activeProjectId);
-    const idMap = await buildIdMap(api, projectIds);
+    let idMap = new Map<string, string>();
+    let projectTasks: Task[] = [];
+    let tasksFetched = false;
+    if (activeProjectId) {
+      try {
+        const taskResult = await api.listTasks({ projectId: activeProjectId });
+        projectTasks = taskResult.data ?? [];
+        idMap = buildIdMapFromTasks(projectTasks);
+        tasksFetched = true;
+      } catch (error) {
+        console.error('[createTask] Failed to fetch tasks for WBS and ID mapping:', error);
+      }
+    }
 
     // Fix predecessors array
     const fixedPredecessors = fixPredecessors(args.predecessors, idMap);
     const correctedPredecessors = args.predecessors != null &&
       JSON.stringify(fixedPredecessors) !== JSON.stringify(args.predecessors);
+
+    let wbs = getWbsParam(args);
+    let autoWbs = false;
+    if (!wbs && tasksFetched) {
+      const index = buildWbsIndex(projectTasks);
+      const hinted = extractLeadingWbs(args.title);
+      if (hinted) {
+        const segments = parseWbsSegments(hinted);
+        if (segments?.length) {
+          if (!index.existing.has(hinted)) {
+            wbs = hinted;
+          } else {
+            wbs = buildNextWbs(index, segments.slice(0, -1));
+            autoWbs = true;
+          }
+        }
+      }
+      if (!wbs) {
+        wbs = buildNextWbs(index);
+        autoWbs = true;
+      }
+    }
 
     const draftActions: DraftAction[] = [{
       id: generateId(),
@@ -463,7 +556,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         description: args.description,
         status: normalizeStatus(getStringParam(args, 'status')),
         priority: normalizePriority(getStringParam(args, 'priority')),
-        wbs: getWbsParam(args),
+        wbs,
         startDate: normalizedStart.value,
         dueDate: getDateParam(args, 'dueDate'),
         completion: args.completion,
@@ -482,6 +575,9 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
     }
     if (correctedStartDate) {
       outputParts.push(t('tool.warning.start_date_corrected'));
+    }
+    if (autoWbs && wbs) {
+      outputParts.push(t('tool.warning.wbs_autofilled', { wbs }));
     }
 
     return {
