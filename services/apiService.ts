@@ -99,6 +99,27 @@ const fetchWithRetry = async (input: RequestInfo, init?: RequestInit): Promise<R
   throw lastError;
 };
 
+type TaskWbsFallback = Task & {
+  wbsCode?: string;
+  wbs_code?: string;
+};
+
+const normalizeTask = (task: Task): Task => {
+  const candidate = task as TaskWbsFallback;
+  const wbs = task.wbs ?? candidate.wbsCode ?? candidate.wbs_code;
+  if (typeof wbs === 'string' && wbs.trim()) {
+    const { wbsCode, wbs_code, ...rest } = candidate;
+    return { ...(rest as Task), wbs: wbs.trim() };
+  }
+  if (candidate.wbsCode || candidate.wbs_code) {
+    const { wbsCode, wbs_code, ...rest } = candidate;
+    return rest as Task;
+  }
+  return task;
+};
+
+const normalizeTaskList = (tasks: Task[]): Task[] => tasks.map(normalizeTask);
+
 const buildQueryString = (params: Record<string, string | number | boolean | undefined | null>): string => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -305,9 +326,12 @@ export const apiService = {
   }) => {
     return fetchJson<{ data: Task[]; total: number; page: number; pageSize: number }>(
       `/api/tasks${buildQueryString(params)}`
-    );
+    ).then((result) => ({
+      ...result,
+      data: normalizeTaskList(result.data),
+    }));
   },
-  getTask: (id: string) => fetchJson<Task>(`/api/tasks/${id}`),
+  getTask: (id: string) => fetchJson<Task>(`/api/tasks/${id}`).then(normalizeTask),
   createTask: (data: {
     id?: string;
     projectId: string;

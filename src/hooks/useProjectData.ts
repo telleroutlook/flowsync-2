@@ -60,6 +60,25 @@ export const useProjectData = (workspaceId: string) => {
     return tasks.filter(task => task.projectId === activeProjectId);
   }, [tasks, activeProjectId]);
 
+  type TaskWbsFallback = Task & {
+    wbsCode?: string;
+    wbs_code?: string;
+  };
+
+  const normalizeTask = useCallback((task: Task): Task => {
+    const candidate = task as TaskWbsFallback;
+    const wbs = task.wbs ?? candidate.wbsCode ?? candidate.wbs_code;
+    if (typeof wbs === 'string' && wbs.trim()) {
+      const { wbsCode, wbs_code, ...rest } = candidate;
+      return { ...(rest as Task), wbs: wbs.trim() };
+    }
+    if (candidate.wbsCode || candidate.wbs_code) {
+      const { wbsCode, wbs_code, ...rest } = candidate;
+      return rest as Task;
+    }
+    return task;
+  }, []);
+
   const fetchAllTasks = useCallback(async (projectId?: string) => {
     const collected: Task[] = [];
     let page = 1;
@@ -73,11 +92,11 @@ export const useProjectData = (workspaceId: string) => {
         total = result.total;
         page += 1;
       } while (collected.length < total);
-      return collected;
+      return collected.map(normalizeTask);
     } catch (err) {
       throw err;
     }
-  }, []);
+  }, [normalizeTask]);
 
   const refreshData = useCallback(async (forceRefresh = false) => {
     try {

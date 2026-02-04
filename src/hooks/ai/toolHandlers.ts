@@ -45,6 +45,9 @@ const formatTaskDate = (ts: string | null | undefined, t: TFunction) => {
 const getStringParam = (args: Record<string, unknown>, key: string): string | undefined =>
   typeof args[key] === 'string' ? args[key] : undefined;
 
+const getWbsParam = (args: Record<string, unknown>): string | undefined =>
+  getStringParam(args, 'wbs') ?? getStringParam(args, 'wbsCode') ?? getStringParam(args, 'wbs_code');
+
 // Helper to extract boolean parameter safely
 const getBoolParam = (args: Record<string, unknown>, key: string): boolean | undefined =>
   typeof args[key] === 'boolean' ? args[key] : undefined;
@@ -460,7 +463,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         description: args.description,
         status: normalizeStatus(getStringParam(args, 'status')),
         priority: normalizePriority(getStringParam(args, 'priority')),
-        wbs: args.wbs,
+        wbs: getWbsParam(args),
         startDate: normalizedStart.value,
         dueDate: getDateParam(args, 'dueDate'),
         completion: args.completion,
@@ -490,7 +493,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
 
   updateTask: async (args, { api, activeProjectId, generateId, pushProcessingStep, t }) => {
     const taskId = getStringParam(args, 'id');
-    const wbs = getStringParam(args, 'wbs'); // Get WBS parameter
+    const wbs = getWbsParam(args);
 
     if (!taskId && !wbs) {
       return { output: t('tool.error.invalid_task_id') };
@@ -544,7 +547,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         description: args.description,
         status: normalizeStatus(getStringParam(args, 'status')),
         priority: normalizePriority(getStringParam(args, 'priority')),
-        wbs: args.wbs, // Preserve WBS for backend resolution
+        wbs, // Preserve WBS for backend resolution
         startDate: normalizedStart.value,
         dueDate: getDateParam(args, 'dueDate'),
         completion: args.completion,
@@ -574,7 +577,7 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
 
   deleteTask: async (args, { api, activeProjectId, generateId, pushProcessingStep, t }) => {
     const taskId = getStringParam(args, 'id');
-    const wbs = getStringParam(args, 'wbs'); // Get WBS parameter
+    const wbs = getWbsParam(args);
 
     if (!taskId && !wbs) {
       return { output: t('tool.error.invalid_task_id') };
@@ -729,6 +732,16 @@ const toolHandlers: Record<string, ToolHandlerFunction> = {
         const rawAction = action as RawAction;
 
         const processedAfter = { ...(rawAction.after || {}) };
+        if (typeof processedAfter.wbs !== 'string') {
+          const wbsAlias = (typeof processedAfter.wbsCode === 'string' && processedAfter.wbsCode)
+            || (typeof processedAfter.wbs_code === 'string' && processedAfter.wbs_code)
+            || undefined;
+          if (wbsAlias) {
+            processedAfter.wbs = wbsAlias;
+          }
+        }
+        if ('wbsCode' in processedAfter) delete processedAfter.wbsCode;
+        if ('wbs_code' in processedAfter) delete processedAfter.wbs_code;
         const shouldSeedProjectId = !rawAction.entityId
           && rawAction.entityType === 'task'
           && rawAction.action !== 'create'
