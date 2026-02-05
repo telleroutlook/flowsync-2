@@ -10,6 +10,7 @@ import { MAX_HISTORY_PART_CHARS } from '../../shared/config';
 const MAX_RETRIES = 3;
 const MAX_HISTORY_MESSAGES = 10;
 const TASK_SNIPPET_COUNT = 20;
+const REQUEST_CANCELLED_CODE = 'REQUEST_CANCELLED';
 
 interface UseChatProps {
   activeProjectId: string;
@@ -38,6 +39,9 @@ const isToolListOutput = (output: string): boolean => {
     /^项目（\d+）\s*：/.test(trimmed)
   );
 };
+
+const isRequestCancelled = (error: unknown): boolean =>
+  error instanceof Error && error.message === REQUEST_CANCELLED_CODE;
 
 // Helper: Convert chat role to AI role
 function toAiRole(role: ChatMessage['role']): AiHistoryItem['role'] {
@@ -208,6 +212,7 @@ export const useChat = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastUserMessageRef = useRef<ChatMessage | null>(null);
   const processingStepsRef = useRef<ProcessingStep[]>([]);
+  const activeRequestRef = useRef<AbortController | null>(null);
 
   // Consolidated ref management for callbacks that need fresh values
   const callbacksRef = useRef({
@@ -334,50 +339,18 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
         setThinkingPreview(currentT('chat.attempt_fix', { attempt, max: MAX_RETRIES }));
       }
 
-      const stageLabels: Record<string, string> = {
-        received: currentT('processing.received'),
-        prepare_request: currentT('processing.preparing'),
-        upstream_request: currentT('processing.calling_ai'),
-        upstream_response: currentT('processing.parsing'),
-        done: currentT('processing.done'),
-      };
-
       try {
-        const response = await aiService.sendMessageStream(
+        updateThinkingPreview(currentT('processing.generating'));
+        const response = await aiService.sendMessage(
           initialHistory,
           userMessage,
           sysContext,
-          (event, data) => {
-            const elapsedMs = typeof data.elapsedMs === 'number' ? data.elapsedMs : undefined;
-
-            switch (event) {
-              case 'assistant_text':
-                if (typeof data.text === 'string') {
-                  updateThinkingPreview(data.text);
-                  recordStep(currentT('processing.generating'), elapsedMs);
-                }
-                break;
-              case 'result':
-                if (typeof data.text === 'string') updateThinkingPreview(data.text);
-                break;
-              case 'tool_start':
-                if (typeof data.name === 'string') {
-                  recordStep(currentT('processing.executing_tool', { name: data.name }), elapsedMs);
-                }
-                break;
-              case 'stage':
-                if (typeof data.name === 'string') {
-                  const label = stageLabels[data.name];
-                  if (label) recordStep(label, elapsedMs);
-                }
-                break;
-              case 'retry':
-                recordStep(currentT('chat.retrying'), elapsedMs);
-                break;
-            }
-          },
-          currentAllowThinking
+          currentAllowThinking,
+          activeRequestRef.current?.signal
         );
+        recordStep(currentT('processing.parsing'));
+        recordStep(currentT('processing.generating'));
+        updateThinkingPreview(currentT('processing.done'));
 
         let finalText = response.text;
         let suggestions: ActionableSuggestion[] = [];
@@ -491,11 +464,16 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
             role: 'model',
             text: effectiveText,
             timestamp: Date.now(),
+            meta: response.meta,
             suggestions: suggestions.length > 0 ? suggestions : undefined,
             thinking: currentAllowThinking ? { steps: fullProcessingSteps, preview: currentThinkingPreview || undefined } : undefined,
           },
         ]);
       } catch (error) {
+        if (isRequestCancelled(error)) {
+          callbacksRef.current.appendSystemMessage(callbacksRef.current.t('chat.cancelled'));
+          return;
+        }
         const errorMessage = error instanceof Error ? error.message : currentT('chat.error_generic');
         setMessages((prev) => [
           ...prev,
@@ -524,6 +502,7 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
     setIsProcessing(false);
     setProcessingSteps([]);
     setThinkingPreview('');
+    activeRequestRef.current = null;
   }, []);
 
   // Helper: Add generic error message
@@ -549,6 +528,7 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
       if (truncatedCount > 0) {
         callbacksRef.current.appendSystemMessage(callbacksRef.current.t('chat.history_truncated', { count: truncatedCount, max: MAX_HISTORY_PART_CHARS }));
       }
+      activeRequestRef.current = new AbortController();
       await processConversationTurn(history, userText, systemContext, 0);
     },
     [pushProcessingStep, processConversationTurn, systemContext]
@@ -592,13 +572,17 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
 
       try {
         await processMessagesWithHistory(messages, userMsg.text);
-      } catch {
-        addErrorMessage();
+      } catch (error) {
+        if (isRequestCancelled(error)) {
+          appendSystemMessage(t('chat.cancelled'));
+        } else {
+          addErrorMessage();
+        }
       } finally {
         endProcessing();
       }
     },
-    [isProcessing, inputText, pendingAttachments, messages, startProcessing, endProcessing, processMessagesWithHistory, addErrorMessage, setMessages, setInputText, setPendingAttachments]
+    [isProcessing, inputText, pendingAttachments, messages, startProcessing, endProcessing, processMessagesWithHistory, addErrorMessage, setMessages, setInputText, setPendingAttachments, appendSystemMessage, t]
   );
 
   // Helper: Filter messages for retry (removes system messages and retryable errors)
@@ -631,12 +615,21 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
     try {
       const filteredMessages = filterMessagesForRetry(messages);
       await processMessagesWithHistory(filteredMessages, retryMessage.text);
-    } catch {
-      addErrorMessage();
+    } catch (error) {
+      if (isRequestCancelled(error)) {
+        appendSystemMessage(t('chat.cancelled'));
+      } else {
+        addErrorMessage();
+      }
     } finally {
       endProcessing();
     }
-  }, [isProcessing, messages, startProcessing, endProcessing, filterMessagesForRetry, processMessagesWithHistory, addErrorMessage, setMessages]);
+  }, [isProcessing, messages, startProcessing, endProcessing, filterMessagesForRetry, processMessagesWithHistory, addErrorMessage, setMessages, appendSystemMessage, t]);
+
+  const handleCancelProcessing = useCallback(() => {
+    if (!isProcessing) return;
+    activeRequestRef.current?.abort();
+  }, [isProcessing]);
 
   return {
     messages,
@@ -651,6 +644,7 @@ Task Context: ${taskCount} tasks in active project. Sample IDs: ${taskSnippets.m
     handleRemoveAttachment,
     handleSendMessage,
     handleRetryLastMessage,
+    handleCancelProcessing,
     messagesEndRef,
     fileInputRef
   };

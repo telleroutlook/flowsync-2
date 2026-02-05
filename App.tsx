@@ -115,6 +115,9 @@ function App() {
   const [guestThinking, setGuestThinking] = useState(() =>
     storageGet('guestThinking') === 'true'
   );
+  const [showDebugInfo, setShowDebugInfo] = useState(() =>
+    storageGet('chatDebug') === 'true'
+  );
 
   const effectiveAllowThinking = user ? (user.allowThinking ?? false) : guestThinking;
 
@@ -130,6 +133,11 @@ function App() {
       console.error('Failed to toggle thinking:', err);
     }
   }, [user, updateProfile]);
+
+  const handleToggleDebugInfo = useCallback(async (enabled: boolean) => {
+    setShowDebugInfo(enabled);
+    storageSet('chatDebug', String(enabled));
+  }, []);
 
   const {
     workspaces,
@@ -331,7 +339,7 @@ function App() {
   // 5. Chat Logic
   const {
     inputText, setInputText, isProcessing, pendingAttachments,
-    handleAttachFiles, handleRemoveAttachment, handleSendMessage, handleRetryLastMessage, processingSteps, thinkingPreview,
+    handleAttachFiles, handleRemoveAttachment, handleSendMessage, handleRetryLastMessage, handleCancelProcessing, processingSteps, thinkingPreview,
     messagesEndRef, fileInputRef
   } = useChat({
     activeProjectId,
@@ -986,6 +994,8 @@ function App() {
           user={user}
           allowThinking={effectiveAllowThinking}
           onToggleThinking={handleToggleThinking}
+          showDebugInfo={showDebugInfo}
+          onToggleDebugInfo={handleToggleDebugInfo}
         />
 
         {/* View Area */}
@@ -1093,6 +1103,8 @@ function App() {
           messagesEndRef={messagesEndRef}
           onSendMessage={handleSendMessage}
           onRetryLastMessage={handleRetryLastMessage}
+          onCancelProcessing={handleCancelProcessing}
+          showDebugInfo={showDebugInfo}
           pendingAttachments={pendingAttachments}
           onRemoveAttachment={handleRemoveAttachment}
           fileInputRef={fileInputRef}

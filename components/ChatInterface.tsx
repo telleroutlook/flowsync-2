@@ -227,6 +227,8 @@ interface ChatInterfaceProps {
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   onSendMessage: (e?: React.FormEvent, overrideText?: string) => void;
   onRetryLastMessage: () => void;
+  onCancelProcessing: () => void;
+  showDebugInfo: boolean;
   pendingAttachments: ChatAttachment[];
   onRemoveAttachment: (id: string) => void;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
@@ -263,6 +265,8 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
   messagesEndRef,
   onSendMessage,
   onRetryLastMessage,
+  onCancelProcessing,
+  showDebugInfo,
   pendingAttachments,
   onRemoveAttachment,
   fileInputRef,
@@ -467,6 +471,7 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
             isProcessing={isProcessing}
             onSuggestionClick={handleSuggestionClick}
             hideSuggestions={!!pendingDraft}
+            showDebugInfo={showDebugInfo}
           />
         ))}
 
@@ -519,14 +524,26 @@ export const ChatInterface = memo<ChatInterfaceProps>(({
               disabled={isProcessing}
             />
 
-            <button
-              type="submit"
-              disabled={(inputText.trim().length === 0 && pendingAttachments.length === 0) || isProcessing}
-              className="h-9 w-9 shrink-0 flex items-center justify-center bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:hover:bg-primary transition-all shadow-sm"
-              aria-label="Send message"
-            >
-              <Send className="w-4 h-4 translate-x-0.5 translate-y-0.5" />
-            </button>
+            {isProcessing ? (
+              <button
+                type="button"
+                onClick={onCancelProcessing}
+                className="h-9 w-9 shrink-0 flex items-center justify-center bg-critical text-critical-foreground rounded-lg hover:bg-critical/90 transition-all shadow-sm"
+                aria-label={t('chat.stop')}
+                title={t('chat.stop')}
+              >
+                <XCircle className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={inputText.trim().length === 0 && pendingAttachments.length === 0}
+                className="h-9 w-9 shrink-0 flex items-center justify-center bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:hover:bg-primary transition-all shadow-sm"
+                aria-label="Send message"
+              >
+                <Send className="w-4 h-4 translate-x-0.5 translate-y-0.5" />
+              </button>
+            )}
           </div>
         </form>
       </div>

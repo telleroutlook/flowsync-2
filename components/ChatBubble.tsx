@@ -48,6 +48,7 @@ interface ChatBubbleProps {
   isProcessing?: boolean;
   onSuggestionClick?: (suggestion: ActionableSuggestion) => void;
   hideSuggestions?: boolean;
+  showDebugInfo?: boolean;
 }
 
 const formatBytes = (value: number): string => {
@@ -155,7 +156,7 @@ const MarkdownContent = memo<MarkdownContentProps>(({ content, isUser, codeLabel
 });
 MarkdownContent.displayName = 'MarkdownContent';
 
-export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessing, onSuggestionClick, hideSuggestions }) => {
+export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessing, onSuggestionClick, hideSuggestions, showDebugInfo = false }) => {
   const { t, locale } = useI18n();
   const [isThinkingOpen, setIsThinkingOpen] = useState(false);
   const isUser = message.role === 'user';
@@ -164,6 +165,14 @@ export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessin
   const attachments = message.attachments || [];
   const suggestions = message.suggestions || [];
   const isRetryableError = !isUser && !isSystem && message.text.includes('OpenAI request failed.');
+  const debugMeta = message.meta;
+  const debugParts = useMemo(() => {
+    if (!debugMeta) return [];
+    const parts: string[] = [];
+    if (debugMeta.requestId) parts.push(debugMeta.requestId);
+    if (typeof debugMeta.turns === 'number') parts.push(`${t('chat.turns', { count: debugMeta.turns })}`);
+    return parts;
+  }, [debugMeta, t]);
 
   const timestamp = useMemo(() =>
     new Date(message.timestamp).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }),
@@ -239,6 +248,12 @@ export const ChatBubble = memo<ChatBubbleProps>(({ message, onRetry, isProcessin
             {attachments.map((attachment) => (
               <Attachment key={attachment.id} attachment={attachment} isUser={isUser} />
             ))}
+          </div>
+        )}
+
+        {!isUser && showDebugInfo && debugParts.length > 0 && (
+          <div className="mt-2 text-[10px] text-text-secondary/70 font-mono">
+            {t('chat.debug')}: {debugParts.join(' · ')}
           </div>
         )}
 

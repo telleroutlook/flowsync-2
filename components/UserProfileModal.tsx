@@ -3,7 +3,7 @@ import type { User } from '../types';
 import { useI18n } from '../src/i18n';
 import { Modal } from './Modal';
 import { cn } from '../src/utils/cn';
-import { ChevronDown, Languages, Brain, CheckCircle, User as UserIcon } from 'lucide-react';
+import { ChevronDown, Languages, Brain, Bug, CheckCircle, User as UserIcon } from 'lucide-react';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -11,9 +11,11 @@ interface UserProfileModalProps {
   user: User | null;
   allowThinking: boolean;
   onToggleThinking: (enabled: boolean) => void | Promise<void>;
+  showDebugInfo: boolean;
+  onToggleDebugInfo: (enabled: boolean) => void | Promise<void>;
 }
 
-export const UserProfileModal = memo<UserProfileModalProps>(({ isOpen, onClose, user, allowThinking, onToggleThinking }) => {
+export const UserProfileModal = memo<UserProfileModalProps>(({ isOpen, onClose, user, allowThinking, onToggleThinking, showDebugInfo, onToggleDebugInfo }) => {
   const { t, locale, setLocale } = useI18n();
   const [isUpdating, setIsUpdating] = React.useState(false);
 
@@ -33,6 +35,16 @@ export const UserProfileModal = memo<UserProfileModalProps>(({ isOpen, onClose, 
       setIsUpdating(false);
     }
   }, [onToggleThinking, isUpdating]);
+
+  const handleDebugChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (isUpdating) return;
+    setIsUpdating(true);
+    try {
+      await onToggleDebugInfo(event.target.checked);
+    } finally {
+      setIsUpdating(false);
+    }
+  }, [onToggleDebugInfo, isUpdating]);
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={t('profile.title')}>
@@ -112,6 +124,27 @@ export const UserProfileModal = memo<UserProfileModalProps>(({ isOpen, onClose, 
                 className="sr-only peer"
                 checked={allowThinking}
                 onChange={handleThinkingChange}
+                disabled={isUpdating}
+              />
+              <span className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></span>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-surface">
+            <div className="space-y-0.5">
+              <label htmlFor="show-debug-info" className="flex items-center gap-2 text-sm font-medium text-text-primary">
+                <Bug className="w-4 h-4 text-text-secondary" aria-hidden="true" />
+                {t('profile.debug.label')}
+              </label>
+              <p className="text-xs text-text-secondary">{t('profile.debug.description')}</p>
+            </div>
+            <label className={cn("relative inline-flex items-center", isUpdating ? "cursor-not-allowed opacity-70" : "cursor-pointer")} htmlFor="show-debug-info">
+              <input
+                type="checkbox"
+                id="show-debug-info"
+                className="sr-only peer"
+                checked={showDebugInfo}
+                onChange={handleDebugChange}
                 disabled={isUpdating}
               />
               <span className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></span>

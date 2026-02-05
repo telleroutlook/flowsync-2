@@ -58,6 +58,10 @@ export interface ChatMessage {
     preview?: string;
     steps?: { label: string; elapsedMs?: number }[];
   };
+  meta?: {
+    requestId?: string;
+    turns?: number;
+  };
   attachments?: ChatAttachment[];
   suggestions?: ActionableSuggestion[];
 }
