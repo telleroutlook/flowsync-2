@@ -4,6 +4,7 @@ import { useI18n } from '../src/i18n';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import type { Project } from '../types';
+import { getErrorMessage } from '../src/utils/error';
 
 interface DeleteProjectModalProps {
   isOpen: boolean;
@@ -16,12 +17,14 @@ export const DeleteProjectModal = memo<DeleteProjectModalProps>(({ isOpen, proje
   const { t } = useI18n();
   const [confirmationName, setConfirmationName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isOpen || !project) return;
     setConfirmationName('');
     setIsSubmitting(false);
+    setSubmitError(null);
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [isOpen, project]);
 
@@ -32,17 +35,18 @@ export const DeleteProjectModal = memo<DeleteProjectModalProps>(({ isOpen, proje
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!project || !isMatch) return;
+    if (!project || !isMatch || isSubmitting) return;
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       await onConfirm(project.id);
       onClose();
-    } catch (error) {
-      console.error(error);
+    } catch (error: unknown) {
+      setSubmitError(t('project.delete.failed', { error: getErrorMessage(error, t('common.unknown_error')) }));
     } finally {
       setIsSubmitting(false);
     }
-  }, [project, isMatch, onConfirm, onClose]);
+  }, [project, isMatch, isSubmitting, onConfirm, onClose, t]);
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setConfirmationName(e.target.value);
@@ -73,6 +77,11 @@ export const DeleteProjectModal = memo<DeleteProjectModalProps>(({ isOpen, proje
             {t('project.delete.confirm_hint', { name: project.name })}
           </p>
         </div>
+        {submitError ? (
+          <p className="text-sm text-danger" role="alert">
+            {submitError}
+          </p>
+        ) : null}
         <div className="flex justify-end gap-3 mt-4">
           <Button
             type="button"

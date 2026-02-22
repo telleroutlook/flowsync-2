@@ -305,6 +305,7 @@ const en = {
   'task.unsaved_badge': 'Unsaved',
   'task.delete.title': 'Delete Task',
   'task.delete.description': 'Delete task "{title}"? This action cannot be undone.',
+  'task.delete.failed': 'Failed to delete task: {error}',
   'task.delete.cancel': 'Cancel',
   'task.delete.confirm': 'Delete',
   'task.delete.button': 'Delete task',
@@ -365,6 +366,7 @@ const en = {
   'project.delete.confirm_label': 'Type \"{name}\" to confirm',
   'project.delete.confirm_placeholder': 'Project name',
   'project.delete.confirm_hint': 'Please enter the exact project name.',
+  'project.delete.failed': 'Failed to delete project: {error}',
   'project.delete.cancel': 'Cancel',
   'project.delete.submit': 'Delete Project',
 
@@ -717,6 +719,7 @@ const zh: Record<keyof typeof en, string> = {
   'task.unsaved_badge': '未保存',
   'task.delete.title': '删除任务',
   'task.delete.description': '确定删除任务“{title}”？此操作不可撤销。',
+  'task.delete.failed': '删除任务失败：{error}',
   'task.delete.cancel': '取消',
   'task.delete.confirm': '删除',
   'task.delete.button': '删除任务',
@@ -777,6 +780,7 @@ const zh: Record<keyof typeof en, string> = {
   'project.delete.confirm_label': '请输入“{name}”确认删除',
   'project.delete.confirm_placeholder': '项目名称',
   'project.delete.confirm_hint': '需要输入完整且一致的项目名称。',
+  'project.delete.failed': '删除项目失败：{error}',
   'project.delete.cancel': '取消',
   'project.delete.submit': '删除项目',
 

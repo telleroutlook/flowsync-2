@@ -3,6 +3,7 @@ import type { ConflictInfo } from '../components/ConflictDialog';
 import { sleep, getRetryDelay } from '../src/utils/retry';
 import { buildAuthHeaders } from './aiService';
 import { ApiError, TimeoutError, NetworkError, getErrorMessage, isAppError } from '../src/utils/error';
+import { storageGet } from '../src/utils/storage';
 
 const MAX_FETCH_RETRIES = 2;
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -11,7 +12,23 @@ const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 // Request deduplication cache
 const pendingRequests = new Map<string, Promise<unknown>>();
 
-function getRequestKey(input: RequestInfo, init?: RequestInit): string {
+interface FetchInitWithOptions extends RequestInit {
+  workspaceId?: string;
+}
+
+function resolveWorkspaceScope(init?: FetchInitWithOptions): string {
+  if (init?.workspaceId) return init.workspaceId;
+
+  if (init?.headers) {
+    const headers = new Headers(init.headers);
+    const workspaceFromHeader = headers.get('X-Workspace-Id') ?? headers.get('x-workspace-id');
+    if (workspaceFromHeader) return workspaceFromHeader;
+  }
+
+  return storageGet('activeWorkspaceId') ?? '';
+}
+
+function getRequestKey(input: RequestInfo, init?: FetchInitWithOptions): string {
   const url = typeof input === 'string' ? input : input.url;
   const method = (init?.method || 'GET').toUpperCase();
 
@@ -20,7 +37,7 @@ function getRequestKey(input: RequestInfo, init?: RequestInit): string {
     return `${method}:${url}:${Date.now()}`;
   }
 
-  return `${method}:${url}`;
+  return `${method}:${url}:ws=${resolveWorkspaceScope(init)}`;
 }
 
 function shouldRetryStatus(status: number): boolean {
@@ -170,10 +187,6 @@ export const initCsrfToken = async (): Promise<void> => {
     console.warn('Failed to initialize CSRF token:', error);
   }
 };
-
-interface FetchInitWithOptions extends RequestInit {
-  workspaceId?: string;
-}
 
 const fetchJson = async <T>(input: RequestInfo, init?: FetchInitWithOptions): Promise<T> => {
   const requestKey = getRequestKey(input, init);
